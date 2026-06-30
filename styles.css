@@ -2700,9 +2700,12 @@ body {
 }
 
 .card-kp {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--primary);
   font-weight: 700;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
 }
 
 .card-kp.kp-negative {
