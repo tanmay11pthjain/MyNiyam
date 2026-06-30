@@ -156,13 +156,31 @@ class KalyanMitra {
     document.getElementById('admin-panel').classList.add('hidden');
 
     this.checkDailyReset();
-    this.calculatePanchang();
+    await this.fetchGeolocationAndPanchang();
     this.grantDailyLogin();
     this.renderDashboard();
     this.renderAchievements();
     this.setupUserEventListeners();
     this.startAutoLockCheck();
     this.checkStreakWarning();
+  }
+
+  async fetchGeolocationAndPanchang() {
+    if (navigator.geolocation) {
+      try {
+        const position = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+        });
+        
+        this.settings.locationLat = position.coords.latitude;
+        this.settings.locationLng = position.coords.longitude;
+        this.settings.locationName = "Live Location";
+        this.saveSettings();
+      } catch (e) {
+        console.warn("Geolocation denied or timeout. Using fallback location.", e);
+      }
+    }
+    await this.calculatePanchang();
   }
 
   // ===== ADMIN INITIALIZATION =====
@@ -535,7 +553,8 @@ class KalyanMitra {
   }
 
   calculateTithi(date) {
-    const refNewMoon = new Date(Date.UTC(2000, 0, 6, 18, 14, 0));
+    // Aligned to start of Kartik in 2025 to fix Adhik Maas drift
+    const refNewMoon = new Date(Date.UTC(2025, 9, 22, 23, 0, 0));
     const synodicMonth = 29.53059;
     const daysSinceRef = (date.getTime() - refNewMoon.getTime()) / (1000 * 60 * 60 * 24);
     const moonAge = ((daysSinceRef % synodicMonth) + synodicMonth) % synodicMonth;
@@ -543,10 +562,10 @@ class KalyanMitra {
     const tithiIndex = Math.floor(moonAge / tithiDuration);
     let paksha, tithiName;
     if (tithiIndex < 15) {
-      paksha = PAKSHA.SHUKLA;
+      paksha = 'Shukla Paksha';
       tithiName = TITHI_NAMES[tithiIndex];
     } else {
-      paksha = PAKSHA.KRISHNA;
+      paksha = 'Krishna Paksha';
       tithiName = TITHI_NAMES_KRISHNA[tithiIndex - 15];
     }
     const lunarMonth = Math.floor(((daysSinceRef / synodicMonth) % 12 + 12) % 12);
@@ -1183,13 +1202,7 @@ class KalyanMitra {
     });
     niyamSelect.value = s.currentDailyNiyamId || 0;
 
-    const locSelect = document.getElementById('admin-location');
-    for (const [key, city] of Object.entries(CITIES)) {
-      if (city.lat === s.locationLat && city.lng === s.locationLng) {
-        locSelect.value = key;
-        break;
-      }
-    }
+    // admin-location removed
   }
 
   saveAdminSettings() {
@@ -1208,14 +1221,7 @@ class KalyanMitra {
     s.enableDailyNiyam = document.getElementById('admin-toggle-niyam').checked;
     s.currentDailyNiyamId = parseInt(document.getElementById('admin-select-niyam').value);
 
-    const cityKey = document.getElementById('admin-location').value;
-    const city = CITIES[cityKey];
-    if (city) {
-      s.locationLat = city.lat;
-      s.locationLng = city.lng;
-      s.locationName = city.name;
-    }
-
+    // Location removed from admin UI - fetched via Geolocation
     this.saveSettings();
     const conf = document.getElementById('save-confirmation');
     conf.classList.remove('hidden');
