@@ -440,12 +440,41 @@ class KalyanMitra {
   }
 
   // ===== PANCHANG CALCULATIONS =====
-  calculatePanchang() {
+  async calculatePanchang() {
     const now = new Date();
     const lat = this.settings.locationLat;
     const lng = this.settings.locationLng;
-    const sunTimes = this.calculateSunriseSunset(lat, lng, now);
+    
     const tithiInfo = this.calculateTithi(now);
+    
+    let sunTimes;
+    try {
+      const url = `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lng}&formatted=0`;
+      const res = await fetch(url);
+      const data = await res.json();
+      
+      if (data.status === "OK") {
+        const sunriseUTC = new Date(data.results.sunrise);
+        const sunsetUTC = new Date(data.results.sunset);
+        
+        const getDecimalHour = (d) => d.getHours() + (d.getMinutes() / 60);
+        
+        const sunriseLocal = getDecimalHour(sunriseUTC);
+        const sunsetLocal = getDecimalHour(sunsetUTC);
+        
+        sunTimes = { 
+          sunrise: sunriseLocal, 
+          sunset: sunsetLocal, 
+          navkarsi: sunriseLocal + (48 / 60) 
+        };
+      } else {
+        throw new Error("API response not OK");
+      }
+    } catch (e) {
+      console.warn("Failed to fetch Sunrise API, falling back to manual calc", e);
+      sunTimes = this.calculateSunriseSunset(lat, lng, now);
+    }
+
     this.renderPanchang(sunTimes, tithiInfo, now);
   }
 
@@ -528,11 +557,16 @@ class KalyanMitra {
   renderPanchang(sunTimes, tithiInfo, now) {
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     document.getElementById('panchang-date').textContent = now.toLocaleDateString('en-IN', options);
-    document.getElementById('panchang-jain-month').textContent = `${tithiInfo.jainMonth} Maas`;
-    document.getElementById('tithi-value').textContent = `${tithiInfo.paksha} — ${tithiInfo.tithiName}`;
-    document.getElementById('sunrise-time').textContent = this.formatTime(sunTimes.sunrise);
-    document.getElementById('navkarsi-time').textContent = this.formatTime(sunTimes.navkarsi);
-    document.getElementById('sunset-time').textContent = this.formatTime(sunTimes.sunset);
+    
+    const pakshaName = tithiInfo.paksha === 'Shukla Paksha' ? 'Shukla' : 'Krushna';
+    const tithiNum = (tithiInfo.tithiIndex % 15) + 1;
+    document.getElementById('tithi-value').textContent = `${tithiInfo.jainMonth} ${pakshaName} ${tithiNum}`;
+    
+    if (sunTimes) {
+      document.getElementById('sunrise-time').textContent = this.formatTime(sunTimes.sunrise);
+      document.getElementById('navkarsi-time').textContent = this.formatTime(sunTimes.navkarsi);
+      document.getElementById('sunset-time').textContent = this.formatTime(sunTimes.sunset);
+    }
   }
 
   renderDashboard() {
