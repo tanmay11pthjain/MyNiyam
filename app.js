@@ -19,11 +19,26 @@ const CITIES = {
   indore:    { lat: 22.7196, lng: 75.8577, name: 'Indore' },
 };
 
+// ===== FIREBASE INITIALIZATION =====
+const firebaseConfig = {
+  apiKey: "AIzaSyD0zrP8fdjBvqu3lbdv2I6E3Z60Fb0MwlE",
+  authDomain: "my-niyam.firebaseapp.com",
+  projectId: "my-niyam",
+  storageBucket: "my-niyam.firebasestorage.app",
+  messagingSenderId: "738555186123",
+  appId: "1:738555186123:web:60c8259dc3844a5f29444e",
+  measurementId: "G-ZJP9LR4RLT",
+  databaseURL: "https://my-niyam-default-rtdb.firebaseio.com"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
 class KalyanMitra {
   constructor() {
     this.currentRole = null;
     this.pendingBadges = [];
     this.autoLockInterval = null;
+    this.currentDayLocked = false;
     this.init();
   }
 
@@ -131,10 +146,10 @@ class KalyanMitra {
   }
 
   // ===== USER INITIALIZATION =====
-  initUser() {
-    this.settings = this.loadSettings();
-    this.profile = this.loadProfile();
-    this.dailyLog = this.loadDailyLog();
+  async initUser() {
+    this.initializing = true;
+    await this.setupRealtimeSync();
+    this.initializing = false;
 
     document.getElementById('app').classList.remove('app-hidden');
     document.getElementById('app').classList.add('app-visible');
@@ -151,10 +166,10 @@ class KalyanMitra {
   }
 
   // ===== ADMIN INITIALIZATION =====
-  initAdmin() {
-    this.settings = this.loadSettings();
-    this.profile = this.loadProfile();
-    this.dailyLog = this.loadDailyLog();
+  async initAdmin() {
+    this.initializing = true;
+    await this.setupRealtimeSync();
+    this.initializing = false;
 
     document.getElementById('admin-panel').classList.remove('hidden');
     document.getElementById('app').classList.add('app-hidden');
@@ -214,29 +229,72 @@ class KalyanMitra {
     document.getElementById('btn-admin-logout').addEventListener('click', () => this.logout());
   }
 
-  // ===== LOCAL STORAGE =====
-  loadSettings() {
-    const saved = localStorage.getItem('km_settings');
-    return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : { ...DEFAULT_SETTINGS };
+  // ===== FIREBASE SYNC & REALTIME LISTENERS =====
+  listenToRef(path, callback) {
+    return new Promise(resolve => {
+      let first = true;
+      db.ref(path).on('value', snap => {
+        callback(snap.val());
+        if (first) {
+          first = false;
+          resolve();
+        }
+      });
+    });
   }
 
-  loadProfile() {
-    const saved = localStorage.getItem('km_profile');
-    return saved ? { ...DEFAULT_PROFILE, ...JSON.parse(saved) } : { ...DEFAULT_PROFILE };
-  }
-
-  loadDailyLog() {
+  async setupRealtimeSync() {
     const todayKey = this.getTodayKey();
-    const saved = localStorage.getItem(`km_daily_${todayKey}`);
-    if (saved) return { ...DEFAULT_DAILY_LOG, ...JSON.parse(saved) };
-    return { ...DEFAULT_DAILY_LOG, date: todayKey };
+
+    const p1 = this.listenToRef('kalyan_mitra/settings', val => {
+      this.settings = val ? { ...DEFAULT_SETTINGS, ...val } : { ...DEFAULT_SETTINGS };
+      if (!this.initializing) {
+        if (this.currentRole === 'user') {
+          this.calculatePanchang();
+          this.renderDashboard();
+        } else {
+          this.loadAdminSettingsUI();
+        }
+      }
+    });
+
+    const p2 = this.listenToRef('kalyan_mitra/profile', val => {
+      this.profile = val ? { ...DEFAULT_PROFILE, ...val } : { ...DEFAULT_PROFILE };
+      if (!this.initializing) {
+        if (this.currentRole === 'admin') this.renderAdminProgress();
+        else if (this.currentRole === 'user') this.renderAchievements();
+      }
+    });
+
+    const p3 = this.listenToRef(`kalyan_mitra/daily_logs/${todayKey}`, val => {
+      if (val) this.dailyLog = { ...DEFAULT_DAILY_LOG, ...val };
+      else this.dailyLog = { ...DEFAULT_DAILY_LOG, date: todayKey };
+      if (!this.initializing) {
+        if (this.currentRole === 'admin') {
+          this.renderAdminProgress();
+          this.renderAdminLock();
+        } else {
+          this.renderDashboard();
+        }
+      }
+    });
+
+    const p4 = this.listenToRef(`kalyan_mitra/lock_status/${todayKey}`, val => {
+      this.currentDayLocked = !!val;
+      if (!this.initializing) {
+        if (this.currentRole === 'user') this.updateLockUI();
+        else if (this.currentRole === 'admin') this.renderAdminLock();
+      }
+    });
+
+    await Promise.all([p1, p2, p3, p4]);
   }
 
-  saveSettings() { localStorage.setItem('km_settings', JSON.stringify(this.settings)); }
-  saveProfile() { localStorage.setItem('km_profile', JSON.stringify(this.profile)); }
+  saveSettings() { db.ref('kalyan_mitra/settings').set(this.settings); }
+  saveProfile() { db.ref('kalyan_mitra/profile').set(this.profile); }
   saveDailyLog() {
     this.dailyLog.date = this.getTodayKey();
-    localStorage.setItem(`km_daily_${this.getTodayKey()}`, JSON.stringify(this.dailyLog));
+    db.ref(`kalyan_mitra/daily_logs/${this.getTodayKey()}`).set(this.dailyLog);
   }
   saveAll() { this.saveSettings(); this.saveProfile(); this.saveDailyLog(); }
 
@@ -247,29 +305,29 @@ class KalyanMitra {
 
   // ===== LOCK SYSTEM =====
   isDayLocked() {
-    const lockKey = `km_locked_${this.getTodayKey()}`;
-    return localStorage.getItem(lockKey) === 'true';
+    return this.currentDayLocked;
   }
 
   lockDay() {
-    const lockKey = `km_locked_${this.getTodayKey()}`;
-    localStorage.setItem(lockKey, 'true');
+    const lockKey = `kalyan_mitra/lock_status/${this.getTodayKey()}`;
+    db.ref(lockKey).set(true);
     // Process end-of-day when locked
     this.processEndOfDay();
   }
 
   startAutoLockCheck() {
     // Check every 30 seconds if we crossed midnight
-    this.autoLockInterval = setInterval(() => {
+    this.autoLockInterval = setInterval(async () => {
       const now = new Date();
       if (now.getHours() === 0 && now.getMinutes() === 0) {
         // Midnight — lock previous day
         const yesterday = new Date(now);
         yesterday.setDate(yesterday.getDate() - 1);
         const yKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
-        const lockKey = `km_locked_${yKey}`;
-        if (localStorage.getItem(lockKey) !== 'true') {
-          localStorage.setItem(lockKey, 'true');
+        const lockKey = `kalyan_mitra/lock_status/${yKey}`;
+        const snap = await db.ref(lockKey).once('value');
+        if (!snap.val()) {
+          db.ref(lockKey).set(true);
         }
         // Reset for new day
         this.checkDailyReset();
@@ -316,13 +374,14 @@ class KalyanMitra {
   }
 
   // ===== DAILY RESET =====
-  checkDailyReset() {
+  async checkDailyReset() {
     const todayKey = this.getTodayKey();
     if (this.dailyLog.date && this.dailyLog.date !== todayKey) {
       // Lock yesterday if not already locked
-      const yLockKey = `km_locked_${this.dailyLog.date}`;
-      if (localStorage.getItem(yLockKey) !== 'true') {
-        localStorage.setItem(yLockKey, 'true');
+      const yLockKey = `kalyan_mitra/lock_status/${this.dailyLog.date}`;
+      const snap = await db.ref(yLockKey).once('value');
+      if (!snap.val()) {
+        db.ref(yLockKey).set(true);
         this.processEndOfDay();
       }
       // New day
@@ -1235,11 +1294,12 @@ class KalyanMitra {
   resetProgress() {
     if (confirm('⚠️ Reset ALL user progress? This erases KP, badges, streaks — everything!')) {
       if (confirm('🙏 Last chance — really reset?')) {
-        // Keep settings and auth, clear user data
-        const settings = localStorage.getItem('km_settings');
-        localStorage.clear();
-        if (settings) localStorage.setItem('km_settings', settings);
-        location.reload();
+        // Keep settings, clear profile, daily_logs, lock_status
+        db.ref('kalyan_mitra/profile').remove();
+        db.ref('kalyan_mitra/daily_logs').remove();
+        db.ref('kalyan_mitra/lock_status').remove().then(() => {
+          location.reload();
+        });
       }
     }
   }
