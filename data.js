@@ -1,0 +1,235 @@
+// ===== KALYAN MITRA — STATIC DATA =====
+
+// ===== TITHI NAMES =====
+const TITHI_NAMES = [
+  'Pratipada', 'Dwitiya', 'Tritiya', 'Chaturthi', 'Panchami',
+  'Shashthi', 'Saptami', 'Ashtami', 'Navami', 'Dashami',
+  'Ekadashi', 'Dwadashi', 'Trayodashi', 'Chaturdashi', 'Purnima'
+];
+
+const TITHI_NAMES_KRISHNA = [
+  'Pratipada', 'Dwitiya', 'Tritiya', 'Chaturthi', 'Panchami',
+  'Shashthi', 'Saptami', 'Ashtami', 'Navami', 'Dashami',
+  'Ekadashi', 'Dwadashi', 'Trayodashi', 'Chaturdashi', 'Amavasya'
+];
+
+// ===== PAKSHA =====
+const PAKSHA = {
+  SHUKLA: 'Shukla Paksha',
+  KRISHNA: 'Krishna Paksha'
+};
+
+// ===== JAIN MONTHS =====
+const JAIN_MONTHS = [
+  'Kartik', 'Margshirsh', 'Paush', 'Maha',
+  'Falgun', 'Chaitra', 'Vaishakh', 'Jyeshth',
+  'Ashadh', 'Shravan', 'Bhadrapad', 'Ashwin'
+];
+
+// ===== LEVEL SYSTEM =====
+const LEVELS = [
+  { level: 1, title: 'Balak',   subtitle: 'Beginner',     icon: '💒', kpRequired: 0,     unlock: 'Welcome to your spiritual journey!' },
+  { level: 2, title: 'Shravak', subtitle: 'Listener',     icon: '👂', kpRequired: 300,   unlock: 'Streak counter unlocked!' },
+  { level: 3, title: 'Sadhak',  subtitle: 'Practitioner', icon: '🧘', kpRequired: 1000,  unlock: 'Custom pachchakhan option!' },
+  { level: 4, title: 'Tapasvi', subtitle: 'Ascetic',      icon: '🔥', kpRequired: 3000,  unlock: 'Golden theme unlocked!' },
+  { level: 5, title: 'Gyani',   subtitle: 'Wise One',     icon: '📖', kpRequired: 7000,  unlock: 'Weekly insights unlocked!' },
+  { level: 6, title: 'Vairagi', subtitle: 'Detached',     icon: '🕊️', kpRequired: 15000, unlock: 'Legendary glow achieved!' }
+];
+
+// ===== ACHIEVEMENT BADGES =====
+const BADGES = [
+  { id: 'early_riser',      name: 'Early Riser',       icon: '🌅', desc: 'Complete Pooja before 7 AM, 5 times',             rarity: 'Common',    condition: 'earlyPooja',        threshold: 5 },
+  { id: 'week_warrior',     name: 'Week Warrior',       icon: '🔥', desc: '7-day streak achieved',                           rarity: 'Common',    condition: 'streak',            threshold: 7 },
+  { id: 'bookworm',         name: 'Bookworm',           icon: '📚', desc: 'Read 100+ pages/lines total',                     rarity: 'Uncommon',  condition: 'totalSwadhyay',     threshold: 100 },
+  { id: 'samayik_master',   name: 'Samayik Master',     icon: '🧘', desc: '50 samayiks completed',                           rarity: 'Uncommon',  condition: 'totalSamayik',      threshold: 50 },
+  { id: 'perfect_week',     name: 'Perfect Week',       icon: '💎', desc: 'All tasks every day for 7 days',                  rarity: 'Rare',      condition: 'perfectDays',       threshold: 7 },
+  { id: 'monthly_champion', name: 'Monthly Champion',   icon: '👑', desc: '30-day streak',                                   rarity: 'Epic',      condition: 'streak',            threshold: 30 },
+  { id: 'karma_king',       name: 'Karma King',         icon: '⭐', desc: 'Earn 10,000 KP total',                            rarity: 'Legendary', condition: 'totalKP',           threshold: 10000 },
+  { id: 'spiritual_warrior',name: 'Spiritual Warrior',  icon: '🕉️', desc: 'Reach Level 5 (Gyani)',                           rarity: 'Epic',      condition: 'level',             threshold: 5 },
+  { id: 'pratikraman_pro',  name: 'Pratikraman Pro',    icon: '🙏', desc: 'Complete both daily pratikraman 20 times',        rarity: 'Uncommon',  condition: 'totalFullPratikraman', threshold: 20 },
+  { id: 'niyam_follower',   name: 'Niyam Follower',     icon: '✨', desc: 'Follow daily pachchakhan 15 times',              rarity: 'Common',    condition: 'totalNiyam',        threshold: 15 },
+  { id: 'first_step',       name: 'First Step',         icon: '👣', desc: 'Complete your first activity',                    rarity: 'Common',    condition: 'totalActivities',   threshold: 1 },
+  { id: 'century',          name: 'Century',            icon: '💯', desc: 'Earn 100 KP in a single day',                     rarity: 'Uncommon',  condition: 'dailyKP',           threshold: 100 },
+];
+
+// ===== PACHCHAKHAN (DAILY VOWS) =====
+const PACHCHAKHANS = [
+  "Aaj ke din gulab jamun ka tyag karein 🍬",
+  "Aaj ke din mobile ka kam se kam upyog karein 📱",
+  "Aaj ke din kisi ki ninda na karein 🤐",
+  "Aaj ke din jalebi ka tyag karein 🍯",
+  "Aaj ke din TV na dekhein 📺",
+  "Aaj ke din chai ya coffee ka tyag karein ☕",
+  "Aaj ke din mithai ka tyag karein 🍮",
+  "Aaj ke din krodh na karein 😌",
+  "Aaj ke din jhooth na bolein 🤞",
+  "Aaj ke din chocolate ka tyag karein 🍫",
+  "Aaj ke din fried food ka tyag karein 🍟",
+  "Aaj ke din social media na chalayein 📵",
+  "Aaj ke din ice cream ka tyag karein 🍦",
+  "Aaj ke din bina zaroorat paani barbaad na karein 💧",
+  "Aaj ke din kisi se ladaai na karein 🕊️",
+  "Aaj ke din namak kam khayein 🧂",
+  "Aaj ke din biscuit/cookies ka tyag karein 🍪",
+  "Aaj ke din lift ki jagah seedhi use karein 🪜",
+  "Aaj ke din online shopping na karein 🛒",
+  "Aaj ke din cold drink ka tyag karein 🥤",
+  "Aaj ke din raatri bhojan na karein 🌙",
+  "Aaj ke din kisi ki madad zaroor karein 🤝",
+  "Aaj ke din ek naya mantra yaad karein 📿",
+  "Aaj ke din khade hokar paani na piyein 🚰",
+  "Aaj ke din pizza/burger ka tyag karein 🍕",
+  "Aaj ke din gossip na karein 🗣️",
+  "Aaj ke din games na khelein 🎮",
+  "Aaj ke din chini ka tyag karein 🍬",
+  "Aaj ke din ek vyakti ko kshama karein 🙏",
+  "Aaj ke din achaar ka tyag karein 🫙",
+  "Aaj ke din paani chhankar piyein 💧",
+  "Aaj ke din kisi ko daan zaroor dein 🎁",
+  "Aaj ke din cake/pastry ka tyag karein 🍰",
+  "Aaj ke din maun vrat rakhein (1 ghanta) 🤫",
+  "Aaj ke din pani puri ka tyag karein 😋",
+  "Aaj ke din kisi buzurg ki seva karein 👴",
+  "Aaj ke din noodles/pasta ka tyag karein 🍝",
+  "Aaj ke din YouTube na dekhein 📺",
+  "Aaj ke din chips ka tyag karein 🥔",
+  "Aaj ke din kisi ko phone karke haal-chaal poochein 📞",
+  "Aaj ke din samosa ka tyag karein 🔺",
+  "Aaj ke din subah jaldi uthein (sunrise se pehle) 🌅",
+  "Aaj ke din kheer ka tyag karein 🍚",
+  "Aaj ke din shopping na karein 🏬",
+  "Aaj ke din halwa ka tyag karein 🍮",
+  "Aaj ke din kisi se oonchi awaaz mein baat na karein 🔇",
+  "Aaj ke din namkeen ka tyag karein 🥨",
+  "Aaj ke din plastic ka upyog kam karein ♻️",
+  "Aaj ke din paneer ka tyag karein 🧀",
+  "Aaj ke din gathiya-fafda ka tyag karein 🍘",
+  "Aaj ke din doosron ki burai na sunein 🙉",
+  "Aaj ke din rabdi ka tyag karein 🥛",
+  "Aaj ke din kisi janwar ko khana khilayein 🐦",
+  "Aaj ke din barfi ka tyag karein 🍬",
+  "Aaj ke din poha/upma ka tyag karein 🍛",
+  "Aaj ke din music na sunein 🎵",
+  "Aaj ke din paratha ka tyag karein 🫓",
+  "Aaj ke din kisi ko compliment zaroor dein 😊",
+  "Aaj ke din dry fruits ka tyag karein 🥜",
+  "Aaj ke din pav bhaji ka tyag karein 🍞",
+  "Aaj ke din chhena/rasmalai ka tyag karein 🧁",
+  "Aaj ke din 10 minute dhyan zaroor karein 🧘",
+  "Aaj ke din idli/dosa ka tyag karein 🫕",
+  "Aaj ke din khatta khana ka tyag karein 🍋",
+];
+
+// ===== MOTIVATIONAL MESSAGES =====
+const MOTIVATIONAL_MESSAGES = {
+  morning: [
+    "Jai Jinendra! 🙏 Nayi subah, nayi sadhana ka avsar.",
+    "Aaj ka din aapki aatmik yatra mein ek aur kadam hai. 🌅",
+    "Har din ek naya aarambh hai. Sadhana mein lage rahein! ✨",
+    "Uttam Kshama, Uttam Mardava — Aaj ka din shubh ho! 🙏",
+  ],
+  progress: [
+    "Bahut achha! Aap sahi raaste par hain! 🌟",
+    "Aapki sadhana rang la rahi hai! Jari rakhein! 💪",
+    "Karma Points badh rahe hain! Aap kar sakte hain! 🔥",
+    "Ek kadam aur — Perfect Day ke nazdeek! ⭐",
+  ],
+  complete: [
+    "🎊 Adbhut! Aaj sab kuch poora ho gaya! Perfect Day!",
+    "🌟 Shaandaar! Aapne aaj apni sadhana poori ki!",
+    "✨ Bahut sundar! Yeh din yaad rakhne layak hai!",
+    "🏆 Champion! Aapne aaj har lakshya poora kiya!",
+  ],
+  streak: [
+    "🔥 Aapki streak jal rahi hai! Mat todiye!",
+    "🔥 Lagataar sadhana ka phal milega! Streak jaari rakhein!",
+    "🔥 Streak ka har din aapko mazboot bana raha hai!",
+  ],
+  streakRisk: [
+    "⚠️ Aapki streak khatre mein hai! Abhi activities poori karein!",
+    "🔴 Din khatam hone wala hai — streak bachayein!",
+    "⏰ Samay kam hai! Apni sadhana poori karein!",
+  ],
+  socialProof: [
+    "Aap is hafte ke top 15% sadhak mein hain! 🏅",
+    "Aap baaki logon se aage hain! Shandar prayas! 📈",
+    "Aapki dedication kamaal ki hai! Top performer! 🌟",
+    "Bahut kam log itni discipline rakhte hain — Salaam! 🙏",
+  ]
+};
+
+// ===== DEFAULT SETTINGS =====
+const DEFAULT_SETTINGS = {
+  samayikTarget: 1,        // 1, 2, or 3 daily
+  samayikFrequency: 'daily', // daily, weekly, monthly
+  swadhyayTarget: 5,       // pages or lines per day
+  swadhyayUnit: 'pages',   // 'pages' or 'lines'
+  pratikramanTarget: 'daily', // daily, chaudasi, monthly
+  pratikramanDaily: 2,      // number per day
+  locationLat: 12.9716,    // Bangalore
+  locationLng: 77.5946,
+  locationName: 'Bangalore',
+  introSeen: false,
+};
+
+// ===== DEFAULT PROFILE =====
+const DEFAULT_PROFILE = {
+  totalKP: 10,             // Start with 10 (endowed progress)
+  currentStreak: 0,
+  longestStreak: 0,
+  lastActiveDate: null,
+  streakFreezeUsed: false,
+  streakFreezeMonth: null,
+  badges: [],
+  // Lifetime stats
+  totalSamayik: 0,
+  totalSwadhyay: 0,
+  totalPratikraman: 0,
+  totalFullPratikraman: 0,
+  totalNiyam: 0,
+  totalActivities: 0,
+  earlyPooja: 0,
+  perfectDays: 0,
+  totalPerfectDays: 0,
+  daysActive: 0,
+};
+
+// ===== DEFAULT DAILY LOG =====
+const DEFAULT_DAILY_LOG = {
+  date: null,
+  samayikDone: 0,
+  poojaDone: false,
+  pakshalDone: false,
+  swadhyayDone: 0,
+  pratikramanMorning: false,
+  pratikramanEvening: false,
+  niyamFollowed: false,
+  kpEarned: 0,
+  perfectDay: false,
+  bonuses: [],
+};
+
+// ===== POINT VALUES =====
+const POINTS = {
+  samayik: 25,
+  samayikEarly: 10,        // Before 8 AM
+  pooja: 20,
+  poojaPakshal: 5,         // Pakshal attendance bonus
+  swadhyay: 15,            // Per target completion
+  swadhyayExceed: 10,      // For exceeding target
+  pratikraman: 30,
+  pratikramanBoth: 15,     // Both morning+evening bonus
+  niyam: 20,
+  niyamSurprise: [10, 15, 20, 25, 30, 50], // Random bonus pool
+  perfectDay: 50,
+  dailyLogin: 10,
+};
+
+// ===== RARITY COLORS =====
+const RARITY_COLORS = {
+  'Common':    '#6B9E6B',
+  'Uncommon':  '#4A90D9',
+  'Rare':      '#9B59B6',
+  'Epic':      '#E67E22',
+  'Legendary': '#F1C40F',
+};

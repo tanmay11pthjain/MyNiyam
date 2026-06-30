@@ -1,0 +1,2647 @@
+/* ============================================================
+   Kalyan Mitra V2 — Aapka Adhyatmik Saathi
+   Mobile-First Production CSS
+   Complete V2: Login + Admin + Lock + Undo
+   ============================================================ */
+
+/* ----- Custom Properties ----- */
+:root {
+  --primary: #E8722A;
+  --primary-dark: #C45E1F;
+  --primary-light: #F4A261;
+  --accent: #D4A843;
+  --bg: #FFF9F0;
+  --card-bg: #FFFFFF;
+  --text-primary: #3E2723;
+  --text-secondary: #795548;
+  --success: #6B9E6B;
+  --success-dark: #4E8050;
+  --xp-start: #FFD700;
+  --xp-end: #FF8C00;
+  --streak-fire: #FF6B35;
+  --level-purple: #7B2D8E;
+  --glow: #FF9933;
+  --shadow: rgba(62, 39, 35, 0.08);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 100px;
+  --transition-fast: 0.2s ease;
+  --transition-med: 0.35s ease;
+  --transition-slow: 0.6s ease;
+  --admin-dark: #3E2723;
+  --admin-dark-end: #5D3A2E;
+  --admin-accent: #4A2C20;
+}
+
+/* ----- Reset & Base ----- */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  font-weight: 400;
+  color: var(--text-primary);
+  background: var(--bg);
+  overflow-x: hidden;
+  min-height: 100dvh;
+  line-height: 1.5;
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+}
+
+/* ----- Universal Hidden Class ----- */
+.hidden {
+  display: none !important;
+}
+
+/* ============================================================
+   KEYFRAME ANIMATIONS
+   ============================================================ */
+
+@keyframes lotusBloom {
+  0%   { transform: rotate(var(--petal-angle)) scale(0) translateY(0); opacity: 0; }
+  60%  { opacity: 1; }
+  100% { transform: rotate(var(--petal-angle)) scale(1) translateY(-14px); opacity: 1; }
+}
+
+@keyframes particleFloat {
+  0%   { transform: translateY(0) translateX(0); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 0.6; }
+  100% { transform: translateY(-110vh) translateX(var(--drift, 20px)); opacity: 0; }
+}
+
+@keyframes glowPulse {
+  0%, 100% { text-shadow: 0 0 8px rgba(255, 215, 0, 0.4), 0 0 20px rgba(255, 153, 51, 0.15); }
+  50%      { text-shadow: 0 0 18px rgba(255, 215, 0, 0.9), 0 0 40px rgba(255, 153, 51, 0.5), 0 0 60px rgba(255, 140, 0, 0.2); }
+}
+
+@keyframes rippleExpand {
+  0%   { transform: translate(-50%, -50%) scale(0); opacity: 0.6; }
+  100% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
+}
+
+@keyframes fadeInUp {
+  0%   { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes slideDown {
+  0%   { transform: translateX(-50%) translateY(-60px); opacity: 0; }
+  15%  { transform: translateX(-50%) translateY(0); opacity: 1; }
+  85%  { transform: translateX(-50%) translateY(0); opacity: 1; }
+  100% { transform: translateX(-50%) translateY(-60px); opacity: 0; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes completionPulse {
+  0%   { transform: scale(1); box-shadow: 0 2px 8px var(--shadow); }
+  50%  { transform: scale(1.02); box-shadow: 0 4px 24px rgba(255, 153, 51, 0.3); }
+  100% { transform: scale(1); box-shadow: 0 2px 8px var(--shadow); }
+}
+
+@keyframes bonusFloat {
+  0%   { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-40px); }
+}
+
+@keyframes flameDance {
+  0%, 100% { transform: scale(1) rotate(-2deg); }
+  25%      { transform: scale(1.12) rotate(3deg); }
+  50%      { transform: scale(1.05) rotate(-1deg); }
+  75%      { transform: scale(1.15) rotate(2deg); }
+}
+
+@keyframes confetti {
+  0%   { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(var(--confetti-x, 60px), var(--confetti-y, -120px)) rotate(720deg); opacity: 0; }
+}
+
+@keyframes glowRadial {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50%      { transform: scale(1.25); opacity: 0.9; }
+}
+
+@keyframes pulseIcon {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.15); }
+}
+
+@keyframes loginCardIn {
+  0%   { opacity: 0; transform: translateY(40px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes bgGlowPulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.35; }
+  50%      { transform: translate(-50%, -50%) scale(1.2); opacity: 0.6; }
+}
+
+@keyframes lockBounce {
+  0%   { transform: scale(0); opacity: 0; }
+  50%  { transform: scale(1.3); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes fadeInError {
+  0%   { opacity: 0; transform: translateY(-4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes saveCheckFade {
+  0%   { opacity: 0; transform: translateY(-6px); }
+  20%  { opacity: 1; transform: translateY(0); }
+  80%  { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+
+
+/* ============================================================
+   LOGIN SCREEN (Replaces V1 intro-screen)
+   ============================================================ */
+
+#login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #1a0f0a;
+  background-image:
+    radial-gradient(ellipse at 50% 40%, rgba(232, 114, 42, 0.08) 0%, transparent 60%),
+    linear-gradient(165deg, #1a0f0a 0%, #2a1a10 40%, #1a0f0a 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.7s ease;
+  padding: 24px;
+}
+
+#login-screen.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Background glow behind the card */
+.login-bg-glow {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(232, 114, 42, 0.25), rgba(255, 153, 51, 0.1) 40%, transparent 70%);
+  transform: translate(-50%, -50%);
+  animation: bgGlowPulse 4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Golden floating particles — same as V1 intro */
+.login-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.login-particles span {
+  position: absolute;
+  bottom: -10px;
+  display: block;
+  width: var(--size, 5px);
+  height: var(--size, 5px);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.9), rgba(232, 114, 42, 0.4));
+  opacity: 0;
+  animation: particleFloat var(--duration, 6s) var(--delay, 0s) ease-in infinite;
+  left: var(--left, 50%);
+  --drift: var(--dx, 15px);
+}
+
+/* Login Card */
+.login-card {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 360px;
+  background: linear-gradient(165deg, #FFFDF8, #FFF9F0);
+  border-radius: 24px;
+  padding: 32px 28px;
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.25),
+    0 4px 16px rgba(232, 114, 42, 0.1);
+  animation: loginCardIn 0.6s ease-out both;
+  text-align: center;
+}
+
+/* Login Lotus — smaller version of V1 intro lotus */
+.login-lotus {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  margin: 0 auto 12px;
+  transform: scale(0.6);
+  transform-origin: center center;
+}
+
+/* Lotus petals (shared between login and intro) */
+.lotus-petal {
+  position: absolute;
+  width: 28px;
+  height: 60px;
+  top: 50%;
+  left: 50%;
+  margin-left: -14px;
+  margin-top: -60px;
+  transform-origin: center bottom;
+  border-radius: 50% 50% 45% 45%;
+  background: linear-gradient(180deg, #FFD700 0%, #E8722A 100%);
+  opacity: 0;
+  animation: lotusBloom 1s ease-out forwards;
+}
+
+.lotus-petal.p1 { --petal-angle:   0deg; animation-delay: 0.1s; }
+.lotus-petal.p2 { --petal-angle:  45deg; animation-delay: 0.2s; }
+.lotus-petal.p3 { --petal-angle:  90deg; animation-delay: 0.3s; }
+.lotus-petal.p4 { --petal-angle: 135deg; animation-delay: 0.4s; }
+.lotus-petal.p5 { --petal-angle: 180deg; animation-delay: 0.5s; }
+.lotus-petal.p6 { --petal-angle: 225deg; animation-delay: 0.6s; }
+.lotus-petal.p7 { --petal-angle: 270deg; animation-delay: 0.7s; }
+.lotus-petal.p8 { --petal-angle: 315deg; animation-delay: 0.8s; }
+
+.lotus-center {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, #FFD700, #E8722A);
+  border-radius: 50%;
+  z-index: 2;
+  opacity: 0;
+  animation: fadeIn 0.6s 0.9s ease forwards;
+}
+
+/* Login Title */
+.login-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.6rem;
+  color: #E8722A;
+  margin-bottom: 4px;
+  animation: glowPulse 2.5s 1s ease-in-out infinite;
+}
+
+.login-subtitle {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 400;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+/* Form Inputs */
+.input-group {
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.input-group label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.input-group input {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e0d5c8;
+  border-radius: 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 1rem;
+  color: var(--text-primary);
+  background: #fff;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.input-group input::placeholder {
+  color: #c0b5a8;
+  font-weight: 400;
+}
+
+.input-group input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(232, 114, 42, 0.12);
+}
+
+/* Login Error */
+.login-error {
+  font-size: 0.8rem;
+  color: #DC3545;
+  text-align: center;
+  margin-bottom: 10px;
+  min-height: 0;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.login-error.show {
+  display: block !important;
+  opacity: 1;
+  animation: fadeInError 0.3s ease;
+}
+
+/* Login Button */
+.btn-login {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-login:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(232, 114, 42, 0.35);
+}
+
+.btn-login:active {
+  transform: scale(0.98);
+}
+
+.btn-login:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-login-text,
+.btn-login-loading {
+  pointer-events: none;
+}
+
+/* Login Footer */
+.login-footer {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: 20px;
+  opacity: 0.7;
+}
+
+
+/* ============================================================
+   LEGACY V1 INTRO SCREEN (kept for backward compatibility)
+   ============================================================ */
+
+#intro-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: linear-gradient(165deg, #3E2723 0%, #5D3A2E 40%, #4A2C20 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.7s ease;
+}
+
+#intro-screen.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Lotus (V1 intro) */
+.intro-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.intro-lotus {
+  position: relative;
+  width: 140px;
+  height: 140px;
+}
+
+/* Golden Particles (V1 intro) */
+.intro-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.intro-particles span {
+  position: absolute;
+  bottom: -10px;
+  display: block;
+  width: var(--size, 5px);
+  height: var(--size, 5px);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.9), rgba(232, 114, 42, 0.4));
+  opacity: 0;
+  animation: particleFloat var(--duration, 6s) var(--delay, 0s) ease-in infinite;
+  left: var(--left, 50%);
+  --drift: var(--dx, 15px);
+}
+
+/* Intro Title (V1) */
+.intro-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 2rem;
+  color: #FFD700;
+  opacity: 0;
+  animation: fadeInUp 0.8s 1.2s ease forwards, glowPulse 2.5s 2s ease-in-out infinite;
+}
+
+.intro-subtitle {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 400;
+  font-size: 1rem;
+  color: rgba(255, 215, 0, 0.7);
+  opacity: 0;
+  animation: fadeInUp 0.7s 1.7s ease forwards;
+}
+
+/* Ripple (V1) */
+.intro-ripple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid rgba(212, 168, 67, 0.5);
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0;
+  animation: rippleExpand 2s 1s ease-out forwards;
+  pointer-events: none;
+}
+
+/* Skip / Enter button (V1) */
+.intro-skip {
+  position: absolute;
+  bottom: max(48px, env(safe-area-inset-bottom, 48px));
+  background: none;
+  border: 1px solid rgba(255, 215, 0, 0.35);
+  color: rgba(255, 215, 0, 0.7);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.85rem;
+  padding: 10px 28px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  opacity: 0;
+  animation: fadeIn 0.6s 2.2s ease forwards;
+  transition: background 0.2s, color 0.2s;
+}
+
+.intro-skip:active {
+  background: rgba(255, 215, 0, 0.15);
+  color: #FFD700;
+}
+
+
+/* ============================================================
+   APP CONTAINER — Reveal transition
+   ============================================================ */
+
+#app {
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+  min-height: 100dvh;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.app-hidden {
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none;
+}
+
+.app-visible {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+  pointer-events: auto !important;
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+
+#app-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: #fff;
+  padding: 14px 16px 10px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  box-shadow: 0 4px 16px rgba(232, 114, 42, 0.25);
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+/* Level section */
+.level-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.level-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.level-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.level-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.karma-points {
+  font-size: 0.78rem;
+  opacity: 0.85;
+  font-weight: 500;
+}
+
+/* Header Right — streak + logout side by side */
+.header-right {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Streak section */
+.streak-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.streak-flame {
+  font-size: 1.6rem;
+  line-height: 1;
+  animation: flameDance 1.4s ease-in-out infinite;
+}
+
+.streak-count {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 1.15rem;
+  line-height: 1.1;
+}
+
+.streak-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.75;
+}
+
+/* Header Logout Button */
+.btn-header-logout {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  flex-shrink: 0;
+  font-family: 'Inter', sans-serif;
+  line-height: 1;
+  padding: 0;
+}
+
+.btn-header-logout:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-header-logout:active {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* XP Bar */
+.xp-bar-container {
+  margin-top: 2px;
+}
+
+.xp-bar-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.xp-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--xp-start), var(--xp-end));
+  background-size: 200% 100%;
+  transition: width 0.5s ease;
+  animation: shimmer 3s linear infinite;
+  min-width: 4px;
+}
+
+.xp-bar-text {
+  display: block;
+  text-align: center;
+  font-size: 0.68rem;
+  margin-top: 4px;
+  opacity: 0.8;
+  font-weight: 500;
+}
+
+
+/* ============================================================
+   LOCK BANNER
+   ============================================================ */
+
+.lock-banner {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #DC3545 0%, #E8722A 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.lock-banner-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.lock-banner-text {
+  line-height: 1.3;
+}
+
+/* .lock-banner.hidden is handled by .hidden */
+
+
+/* ============================================================
+   LOCK INDICATORS ON ACTIVITY CARDS
+   ============================================================ */
+
+.lock-indicator {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, var(--xp-start), var(--xp-end));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  z-index: 5;
+  opacity: 0;
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+  transition: opacity var(--transition-fast);
+}
+
+/* When lock-indicator is visible (hidden class removed) */
+.activity-card .lock-indicator:not(.hidden) {
+  opacity: 1;
+  animation: lockBounce 0.4s ease-out;
+}
+
+/* Locked activity card */
+.activity-card.locked {
+  opacity: 0.7;
+  border-color: #ccc;
+  border-left-color: #ccc;
+}
+
+.activity-card.locked .btn-complete,
+.activity-card.locked .btn-undo,
+.activity-card.locked .btn-counter,
+.activity-card.locked .slot-btn,
+.activity-card.locked .pakshal-toggle {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.activity-card.locked .lock-indicator {
+  opacity: 1;
+}
+
+
+/* ============================================================
+   TAB CONTENT
+   ============================================================ */
+
+.tab-content {
+  display: none;
+  padding: 16px 14px;
+}
+
+.tab-content.active {
+  display: block;
+  animation: fadeIn 0.3s ease;
+}
+
+/* ============================================================
+   PANCHANG CARD
+   ============================================================ */
+
+.panchang-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 18px 16px 16px;
+  box-shadow: 0 2px 12px var(--shadow);
+  border-top: 3px solid var(--primary);
+  margin-bottom: 14px;
+}
+
+.panchang-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.panchang-icon {
+  font-size: 1.3rem;
+}
+
+.panchang-date-area {
+  display: flex;
+  flex-direction: column;
+}
+
+.panchang-date {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.panchang-jain-month {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.tithi-display {
+  text-align: center;
+  padding: 10px 0 14px;
+}
+
+.tithi-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.tithi-value {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.35rem;
+  color: var(--primary);
+}
+
+.sun-times {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.time-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+}
+
+.time-icon {
+  font-size: 1.1rem;
+}
+
+.time-label {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.time-value {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+/* ============================================================
+   DAILY PROGRESS
+   ============================================================ */
+
+.daily-progress-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  box-shadow: 0 2px 10px var(--shadow);
+  margin-bottom: 14px;
+}
+
+.daily-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.daily-progress-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.daily-progress-text {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.daily-progress-track {
+  width: 100%;
+  height: 10px;
+  background: #EDEDED;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.daily-progress-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--primary-light), var(--success));
+  transition: width 0.5s ease;
+  min-width: 0;
+}
+
+.daily-kp {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+/* ============================================================
+   ACTIVITY CARDS
+   ============================================================ */
+
+#activities-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.activity-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px var(--shadow);
+  overflow: hidden;
+  border-left: 4px solid var(--primary);
+  position: relative;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease, opacity 0.3s ease;
+}
+
+.activity-card.completing {
+  animation: completionPulse 0.5s ease;
+}
+
+.activity-card.completed {
+  border-left-color: var(--success);
+}
+
+/* Card Header */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px 0;
+}
+
+.card-title-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-icon {
+  font-size: 1.2rem;
+}
+
+.card-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.card-kp {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--primary);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+
+/* Card Body */
+.card-body {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.card-status {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+
+/* Card Actions */
+.card-actions {
+  display: flex;
+  gap: 10px;
+  padding: 0 16px 14px;
+  align-items: center;
+}
+
+/* Dual Actions — Complete + Undo side by side */
+.dual-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+}
+
+/* Complete Button */
+.btn-complete {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 10px 20px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-med);
+}
+
+.btn-complete:active {
+  transform: scale(0.96);
+}
+
+.btn-icon {
+  font-size: 1rem;
+}
+
+.activity-card.completed .btn-complete {
+  background: linear-gradient(135deg, var(--success), var(--success-dark));
+  pointer-events: none;
+}
+
+/* Undo Button */
+.btn-undo {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #fff;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-pill);
+  padding: 10px 20px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: transform var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.btn-undo:hover {
+  background: rgba(232, 114, 42, 0.06);
+}
+
+.btn-undo:active {
+  transform: scale(0.96);
+  background: rgba(232, 114, 42, 0.12);
+}
+
+/* .btn-undo.hidden handled by .hidden */
+
+/* Bonus floating text */
+.card-bonus {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--accent);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.card-bonus.show {
+  animation: bonusFloat 1.2s ease forwards;
+}
+
+/* ============================================================
+   PROGRESS RING (Samayik)
+   ============================================================ */
+
+.progress-ring-container {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+
+.progress-ring {
+  width: 80px;
+  height: 80px;
+  transform: rotate(-90deg);
+}
+
+.progress-ring-bg {
+  fill: none;
+  stroke: #EDE7E3;
+  stroke-width: 6;
+}
+
+.progress-ring-fill {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
+}
+
+.progress-ring-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+/* ============================================================
+   POOJA CARD
+   ============================================================ */
+
+.pooja-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-circle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #D0CCC8;
+  transition: background var(--transition-med);
+}
+
+.status-circle.done {
+  background: var(--success);
+  box-shadow: 0 0 6px rgba(107, 158, 107, 0.5);
+}
+
+.pooja-actions {
+  flex-wrap: wrap;
+}
+
+/* Toggle switch */
+.pakshal-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pakshal-toggle input {
+  display: none;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: #D0CCC8;
+  border-radius: var(--radius-pill);
+  transition: background var(--transition-fast);
+}
+
+.toggle-slider::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform var(--transition-fast);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.pakshal-toggle input:checked + .toggle-slider {
+  background: var(--primary);
+}
+
+.pakshal-toggle input:checked + .toggle-slider::after {
+  transform: translateX(18px);
+}
+
+.toggle-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* ============================================================
+   SWADHYAY CARD
+   ============================================================ */
+
+.counter-section {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.btn-counter {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  font-size: 1.3rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+
+.btn-counter:active {
+  transform: scale(0.9);
+  background: var(--primary);
+  color: #fff;
+}
+
+.counter-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.counter-value {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 2rem;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.counter-unit {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.swadhyay-progress {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.swadhyay-progress-track {
+  width: 100%;
+  height: 6px;
+  background: #EDE7E3;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.swadhyay-progress-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--primary-light), var(--primary));
+  transition: width 0.4s ease;
+}
+
+.swadhyay-progress-text {
+  display: block;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* ============================================================
+   PRATIKRAMAN CARD
+   ============================================================ */
+
+.pratikraman-slots {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.slot-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 10px;
+  background: var(--bg);
+  border: 2px solid #E0D6CE;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+  font-family: 'Inter', sans-serif;
+}
+
+.slot-btn:active {
+  transform: scale(0.96);
+}
+
+.slot-icon {
+  font-size: 1.4rem;
+}
+
+.slot-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.slot-check {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.slot-btn.completed {
+  background: rgba(107, 158, 107, 0.12);
+  border-color: var(--success);
+}
+
+.slot-btn.completed .slot-check {
+  color: var(--success);
+  font-weight: 700;
+}
+
+/* ============================================================
+   NIYAM CARD
+   ============================================================ */
+
+.niyam-card {
+  background: linear-gradient(145deg, #FFF9F0, #FFF3E0) !important;
+  border-left-color: var(--accent) !important;
+}
+
+.niyam-text {
+  font-size: 1.05rem;
+  font-style: italic;
+  text-align: center;
+  color: var(--text-primary);
+  line-height: 1.6;
+  padding: 4px 0;
+}
+
+.btn-niyam {
+  background: linear-gradient(135deg, var(--accent), #C4922F) !important;
+}
+
+/* ============================================================
+   MOTIVATION SECTION
+   ============================================================ */
+
+#motivation-section {
+  margin-top: 14px;
+}
+
+.motivation-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  box-shadow: 0 2px 8px var(--shadow);
+  text-align: center;
+}
+
+.motivation-text {
+  font-style: italic;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.social-proof {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  margin-top: 8px;
+}
+
+/* ============================================================
+   KP POPUP
+   ============================================================ */
+
+.kp-popup {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-60px);
+  background: linear-gradient(135deg, var(--accent), var(--xp-end));
+  color: #fff;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 10px 24px;
+  border-radius: var(--radius-pill);
+  z-index: 200;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: 0 4px 16px rgba(212, 168, 67, 0.4);
+}
+
+.kp-popup.show {
+  display: block !important;
+  animation: slideDown 2s ease forwards;
+}
+
+/* ============================================================
+   BURST PARTICLES
+   ============================================================ */
+
+#burst-container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 150;
+}
+
+.burst-particle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: burstExplode 0.6s ease-out forwards;
+}
+
+@keyframes burstExplode {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+}
+
+/* JS-generated intro/login particles */
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, #FFD700, #FF993388);
+  animation: particleFloat 3s ease-in infinite;
+  opacity: 0;
+}
+
+/* Level-up confetti pieces */
+.confetti-piece {
+  position: absolute;
+  top: -10px;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  animation: confetti 2.5s ease-out forwards;
+  opacity: 0.9;
+}
+
+/* Evening summary items */
+.summary-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.summary-item:last-child {
+  border-bottom: none;
+}
+
+.summary-item.done {
+  color: var(--success);
+  font-weight: 600;
+}
+
+/* ============================================================
+   BOTTOM NAVIGATION (User)
+   ============================================================ */
+
+#bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  background: var(--card-bg);
+  display: flex;
+  justify-content: space-around;
+  box-shadow: 0 -2px 12px var(--shadow);
+  padding: 6px 0 max(6px, env(safe-area-inset-bottom, 6px));
+  z-index: 100;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast), transform var(--transition-fast);
+  font-family: 'Inter', sans-serif;
+}
+
+.nav-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.nav-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.nav-item.active {
+  color: var(--primary);
+  transform: scale(1.05);
+}
+
+/* ============================================================
+   ACHIEVEMENTS TAB
+   ============================================================ */
+
+.achievements-container {
+  padding-bottom: 10px;
+}
+
+.section-heading {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.stat-item {
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  padding: 14px 8px;
+  text-align: center;
+  box-shadow: 0 2px 8px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-value {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 1.4rem;
+  color: var(--primary);
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Badges Grid */
+.badges-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.badge-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 6px;
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px var(--shadow);
+  transition: transform var(--transition-fast);
+  text-align: center;
+}
+
+.badge-item.locked {
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+
+.badge-item.earned {
+  filter: none;
+  opacity: 1;
+  box-shadow: 0 2px 12px rgba(255, 153, 51, 0.2);
+}
+
+.badge-item .badge-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.badge-item .badge-name {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+/* Rarity borders */
+.badge-item[data-rarity="common"]    { border-bottom: 3px solid #A0A0A0; }
+.badge-item[data-rarity="rare"]      { border-bottom: 3px solid #4A90D9; }
+.badge-item[data-rarity="epic"]      { border-bottom: 3px solid var(--level-purple); }
+.badge-item[data-rarity="legendary"] { border-bottom: 3px solid var(--accent); }
+
+/* Level Journey */
+.level-journey {
+  position: relative;
+  padding-left: 28px;
+  margin-bottom: 16px;
+}
+
+.level-journey::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #E0D6CE;
+  border-radius: 2px;
+}
+
+.level-journey .journey-node {
+  position: relative;
+  padding: 10px 0 10px 16px;
+}
+
+.level-journey .journey-node::before {
+  content: '';
+  position: absolute;
+  left: -24px;
+  top: 14px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #D0CCC8;
+  border: 2px solid #fff;
+  z-index: 2;
+}
+
+.level-journey .journey-node.reached::before {
+  background: var(--primary);
+  box-shadow: 0 0 6px rgba(232, 114, 42, 0.4);
+}
+
+.level-journey .journey-node.current::before {
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(212, 168, 67, 0.5);
+}
+
+.journey-node .journey-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.journey-node .journey-desc {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+/* ============================================================
+   SETTINGS TAB (Shared V1 + V2 admin)
+   ============================================================ */
+
+.settings-container {
+  padding-bottom: 10px;
+}
+
+.settings-group {
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px var(--shadow);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.settings-group-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.setting-item:last-child {
+  border-bottom: none;
+}
+
+.setting-item label {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.setting-item select,
+.setting-item input[type="number"] {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.82rem;
+  padding: 7px 12px;
+  border: 1.5px solid #DDD5CE;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color var(--transition-fast);
+  min-width: 100px;
+  -webkit-appearance: none;
+}
+
+.setting-item select:focus,
+.setting-item input[type="number"]:focus {
+  border-color: var(--primary);
+}
+
+.setting-item input[type="number"] {
+  width: 80px;
+  min-width: 80px;
+  text-align: center;
+}
+
+.btn-detect-location {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  background: transparent;
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-pill);
+  color: var(--primary);
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.btn-detect-location:active {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* Danger Zone */
+.danger-zone {
+  border: 1.5px solid rgba(220, 53, 69, 0.25);
+}
+
+.btn-reset {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 2px solid #DC3545;
+  border-radius: var(--radius-pill);
+  color: #DC3545;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.btn-reset:active {
+  background: #DC3545;
+  color: #fff;
+}
+
+/* Save Settings Button (Admin) */
+.btn-save-settings {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  margin-top: 16px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.btn-save-settings:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(232, 114, 42, 0.35);
+}
+
+.btn-save-settings:active {
+  transform: scale(0.98);
+}
+
+/* Save Confirmation */
+.save-confirmation {
+  font-size: 0.85rem;
+  color: var(--success);
+  text-align: center;
+  margin-top: 10px;
+  font-weight: 600;
+  animation: saveCheckFade 2.5s ease forwards;
+}
+
+/* .save-confirmation.hidden handled by .hidden */
+
+
+/* ============================================================
+   OVERLAYS (Level Up / Badge / Evening Summary)
+   ============================================================ */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(62, 39, 35, 0.65);
+  padding: 24px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.overlay-content {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 32px 24px 24px;
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+  position: relative;
+  transform: scale(0.9);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.overlay.show .overlay-content {
+  transform: scale(1);
+}
+
+/* Level Up Overlay */
+.level-up-content {
+  overflow: hidden;
+}
+
+.level-up-glow {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.4), transparent 70%);
+  animation: glowRadial 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.level-up-icon {
+  font-size: 3rem;
+  margin-bottom: 8px;
+  animation: pulseIcon 1.2s ease-in-out infinite;
+}
+
+.level-up-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 1.6rem;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.level-up-name {
+  font-size: 0.92rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.level-up-unlock {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.btn-continue {
+  display: inline-block;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 12px 32px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.btn-continue:active {
+  transform: scale(0.95);
+}
+
+/* Badge Unlock Overlay */
+.badge-unlock-content {
+  overflow: hidden;
+}
+
+.badge-unlock-glow {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(123, 45, 142, 0.3), transparent 70%);
+  animation: glowRadial 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.badge-unlock-icon {
+  font-size: 3rem;
+  margin-bottom: 8px;
+  animation: pulseIcon 1.2s ease-in-out infinite;
+}
+
+.badge-unlock-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 1.4rem;
+  color: var(--level-purple);
+  margin-bottom: 4px;
+}
+
+.badge-unlock-name {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.badge-unlock-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.badge-unlock-rarity {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 3px 14px;
+  border-radius: var(--radius-pill);
+  background: rgba(123, 45, 142, 0.1);
+  color: var(--level-purple);
+  margin-bottom: 16px;
+}
+
+/* Evening Summary Overlay */
+.summary-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.3rem;
+  margin-bottom: 14px;
+  color: var(--text-primary);
+}
+
+.summary-stats {
+  text-align: left;
+  margin-bottom: 14px;
+}
+
+.summary-stats .summary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 0.85rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.summary-stats .summary-row:last-child {
+  border-bottom: none;
+}
+
+.summary-kp {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 1.8rem;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.summary-streak {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.summary-message {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-bottom: 16px;
+}
+
+/* ============================================================
+   BOTTOM SPACER
+   ============================================================ */
+
+.bottom-spacer {
+  height: 80px;
+}
+
+
+/* ============================================================
+   ============================================================
+   ADMIN PANEL
+   ============================================================
+   ============================================================ */
+
+#admin-panel {
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+/* #admin-panel.hidden handled by .hidden */
+
+/* ----- Admin Header ----- */
+#admin-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: linear-gradient(135deg, var(--admin-dark) 0%, var(--admin-dark-end) 60%, var(--admin-accent) 100%);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(62, 39, 35, 0.3);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.admin-header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+}
+
+.admin-title-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-crown {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.admin-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #fff;
+  margin: 0;
+}
+
+/* Admin header logout — wider version with text */
+#admin-header .btn-header-logout {
+  width: auto;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  gap: 4px;
+  border-radius: var(--radius-sm);
+}
+
+/* ----- Admin Description ----- */
+.admin-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+/* ----- Admin Section ----- */
+.admin-section {
+  padding: 16px;
+}
+
+/* ----- Admin Sub Heading ----- */
+.sub-heading {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  margin: 16px 0 10px;
+}
+
+/* ----- Admin Tab System ----- */
+.admin-tab-content {
+  display: none;
+}
+
+.admin-tab-content.active {
+  display: block;
+  animation: fadeInUp 0.35s ease;
+}
+
+
+/* ============================================================
+   ADMIN: USER PROGRESS TAB
+   ============================================================ */
+
+/* Profile Card */
+.admin-profile-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  box-shadow: 0 2px 8px var(--shadow);
+  margin-bottom: 12px;
+}
+
+.admin-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.admin-profile-icon {
+  font-size: 2rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.admin-profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.admin-profile-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.admin-profile-kp {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.admin-profile-streak {
+  margin-left: auto;
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* Today's Activity Grid */
+.admin-today-grid {
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px var(--shadow);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.admin-activity-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0e8e0;
+  gap: 10px;
+}
+
+.admin-activity-item:last-child {
+  border-bottom: none;
+}
+
+.admin-act-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.admin-act-name {
+  flex: 1;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.admin-act-status {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.admin-act-status.done {
+  color: var(--success);
+  font-weight: 700;
+}
+
+/* Admin Stats Grid — same as user stats grid */
+.admin-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+/* Admin Badges List */
+.admin-badges-list {
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px var(--shadow);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.admin-no-badges {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  text-align: center;
+  margin: 0;
+}
+
+
+/* ============================================================
+   ADMIN: LOCK DAY TAB
+   ============================================================ */
+
+/* Lock Status Card */
+.lock-status-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  text-align: center;
+  box-shadow: 0 2px 8px var(--shadow);
+  margin-bottom: 16px;
+  transition: background var(--transition-med), border-color var(--transition-med);
+}
+
+.lock-status-card.locked {
+  background: linear-gradient(145deg, #e8f5e9, #f1f8e9);
+  border: 1px solid rgba(107, 158, 107, 0.3);
+}
+
+.lock-status-icon {
+  font-size: 3rem;
+  margin-bottom: 8px;
+  line-height: 1;
+}
+
+.lock-status-text {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+/* Lock Summary */
+.lock-summary {
+  margin: 16px 0;
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+.lock-summary p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+/* Lock Preview List — reuses admin-today-grid pattern but smaller */
+#lock-preview-list {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+#lock-preview-list .admin-activity-item {
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
+
+#lock-preview-list .admin-act-icon {
+  font-size: 1rem;
+}
+
+#lock-preview-list .admin-act-name {
+  font-size: 0.82rem;
+}
+
+#lock-preview-list .admin-act-status {
+  font-size: 0.8rem;
+}
+
+/* Lock Day Button */
+.btn-lock-day {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #DC3545, #E8722A);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
+}
+
+.btn-lock-day:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(220, 53, 69, 0.35);
+}
+
+.btn-lock-day:active {
+  transform: scale(0.98);
+}
+
+.btn-lock-day:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  background: #aaa;
+}
+
+/* Lock Note */
+.lock-note {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: 8px;
+}
+
+
+/* ============================================================
+   ADMIN BOTTOM NAV
+   ============================================================ */
+
+#admin-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  background: var(--card-bg);
+  display: flex;
+  justify-content: space-around;
+  box-shadow: 0 -2px 12px var(--shadow);
+  padding: 6px 0 max(6px, env(safe-area-inset-bottom, 6px));
+  z-index: 100;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* Admin nav items inherit .nav-item styles */
+#admin-bottom-nav .nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast), transform var(--transition-fast);
+  font-family: 'Inter', sans-serif;
+}
+
+#admin-bottom-nav .nav-item .nav-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+#admin-bottom-nav .nav-item .nav-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Admin active color — deep brown to distinguish from user's saffron */
+#admin-bottom-nav .nav-item.active {
+  color: var(--admin-dark);
+  transform: scale(1.05);
+}
+
+
+/* ============================================================
+   RESPONSIVE — Larger phones / small tablets
+   ============================================================ */
+
+@media (min-width: 480px) {
+  body {
+    background: #F0E6D8;
+  }
+
+  #app {
+    box-shadow: 0 0 40px rgba(62, 39, 35, 0.1);
+    background: var(--bg);
+  }
+
+  #admin-panel {
+    box-shadow: 0 0 40px rgba(62, 39, 35, 0.1);
+    background: var(--bg);
+  }
+
+  .stats-grid {
+    gap: 14px;
+  }
+
+  .admin-stats-grid {
+    gap: 14px;
+  }
+
+  .badges-grid {
+    gap: 14px;
+  }
+
+  .panchang-card {
+    padding: 22px 20px;
+  }
+
+  .login-card {
+    padding: 36px 32px;
+  }
+
+  .login-bg-glow {
+    width: 420px;
+    height: 420px;
+  }
+}
+
+/* ============================================================
+   SMALL SCREEN ADJUSTMENTS
+   ============================================================ */
+
+@media (max-width: 350px) {
+  .login-card {
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+
+  .login-title {
+    font-size: 1.4rem;
+  }
+
+  .admin-header-content {
+    padding: 12px;
+  }
+
+  .admin-title {
+    font-size: 1.05rem;
+  }
+
+  .admin-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ============================================================
+   MISSING V2 UTILITIES & ANIMATIONS
+   ============================================================ */
+
+.shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  15%, 45%, 75% { transform: translateX(-6px); }
+  30%, 60%, 90% { transform: translateX(6px); }
+}
+
+.kp-popup.kp-negative {
+  background: #D32F2F !important;
+  box-shadow: 0 4px 15px rgba(211, 47, 47, 0.4);
+}
+
+.lock-preview-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.lock-preview-item:last-child {
+  border-bottom: none;
+}
+
+.admin-badge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card-bg);
+  border: 2px solid #e0d5c8;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 4px;
+  box-shadow: 0 2px 6px var(--shadow);
+}
+
+/* ============================================================
+   PRINT STYLES
+   ============================================================ */
+
+@media print {
+  #login-screen,
+  #bottom-nav,
+  #admin-bottom-nav,
+  .btn-complete,
+  .btn-undo,
+  .btn-login,
+  .btn-save-settings,
+  .btn-lock-day,
+  .btn-header-logout,
+  .overlay {
+    display: none !important;
+  }
+}

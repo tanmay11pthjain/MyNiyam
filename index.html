@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="Kalyan Mitra V2 — Admin-controlled spiritual companion for daily Jain sadhana.">
+  <meta name="theme-color" content="#E8722A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Kalyan Mitra — Aapka Adhyatmik Saathi 🙏</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ===== LOGIN SCREEN ===== -->
+  <div id="login-screen">
+    <div class="login-bg-glow"></div>
+    <div class="login-particles" id="login-particles"></div>
+    <div class="login-card">
+      <div class="login-lotus">
+        <div class="lotus-petal p1"></div>
+        <div class="lotus-petal p2"></div>
+        <div class="lotus-petal p3"></div>
+        <div class="lotus-petal p4"></div>
+        <div class="lotus-petal p5"></div>
+        <div class="lotus-petal p6"></div>
+        <div class="lotus-petal p7"></div>
+        <div class="lotus-petal p8"></div>
+        <div class="lotus-center"></div>
+      </div>
+      <h1 class="login-title">🙏 Kalyan Mitra</h1>
+      <p class="login-subtitle">Aapka Adhyatmik Saathi</p>
+      <form id="login-form" autocomplete="on">
+        <div class="input-group">
+          <label for="login-username">Username</label>
+          <input type="text" id="login-username" name="username" autocomplete="username" required placeholder="Enter username">
+        </div>
+        <div class="input-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" name="password" autocomplete="current-password" required placeholder="Enter password">
+        </div>
+        <div class="login-error hidden" id="login-error"></div>
+        <button type="submit" class="btn-login" id="btn-login">
+          <span class="btn-login-text">Login</span>
+          <span class="btn-login-loading hidden" id="btn-login-loading">...</span>
+        </button>
+      </form>
+      <div class="login-footer">🙏 Jai Jinendra</div>
+    </div>
+  </div>
+
+  <!-- ===== USER DASHBOARD ===== -->
+  <div id="app" class="app-hidden">
+
+    <!-- Header: Level + XP + Streak + Logout -->
+    <header id="app-header">
+      <div class="header-top">
+        <div class="level-section">
+          <span class="level-icon" id="level-icon">💒</span>
+          <div class="level-info">
+            <span class="level-title" id="level-title">Balak</span>
+            <span class="karma-points" id="karma-points">10 KP</span>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="streak-section" id="streak-section">
+            <div class="streak-flame" id="streak-flame">🕯️</div>
+            <span class="streak-count" id="streak-count">0</span>
+          </div>
+          <button class="btn-header-logout" id="btn-user-logout" title="Logout">↩</button>
+        </div>
+      </div>
+      <div class="xp-bar-container">
+        <div class="xp-bar-track">
+          <div class="xp-bar-fill" id="xp-bar-fill" style="width: 3%"></div>
+        </div>
+        <span class="xp-bar-text" id="xp-bar-text">Lvl 1 • 10/300 KP</span>
+      </div>
+    </header>
+
+    <!-- Lock Banner -->
+    <div id="lock-banner" class="lock-banner hidden">
+      <span class="lock-banner-icon">🔒</span>
+      <span class="lock-banner-text">Today's activities are locked. Status finalized.</span>
+    </div>
+
+    <!-- TAB: HOME -->
+    <main id="tab-home" class="tab-content active">
+
+      <!-- Panchang Card -->
+      <section id="panchang-section">
+        <div class="panchang-card">
+          <div class="panchang-header">
+            <span class="panchang-icon">🙏</span>
+            <div class="panchang-date-area">
+              <div class="panchang-date" id="panchang-date"></div>
+              <div class="panchang-jain-month" id="panchang-jain-month"></div>
+            </div>
+          </div>
+          <div class="tithi-display">
+            <div class="tithi-label">Today's Tithi</div>
+            <div class="tithi-value" id="tithi-value">Loading...</div>
+          </div>
+          <div class="sun-times">
+            <div class="time-item">
+              <div class="time-icon">🌅</div>
+              <div class="time-label">Sunrise</div>
+              <div class="time-value" id="sunrise-time">--:--</div>
+            </div>
+            <div class="time-item">
+              <div class="time-icon">🙏</div>
+              <div class="time-label">Navkarsi</div>
+              <div class="time-value" id="navkarsi-time">--:--</div>
+            </div>
+            <div class="time-item">
+              <div class="time-icon">🌇</div>
+              <div class="time-label">Sunset</div>
+              <div class="time-value" id="sunset-time">--:--</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Daily Progress -->
+      <section id="daily-progress-section">
+        <div class="daily-progress-card">
+          <div class="daily-progress-header">
+            <span class="daily-progress-title">Today's Sadhana</span>
+            <span class="daily-progress-text" id="daily-progress-text">0/5 Complete</span>
+          </div>
+          <div class="daily-progress-track">
+            <div class="daily-progress-fill" id="daily-progress-fill" style="width: 0%"></div>
+          </div>
+          <div class="daily-kp" id="daily-kp">+0 KP earned today</div>
+        </div>
+      </section>
+
+      <!-- Activity Cards -->
+      <section id="activities-section">
+
+        <!-- SAMAYIK -->
+        <div class="activity-card" id="samayik-card">
+          <div class="lock-indicator hidden" id="samayik-lock">🔒</div>
+          <div class="card-header">
+            <div class="card-title-area">
+              <span class="card-icon">🧘</span>
+              <span class="card-title">Samayik</span>
+            </div>
+            <span class="card-kp">+25 KP</span>
+          </div>
+          <div class="card-body">
+            <div class="progress-ring-container">
+              <svg class="progress-ring" viewBox="0 0 80 80">
+                <circle class="progress-ring-bg" cx="40" cy="40" r="34"></circle>
+                <circle class="progress-ring-fill" id="samayik-ring" cx="40" cy="40" r="34" stroke-dasharray="213.6" stroke-dashoffset="213.6"></circle>
+              </svg>
+              <span class="progress-ring-text" id="samayik-progress-text">0/1</span>
+            </div>
+            <div class="card-status" id="samayik-status">Tap to mark complete</div>
+          </div>
+          <div class="card-actions dual-actions">
+            <button class="btn-complete" id="btn-samayik">
+              <span class="btn-icon">✓</span> Complete
+            </button>
+            <button class="btn-undo hidden" id="btn-samayik-undo">
+              <span class="btn-icon">↩</span> Undo
+            </button>
+          </div>
+          <div class="card-bonus" id="samayik-bonus"></div>
+        </div>
+
+        <!-- POOJA -->
+        <div class="activity-card" id="pooja-card">
+          <div class="lock-indicator hidden" id="pooja-lock">🔒</div>
+          <div class="card-header">
+            <div class="card-title-area">
+              <span class="card-icon">🪔</span>
+              <span class="card-title">Pooja</span>
+            </div>
+            <span class="card-kp">+20 KP</span>
+          </div>
+          <div class="card-body">
+            <div class="pooja-status" id="pooja-status">
+              <div class="status-circle" id="pooja-circle"></div>
+              <span id="pooja-status-text">Not done yet</span>
+            </div>
+          </div>
+          <div class="card-actions pooja-actions">
+            <button class="btn-complete" id="btn-pooja">
+              <span class="btn-icon">✓</span> Done
+            </button>
+            <button class="btn-undo hidden" id="btn-pooja-undo">
+              <span class="btn-icon">↩</span> Undo
+            </button>
+            <label class="pakshal-toggle" id="pakshal-toggle">
+              <input type="checkbox" id="pakshal-checkbox">
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">Pakshal</span>
+            </label>
+          </div>
+          <div class="card-bonus" id="pooja-bonus"></div>
+        </div>
+
+        <!-- SWADHYAY -->
+        <div class="activity-card" id="swadhyay-card">
+          <div class="lock-indicator hidden" id="swadhyay-lock">🔒</div>
+          <div class="card-header">
+            <div class="card-title-area">
+              <span class="card-icon">📖</span>
+              <span class="card-title">Swadhyay</span>
+            </div>
+            <span class="card-kp">+15 KP</span>
+          </div>
+          <div class="card-body">
+            <div class="counter-section">
+              <button class="btn-counter btn-minus" id="btn-swadhyay-minus">−</button>
+              <div class="counter-display">
+                <span class="counter-value" id="swadhyay-count">0</span>
+                <span class="counter-unit" id="swadhyay-unit">pages</span>
+              </div>
+              <button class="btn-counter btn-plus" id="btn-swadhyay-plus">+</button>
+            </div>
+            <div class="swadhyay-progress">
+              <div class="swadhyay-progress-track">
+                <div class="swadhyay-progress-fill" id="swadhyay-progress-fill" style="width: 0%"></div>
+              </div>
+              <span class="swadhyay-progress-text" id="swadhyay-progress-text">0/5 pages</span>
+            </div>
+          </div>
+          <div class="card-bonus" id="swadhyay-bonus"></div>
+        </div>
+
+        <!-- PRATIKRAMAN -->
+        <div class="activity-card" id="pratikraman-card">
+          <div class="lock-indicator hidden" id="pratikraman-lock">🔒</div>
+          <div class="card-header">
+            <div class="card-title-area">
+              <span class="card-icon">🙏</span>
+              <span class="card-title">Pratikraman</span>
+            </div>
+            <span class="card-kp">+30 KP</span>
+          </div>
+          <div class="card-body">
+            <div class="pratikraman-slots">
+              <button class="slot-btn" id="pratikraman-morning">
+                <span class="slot-icon">🌅</span>
+                <span class="slot-label">Morning</span>
+                <span class="slot-check" id="pratikraman-morning-check">○</span>
+              </button>
+              <button class="slot-btn" id="pratikraman-evening">
+                <span class="slot-icon">🌙</span>
+                <span class="slot-label">Evening</span>
+                <span class="slot-check" id="pratikraman-evening-check">○</span>
+              </button>
+            </div>
+            <div class="card-status" id="pratikraman-status">0/2 completed</div>
+          </div>
+          <div class="card-bonus" id="pratikraman-bonus"></div>
+        </div>
+
+        <!-- DAILY NIYAM -->
+        <div class="activity-card niyam-card" id="niyam-card">
+          <div class="lock-indicator hidden" id="niyam-lock">🔒</div>
+          <div class="card-header">
+            <div class="card-title-area">
+              <span class="card-icon">✨</span>
+              <span class="card-title">Aaj Ka Niyam</span>
+            </div>
+            <span class="card-kp">+20 KP</span>
+          </div>
+          <div class="card-body">
+            <div class="niyam-text" id="niyam-text">Loading...</div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-complete btn-niyam" id="btn-niyam">
+              <span class="btn-icon">✓</span> Maine Paalan Kiya
+            </button>
+            <button class="btn-undo hidden" id="btn-niyam-undo">
+              <span class="btn-icon">↩</span> Undo
+            </button>
+          </div>
+          <div class="card-bonus" id="niyam-bonus"></div>
+        </div>
+
+      </section>
+
+      <!-- Motivation -->
+      <section id="motivation-section">
+        <div class="motivation-card">
+          <div class="motivation-text" id="motivation-text"></div>
+          <div class="social-proof" id="social-proof"></div>
+        </div>
+      </section>
+      <div class="bottom-spacer"></div>
+    </main>
+
+    <!-- TAB: ACHIEVEMENTS -->
+    <div id="tab-achievements" class="tab-content">
+      <div class="achievements-container">
+        <h2 class="section-heading">📊 Your Stats</h2>
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-item"><span class="stat-value" id="stat-total-kp">10</span><span class="stat-label">Total KP</span></div>
+          <div class="stat-item"><span class="stat-value" id="stat-longest-streak">0</span><span class="stat-label">Best Streak</span></div>
+          <div class="stat-item"><span class="stat-value" id="stat-total-samayik">0</span><span class="stat-label">Samayiks</span></div>
+          <div class="stat-item"><span class="stat-value" id="stat-total-swadhyay">0</span><span class="stat-label">Pages Read</span></div>
+          <div class="stat-item"><span class="stat-value" id="stat-total-pratikraman">0</span><span class="stat-label">Pratikramans</span></div>
+          <div class="stat-item"><span class="stat-value" id="stat-perfect-days">0</span><span class="stat-label">Perfect Days</span></div>
+        </div>
+        <h2 class="section-heading">🏆 Trophy Shelf</h2>
+        <div class="badges-grid" id="badges-grid"></div>
+        <h2 class="section-heading">🏔️ Spiritual Journey</h2>
+        <div class="level-journey" id="level-journey"></div>
+      </div>
+      <div class="bottom-spacer"></div>
+    </div>
+
+    <!-- BOTTOM NAV (User: 2 tabs only) -->
+    <nav id="bottom-nav">
+      <button class="nav-item active" data-tab="home">
+        <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+      </button>
+      <button class="nav-item" data-tab="achievements">
+        <span class="nav-icon">🏆</span><span class="nav-label">Badges</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ===== ADMIN PANEL ===== -->
+  <div id="admin-panel" class="hidden">
+    <header id="admin-header">
+      <div class="admin-header-content">
+        <div class="admin-title-area">
+          <span class="admin-crown">👑</span>
+          <h1 class="admin-title">Admin Panel</h1>
+        </div>
+        <button class="btn-header-logout" id="btn-admin-logout" title="Logout">↩ Logout</button>
+      </div>
+    </header>
+
+    <!-- ADMIN TAB: SETTINGS -->
+    <div id="admin-tab-settings" class="admin-tab-content active">
+      <div class="admin-section">
+        <h2 class="section-heading">⚙️ Target Settings</h2>
+        <p class="admin-desc">Set daily targets for the user's spiritual practice.</p>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">🧘 Samayik</h3>
+          <div class="setting-item">
+            <label for="admin-samayik-target">Daily Target</label>
+            <select id="admin-samayik-target">
+              <option value="1">1 per day</option>
+              <option value="2">2 per day</option>
+              <option value="3">3 per day</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label for="admin-samayik-frequency">Frequency</label>
+            <select id="admin-samayik-frequency">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">📖 Swadhyay</h3>
+          <div class="setting-item">
+            <label for="admin-swadhyay-target">Daily Target</label>
+            <input type="number" id="admin-swadhyay-target" min="1" max="100" value="5">
+          </div>
+          <div class="setting-item">
+            <label for="admin-swadhyay-unit">Unit</label>
+            <select id="admin-swadhyay-unit">
+              <option value="pages">Pages</option>
+              <option value="lines">Lines</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">🙏 Pratikraman</h3>
+          <div class="setting-item">
+            <label for="admin-pratikraman-target">Type</label>
+            <select id="admin-pratikraman-target">
+              <option value="daily">Daily (2 per day)</option>
+              <option value="chaudasi">Chaudasi</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">📍 Location</h3>
+          <div class="setting-item">
+            <label for="admin-location">City</label>
+            <select id="admin-location">
+              <option value="bangalore">Bangalore</option>
+              <option value="mumbai">Mumbai</option>
+              <option value="ahmedabad">Ahmedabad</option>
+              <option value="delhi">Delhi</option>
+              <option value="jaipur">Jaipur</option>
+              <option value="kolkata">Kolkata</option>
+              <option value="chennai">Chennai</option>
+              <option value="pune">Pune</option>
+              <option value="surat">Surat</option>
+              <option value="udaipur">Udaipur</option>
+              <option value="palitana">Palitana</option>
+              <option value="indore">Indore</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="btn-save-settings" id="btn-save-settings">💾 Save Settings</button>
+        <div class="save-confirmation hidden" id="save-confirmation">✅ Settings saved!</div>
+      </div>
+    </div>
+
+    <!-- ADMIN TAB: USER PROGRESS -->
+    <div id="admin-tab-progress" class="admin-tab-content">
+      <div class="admin-section">
+        <h2 class="section-heading">📊 User Progress</h2>
+
+        <div class="admin-profile-card">
+          <div class="admin-profile-header">
+            <span class="admin-profile-icon" id="admin-user-level-icon">💒</span>
+            <div class="admin-profile-info">
+              <span class="admin-profile-title" id="admin-user-level">Balak</span>
+              <span class="admin-profile-kp" id="admin-user-kp">10 KP</span>
+            </div>
+            <div class="admin-profile-streak">
+              <span id="admin-user-streak-flame">🕯️</span>
+              <span id="admin-user-streak">0 day streak</span>
+            </div>
+          </div>
+        </div>
+
+        <h3 class="sub-heading">Today's Activities</h3>
+        <div class="admin-today-grid" id="admin-today-grid">
+          <div class="admin-activity-item" id="admin-act-samayik">
+            <span class="admin-act-icon">🧘</span>
+            <span class="admin-act-name">Samayik</span>
+            <span class="admin-act-status" id="admin-samayik-status">0/1</span>
+          </div>
+          <div class="admin-activity-item" id="admin-act-pooja">
+            <span class="admin-act-icon">🪔</span>
+            <span class="admin-act-name">Pooja</span>
+            <span class="admin-act-status" id="admin-pooja-status">✗</span>
+          </div>
+          <div class="admin-activity-item" id="admin-act-swadhyay">
+            <span class="admin-act-icon">📖</span>
+            <span class="admin-act-name">Swadhyay</span>
+            <span class="admin-act-status" id="admin-swadhyay-status">0/5</span>
+          </div>
+          <div class="admin-activity-item" id="admin-act-pratikraman">
+            <span class="admin-act-icon">🙏</span>
+            <span class="admin-act-name">Pratikraman</span>
+            <span class="admin-act-status" id="admin-pratikraman-status">0/2</span>
+          </div>
+          <div class="admin-activity-item" id="admin-act-niyam">
+            <span class="admin-act-icon">✨</span>
+            <span class="admin-act-name">Niyam</span>
+            <span class="admin-act-status" id="admin-niyam-status">✗</span>
+          </div>
+        </div>
+
+        <h3 class="sub-heading">Lifetime Stats</h3>
+        <div class="admin-stats-grid">
+          <div class="stat-item"><span class="stat-value" id="admin-stat-kp">10</span><span class="stat-label">Total KP</span></div>
+          <div class="stat-item"><span class="stat-value" id="admin-stat-streak">0</span><span class="stat-label">Best Streak</span></div>
+          <div class="stat-item"><span class="stat-value" id="admin-stat-samayik">0</span><span class="stat-label">Samayiks</span></div>
+          <div class="stat-item"><span class="stat-value" id="admin-stat-swadhyay">0</span><span class="stat-label">Pages</span></div>
+          <div class="stat-item"><span class="stat-value" id="admin-stat-pratikraman">0</span><span class="stat-label">Pratikramans</span></div>
+          <div class="stat-item"><span class="stat-value" id="admin-stat-perfect">0</span><span class="stat-label">Perfect Days</span></div>
+        </div>
+
+        <h3 class="sub-heading">🏆 Badges Earned</h3>
+        <div class="admin-badges-list" id="admin-badges-list">
+          <p class="admin-no-badges">No badges earned yet.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN TAB: LOCK DAY -->
+    <div id="admin-tab-lock" class="admin-tab-content">
+      <div class="admin-section">
+        <h2 class="section-heading">🔒 Lock Day</h2>
+        <p class="admin-desc">Lock today's submissions to finalize the user's activity status. This action cannot be undone.</p>
+
+        <div class="lock-status-card" id="lock-status-card">
+          <div class="lock-status-icon" id="lock-status-icon">🔓</div>
+          <div class="lock-status-text" id="lock-status-text">Today is <strong>unlocked</strong>. User can still modify activities.</div>
+        </div>
+
+        <div class="lock-summary" id="lock-summary">
+          <p>Current status if locked now:</p>
+          <div id="lock-preview-list"><!-- Populated by JS --></div>
+        </div>
+
+        <button class="btn-lock-day" id="btn-lock-day">🔒 Lock Today's Submissions</button>
+        <p class="lock-note">⏰ Auto-lock also happens at midnight.</p>
+
+        <div class="settings-group danger-zone" style="margin-top:24px">
+          <h3 class="settings-group-title">⚠️ Danger Zone</h3>
+          <button class="btn-reset" id="btn-admin-reset">Reset All User Progress</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN BOTTOM NAV -->
+    <nav id="admin-bottom-nav">
+      <button class="nav-item active" data-tab="admin-settings">
+        <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
+      </button>
+      <button class="nav-item" data-tab="admin-progress">
+        <span class="nav-icon">📊</span><span class="nav-label">Progress</span>
+      </button>
+      <button class="nav-item" data-tab="admin-lock">
+        <span class="nav-icon">🔒</span><span class="nav-label">Lock</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ===== OVERLAYS ===== -->
+
+  <!-- Level Up -->
+  <div id="level-up-overlay" class="overlay hidden">
+    <div class="overlay-content level-up-content">
+      <div class="level-up-glow"></div>
+      <div class="level-up-icon" id="level-up-icon">🧘</div>
+      <h2 class="level-up-title">Level Up!</h2>
+      <p class="level-up-name" id="level-up-name">You are now a Sadhak!</p>
+      <p class="level-up-unlock" id="level-up-unlock">Unlocked!</p>
+      <button class="btn-continue" id="btn-close-levelup">Jai Jinendra 🙏</button>
+    </div>
+  </div>
+
+  <!-- Badge Unlock -->
+  <div id="badge-unlock-overlay" class="overlay hidden">
+    <div class="overlay-content badge-unlock-content">
+      <div class="badge-unlock-glow"></div>
+      <div class="badge-unlock-icon" id="badge-unlock-icon">🏆</div>
+      <h2 class="badge-unlock-title">New Achievement!</h2>
+      <p class="badge-unlock-name" id="badge-unlock-name"></p>
+      <p class="badge-unlock-desc" id="badge-unlock-desc"></p>
+      <span class="badge-unlock-rarity" id="badge-unlock-rarity">Common</span>
+      <button class="btn-continue" id="btn-close-badge">Wonderful! ✨</button>
+    </div>
+  </div>
+
+  <!-- Evening Summary -->
+  <div id="evening-summary-overlay" class="overlay hidden">
+    <div class="overlay-content evening-summary-content">
+      <h2 class="summary-title">🌙 Today's Report</h2>
+      <div class="summary-stats" id="summary-stats"></div>
+      <div class="summary-kp" id="summary-kp">+0 KP earned</div>
+      <div class="summary-streak" id="summary-streak"></div>
+      <div class="summary-message" id="summary-message"></div>
+      <button class="btn-continue" id="btn-close-summary">Jai Jinendra 🙏</button>
+    </div>
+  </div>
+
+  <!-- KP Popup -->
+  <div id="kp-popup" class="kp-popup hidden">+0 KP</div>
+
+  <!-- Burst Particles -->
+  <div id="burst-container"></div>
+
+  <!-- Scripts -->
+  <script src="data.js"></script>
+  <script src="auth.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
