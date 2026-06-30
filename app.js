@@ -32,6 +32,7 @@ class KalyanMitra {
     const session = Auth.validateSession();
     if (session) {
       this.currentRole = session.role;
+      document.getElementById('login-screen').classList.add('hidden');
       if (session.role === 'admin') {
         this.initAdmin();
       } else {
