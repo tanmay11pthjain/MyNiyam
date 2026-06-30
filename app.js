@@ -183,18 +183,48 @@ class KalyanMitra {
 
   // ===== EVENT LISTENERS =====
   setupUserEventListeners() {
-    // Activity buttons
-    document.getElementById('btn-samayik').addEventListener('click', () => this.completeSamayik());
-    document.getElementById('btn-samayik-undo').addEventListener('click', () => this.undoSamayik());
-    document.getElementById('btn-pooja').addEventListener('click', () => this.completePooja());
-    document.getElementById('btn-pooja-undo').addEventListener('click', () => this.undoPooja());
-    document.getElementById('pakshal-checkbox').addEventListener('change', () => this.togglePakshal());
-    document.getElementById('btn-swadhyay-minus').addEventListener('click', () => this.adjustSwadhyay(-1));
-    document.getElementById('btn-swadhyay-plus').addEventListener('click', () => this.adjustSwadhyay(1));
-    document.getElementById('pratikraman-morning').addEventListener('click', () => this.togglePratikraman('morning'));
-    document.getElementById('pratikraman-evening').addEventListener('click', () => this.togglePratikraman('evening'));
-    document.getElementById('btn-niyam').addEventListener('click', () => this.confirmNiyam());
-    document.getElementById('btn-niyam-undo').addEventListener('click', () => this.undoNiyam());
+    const bindSimple = (id, prop, points, elId = id) => {
+      const btn = document.getElementById(`btn-${elId}`);
+      const btnUndo = document.getElementById(`btn-${elId}-undo`);
+      if (btn) btn.addEventListener('click', () => this.toggleSimpleActivity(elId, prop, true, points));
+      if (btnUndo) btnUndo.addEventListener('click', () => this.toggleSimpleActivity(elId, prop, false, points));
+    };
+
+    bindSimple('navkarsi', 'navkarsiDone', POINTS.navkarsi);
+    bindSimple('wakeup', 'wakeUpDone', POINTS.wakeUpEarly);
+    bindSimple('sleep', 'sleepDone', POINTS.sleepEarly);
+    bindSimple('pranam', 'pranamDone', POINTS.pranam);
+    bindSimple('ratribhojan', 'ratriBhojanDone', POINTS.ratriBhojan);
+    bindSimple('kandmool', 'kandmoolDone', POINTS.kandmool);
+    bindSimple('niyam', 'dailyNiyamDone', POINTS.dailyNiyam);
+
+    const btnPooja = document.getElementById('btn-pooja');
+    const btnPoojaUndo = document.getElementById('btn-pooja-undo');
+    if (btnPooja) btnPooja.addEventListener('click', () => this.completePooja());
+    if (btnPoojaUndo) btnPoojaUndo.addEventListener('click', () => this.undoPooja());
+
+    const ashtaCheck = document.getElementById('ashta-checkbox');
+    if (ashtaCheck) ashtaCheck.addEventListener('change', () => this.toggleAshtaPrakari());
+
+    const bindCounter = (id, handler) => {
+      const btnMinus = document.getElementById(`btn-${id}-minus`);
+      const btnPlus = document.getElementById(`btn-${id}-plus`);
+      if (btnMinus) btnMinus.addEventListener('click', () => handler(-1));
+      if (btnPlus) btnPlus.addEventListener('click', () => handler(1));
+    };
+
+    bindCounter('samayik', (delta) => this.adjustCounter('samayikDone', delta, POINTS.samayik, 'samayik'));
+    bindCounter('pratikraman', (delta) => this.adjustCounter('pratikramanDone', delta, POINTS.pratikraman, 'pratikraman'));
+    bindCounter('book', (delta) => this.adjustCounter('bookReadingMins', delta * 30, POINTS.bookReading, 'book'));
+
+    const bindScreenTime = (id, prop, delta) => {
+      const btnMinus = document.getElementById(`btn-${id}-minus`);
+      const btnPlus = document.getElementById(`btn-${id}-plus`);
+      if (btnMinus) btnMinus.addEventListener('click', () => this.adjustScreenTime(prop, -delta));
+      if (btnPlus) btnPlus.addEventListener('click', () => this.adjustScreenTime(prop, delta));
+    };
+    bindScreenTime('screen-h', 'screenTimeHours', 1);
+    bindScreenTime('screen-m', 'screenTimeMins', 15);
 
     // Navigation
     document.querySelectorAll('#bottom-nav .nav-item').forEach(btn => {
@@ -545,106 +575,127 @@ class KalyanMitra {
     const s = this.settings, d = this.dailyLog;
     const locked = this.isDayLocked();
 
-    // Samayik
-    const samTarget = parseInt(s.samayikTarget);
-    const samDone = d.samayikDone || 0;
-    document.getElementById('samayik-progress-text').textContent = `${samDone}/${samTarget}`;
-    this.updateProgressRing('samayik-ring', samDone / samTarget);
-    const samCard = document.getElementById('samayik-card');
-    const btnSam = document.getElementById('btn-samayik');
-    const btnSamUndo = document.getElementById('btn-samayik-undo');
-    if (samDone >= samTarget) {
-      samCard.classList.add('completed');
-      btnSam.classList.add('hidden');
-      if (!locked) btnSamUndo.classList.remove('hidden');
-      document.getElementById('samayik-status').textContent = 'Target achieved! 🎉';
-    } else {
-      samCard.classList.remove('completed');
-      btnSam.classList.remove('hidden');
-      if (samDone > 0 && !locked) btnSamUndo.classList.remove('hidden');
-      else btnSamUndo.classList.add('hidden');
-      document.getElementById('samayik-status').textContent = `${samTarget - samDone} more to go`;
-    }
+    // Toggle visibility based on Admin settings
+    document.getElementById('navkarsi-card').style.display = s.enableNavkarsi ? 'flex' : 'none';
+    document.getElementById('wakeup-card').style.display = s.enableWakeup ? 'flex' : 'none';
+    document.getElementById('sleep-card').style.display = s.enableSleep ? 'flex' : 'none';
+    document.getElementById('pranam-card').style.display = s.enablePranam ? 'flex' : 'none';
+    document.getElementById('pooja-card').style.display = s.enablePooja ? 'flex' : 'none';
+    document.getElementById('samayik-card').style.display = s.enableSamayik ? 'flex' : 'none';
+    document.getElementById('pratikraman-card').style.display = s.enablePratikraman ? 'flex' : 'none';
+    document.getElementById('book-card').style.display = s.enableBookReading ? 'flex' : 'none';
+    document.getElementById('ratribhojan-card').style.display = s.enableRatriBhojan ? 'flex' : 'none';
+    document.getElementById('kandmool-card').style.display = s.enableKandmool ? 'flex' : 'none';
+    document.getElementById('screentime-card').style.display = s.enableScreenTime ? 'flex' : 'none';
+    document.getElementById('niyam-card').style.display = s.enableDailyNiyam ? 'block' : 'none';
+
+    const checkCat = (catId, toggles) => {
+      document.getElementById(catId).style.display = toggles.some(t => t) ? 'block' : 'none';
+    };
+    checkCat('cat-morning', [s.enableNavkarsi, s.enableWakeup, s.enableSleep, s.enablePranam]);
+    checkCat('cat-sadhana', [s.enablePooja, s.enableSamayik, s.enablePratikraman, s.enableBookReading]);
+    checkCat('cat-tyag', [s.enableRatriBhojan, s.enableKandmool, s.enableScreenTime, s.enableDailyNiyam]);
+
+    const updateSimpleCard = (id, isDone) => {
+      const card = document.getElementById(`${id}-card`);
+      const btn = document.getElementById(`btn-${id}`);
+      const btnUndo = document.getElementById(`btn-${id}-undo`);
+      if (!card || !btn || !btnUndo) return;
+      if (isDone) {
+        card.classList.add('completed');
+        btn.classList.add('hidden');
+        if (!locked) btnUndo.classList.remove('hidden');
+      } else {
+        card.classList.remove('completed');
+        btn.classList.remove('hidden');
+        btnUndo.classList.add('hidden');
+      }
+      btn.disabled = locked;
+    };
+
+    updateSimpleCard('navkarsi', d.navkarsiDone);
+    updateSimpleCard('wakeup', d.wakeUpDone);
+    updateSimpleCard('sleep', d.sleepDone);
+    updateSimpleCard('pranam', d.pranamDone);
+    updateSimpleCard('ratribhojan', d.ratriBhojanDone);
+    updateSimpleCard('kandmool', d.kandmoolDone);
 
     // Pooja
-    const poojaCard = document.getElementById('pooja-card');
-    const btnPooja = document.getElementById('btn-pooja');
-    const btnPoojaUndo = document.getElementById('btn-pooja-undo');
-    const poojaCircle = document.getElementById('pooja-circle');
-    if (d.poojaDone) {
-      poojaCard.classList.add('completed');
-      btnPooja.classList.add('hidden');
-      if (!locked) btnPoojaUndo.classList.remove('hidden');
-      poojaCircle.classList.add('done');
-      document.getElementById('pooja-status-text').textContent = 'Pooja completed! 🪔';
-    } else {
-      poojaCard.classList.remove('completed');
-      btnPooja.classList.remove('hidden');
-      btnPoojaUndo.classList.add('hidden');
-      poojaCircle.classList.remove('done');
-      document.getElementById('pooja-status-text').textContent = 'Not done yet';
+    updateSimpleCard('pooja', d.poojaDone);
+    const ashtaCheck = document.getElementById('ashta-checkbox');
+    if (ashtaCheck) {
+      ashtaCheck.checked = d.ashtaPrakariDone || false;
+      ashtaCheck.disabled = locked;
     }
-    document.getElementById('pakshal-checkbox').checked = d.pakshalDone || false;
-    document.getElementById('pakshal-checkbox').disabled = locked;
 
-    // Swadhyay
-    const swTarget = parseInt(s.swadhyayTarget);
-    const swDone = d.swadhyayDone || 0;
-    document.getElementById('swadhyay-count').textContent = swDone;
-    document.getElementById('swadhyay-unit').textContent = s.swadhyayUnit;
-    document.getElementById('swadhyay-progress-text').textContent = `${swDone}/${swTarget} ${s.swadhyayUnit}`;
-    document.getElementById('swadhyay-progress-fill').style.width = `${Math.min(100, (swDone / swTarget) * 100)}%`;
-    const swCard = document.getElementById('swadhyay-card');
-    if (swDone >= swTarget) swCard.classList.add('completed');
-    else swCard.classList.remove('completed');
-    document.getElementById('btn-swadhyay-minus').disabled = locked || swDone <= 0;
-    document.getElementById('btn-swadhyay-plus').disabled = locked;
+    // Counters
+    const updateCounterCard = (id, count) => {
+      const elCount = document.getElementById(`${id}-count`);
+      if (elCount) elCount.textContent = count;
+      const cCard = document.getElementById(`${id}-card`);
+      if (!cCard) return;
+      if (count > 0) cCard.classList.add('completed');
+      else cCard.classList.remove('completed');
+      const btnMinus = document.getElementById(`btn-${id}-minus`);
+      if (btnMinus) btnMinus.disabled = locked || count <= 0;
+      const btnPlus = document.getElementById(`btn-${id}-plus`);
+      if (btnPlus) btnPlus.disabled = locked;
+    };
+    updateCounterCard('samayik', d.samayikDone || 0);
+    updateCounterCard('pratikraman', d.pratikramanDone || 0);
+    updateCounterCard('book', d.bookReadingMins || 0);
 
-    // Pratikraman
-    const pratM = d.pratikramanMorning || false;
-    const pratE = d.pratikramanEvening || false;
-    const pratDone = (pratM ? 1 : 0) + (pratE ? 1 : 0);
-    document.getElementById('pratikraman-morning-check').textContent = pratM ? '✓' : '○';
-    document.getElementById('pratikraman-evening-check').textContent = pratE ? '✓' : '○';
-    document.getElementById('pratikraman-status').textContent = `${pratDone}/2 completed`;
-    const morBtn = document.getElementById('pratikraman-morning');
-    const eveBtn = document.getElementById('pratikraman-evening');
-    morBtn.classList.toggle('completed', pratM);
-    eveBtn.classList.toggle('completed', pratE);
-    morBtn.disabled = locked;
-    eveBtn.disabled = locked;
-    const pratCard = document.getElementById('pratikraman-card');
-    if (pratDone >= 2) pratCard.classList.add('completed');
-    else pratCard.classList.remove('completed');
+    // Screen Time
+    const stH = d.screenTimeHours || 0;
+    const stM = d.screenTimeMins || 0;
+    const stCard = document.getElementById('screentime-card');
+    if (stCard) {
+      document.getElementById('screen-h-count').textContent = `${stH}h`;
+      document.getElementById('screen-m-count').textContent = `${stM}m`;
+      if (stH > 0 || stM > 0) stCard.classList.add('completed');
+      else stCard.classList.remove('completed');
+      
+      document.getElementById('btn-screen-h-minus').disabled = locked || stH <= 0;
+      document.getElementById('btn-screen-h-plus').disabled = locked;
+      document.getElementById('btn-screen-m-minus').disabled = locked || stM <= 0;
+      document.getElementById('btn-screen-m-plus').disabled = locked;
+    }
 
     // Niyam
-    const niyamCard = document.getElementById('niyam-card');
-    const btnNiyam = document.getElementById('btn-niyam');
-    const btnNiyamUndo = document.getElementById('btn-niyam-undo');
-    if (d.niyamFollowed) {
-      niyamCard.classList.add('completed');
-      btnNiyam.classList.add('hidden');
-      if (!locked) btnNiyamUndo.classList.remove('hidden');
-    } else {
-      niyamCard.classList.remove('completed');
-      btnNiyam.classList.remove('hidden');
-      btnNiyamUndo.classList.add('hidden');
-    }
+    updateSimpleCard('niyam', d.dailyNiyamDone);
+  }
+
+  getTotalTasksCount() {
+    const s = this.settings;
+    let total = 0;
+    if (s.enableNavkarsi) total++;
+    if (s.enableWakeup) total++;
+    if (s.enableSleep) total++;
+    if (s.enablePranam) total++;
+    if (s.enablePooja) total++;
+    if (s.enableSamayik) total++;
+    if (s.enablePratikraman) total++;
+    if (s.enableBookReading) total++;
+    if (s.enableRatriBhojan) total++;
+    if (s.enableKandmool) total++;
+    if (s.enableDailyNiyam) total++;
+    return total;
   }
 
   renderDailyProgress() {
+    const total = this.getTotalTasksCount() || 1; // Prevent div by 0
     const completed = this.getCompletedCount();
-    const pct = (completed / 5) * 100;
-    document.getElementById('daily-progress-text').textContent = `${completed}/5 Complete`;
+    const pct = (completed / total) * 100;
+    document.getElementById('daily-progress-text').textContent = `${completed}/${total} Complete`;
     const fill = document.getElementById('daily-progress-fill');
     fill.style.width = `${pct}%`;
-    fill.classList.toggle('perfect', completed >= 5);
+    fill.classList.toggle('perfect', completed >= total);
     document.getElementById('daily-kp').textContent = `+${this.dailyLog.kpEarned || 0} KP earned today`;
   }
 
   renderNiyam() {
-    const dayOfYear = this.getDayOfYear();
-    document.getElementById('niyam-text').textContent = PACHCHAKHANS[dayOfYear % PACHCHAKHANS.length];
+    const niyamId = this.settings.currentDailyNiyamId || 0;
+    document.getElementById('niyam-text').textContent = PACHCHAKHANS[niyamId];
   }
 
   renderMotivation() {
@@ -665,55 +716,30 @@ class KalyanMitra {
 
   // ===== ACTIVITY ACTIONS (REVERSIBLE) =====
 
-  completeSamayik() {
+  toggleSimpleActivity(elId, prop, isDone, points) {
     if (this.isDayLocked()) return;
-    const target = parseInt(this.settings.samayikTarget);
-    if ((this.dailyLog.samayikDone || 0) >= target) return;
-
-    this.dailyLog.samayikDone = (this.dailyLog.samayikDone || 0) + 1;
-    this.profile.totalSamayik = (this.profile.totalSamayik || 0) + 1;
-    this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
-
-    let points = POINTS.samayik;
-    if (new Date().getHours() < 8) points += POINTS.samayikEarly;
-    points = this.applyStreakMultiplier(points);
-
-    this.addKarmaPoints(points, 'Samayik');
-    this.showCompletionBurst(document.getElementById('samayik-card'));
-    this.afterActivity();
-  }
-
-  undoSamayik() {
-    if (this.isDayLocked()) return;
-    if ((this.dailyLog.samayikDone || 0) <= 0) return;
-
-    this.dailyLog.samayikDone -= 1;
-    this.profile.totalSamayik = Math.max(0, (this.profile.totalSamayik || 0) - 1);
-
-    let points = POINTS.samayik;
-    points = this.applyStreakMultiplier(points);
-    this.deductKarmaPoints(points);
-
-    // Undo perfect day if it was set
-    if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
-      this.dailyLog.perfectDay = false;
-      this.deductKarmaPoints(POINTS.perfectDay);
+    if (this.dailyLog[prop] === isDone) return;
+    this.dailyLog[prop] = isDone;
+    
+    let actualPoints = this.applyStreakMultiplier(points);
+    if (isDone) {
+      this.addKarmaPoints(actualPoints, elId);
+      this.showCompletionBurst(document.getElementById(`${elId}-card`));
+    } else {
+      this.deductKarmaPoints(actualPoints);
+      if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
+        this.dailyLog.perfectDay = false;
+        this.deductKarmaPoints(POINTS.perfectDay);
+      }
     }
-
     this.afterActivity();
   }
 
   completePooja() {
     if (this.isDayLocked() || this.dailyLog.poojaDone) return;
-
     this.dailyLog.poojaDone = true;
-    this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
-
-    let points = POINTS.pooja;
-    if (this.dailyLog.pakshalDone) points += POINTS.poojaPakshal;
-    if (new Date().getHours() < 7) this.profile.earlyPooja = (this.profile.earlyPooja || 0) + 1;
-
-    points = this.applyStreakMultiplier(points);
+    let points = this.applyStreakMultiplier(POINTS.pooja);
+    if (this.dailyLog.ashtaPrakariDone) points += POINTS.ashtaPrakari; 
     this.addKarmaPoints(points, 'Pooja');
     this.showCompletionBurst(document.getElementById('pooja-card'));
     this.afterActivity();
@@ -721,13 +747,10 @@ class KalyanMitra {
 
   undoPooja() {
     if (this.isDayLocked() || !this.dailyLog.poojaDone) return;
-
     this.dailyLog.poojaDone = false;
-    let points = POINTS.pooja;
-    if (this.dailyLog.pakshalDone) points += POINTS.poojaPakshal;
-    points = this.applyStreakMultiplier(points);
+    let points = this.applyStreakMultiplier(POINTS.pooja);
+    if (this.dailyLog.ashtaPrakariDone) points += POINTS.ashtaPrakari;
     this.deductKarmaPoints(points);
-
     if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
       this.dailyLog.perfectDay = false;
       this.deductKarmaPoints(POINTS.perfectDay);
@@ -735,80 +758,33 @@ class KalyanMitra {
     this.afterActivity();
   }
 
-  togglePakshal() {
+  toggleAshtaPrakari() {
     if (this.isDayLocked()) return;
-    this.dailyLog.pakshalDone = document.getElementById('pakshal-checkbox').checked;
-    if (this.dailyLog.poojaDone && this.dailyLog.pakshalDone && !this.dailyLog.pakshalBonusGiven) {
-      this.dailyLog.pakshalBonusGiven = true;
-      this.addKarmaPoints(POINTS.poojaPakshal, 'Pakshal Bonus');
-      this.showBonus('pooja-bonus', '🙏 Pakshal +5!');
+    this.dailyLog.ashtaPrakariDone = document.getElementById('ashta-checkbox').checked;
+    if (this.dailyLog.poojaDone) {
+      if (this.dailyLog.ashtaPrakariDone) {
+        this.addKarmaPoints(POINTS.ashtaPrakari, 'Ashta Prakari');
+      } else {
+        this.deductKarmaPoints(POINTS.ashtaPrakari);
+      }
     }
     this.saveDailyLog();
   }
 
-  adjustSwadhyay(delta) {
+  adjustCounter(prop, delta, pointsPerUnit, elId) {
     if (this.isDayLocked()) return;
-    const newVal = Math.max(0, (this.dailyLog.swadhyayDone || 0) + delta);
-    const oldVal = this.dailyLog.swadhyayDone || 0;
-    const target = parseInt(this.settings.swadhyayTarget);
-    this.dailyLog.swadhyayDone = newVal;
-
+    const oldVal = this.dailyLog[prop] || 0;
+    const newVal = Math.max(0, oldVal + delta);
+    if (oldVal === newVal) return;
+    this.dailyLog[prop] = newVal;
+    
+    const points = this.applyStreakMultiplier(pointsPerUnit);
+    
     if (delta > 0) {
-      this.profile.totalSwadhyay = (this.profile.totalSwadhyay || 0) + 1;
-      if (newVal === target) {
-        this.addKarmaPoints(this.applyStreakMultiplier(POINTS.swadhyay), 'Swadhyay Target!');
-        this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
-        this.showCompletionBurst(document.getElementById('swadhyay-card'));
-      } else if (oldVal === target) {
-        this.addKarmaPoints(POINTS.swadhyayExceed, 'Exceeded target!');
-        this.showBonus('swadhyay-bonus', '📖 Exceeded +10!');
-      }
-    } else if (delta < 0) {
-      this.profile.totalSwadhyay = Math.max(0, (this.profile.totalSwadhyay || 0) - 1);
-      if (oldVal === target && newVal < target) {
-        // Went below target — deduct points
-        this.deductKarmaPoints(this.applyStreakMultiplier(POINTS.swadhyay));
-      }
-      if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
-        this.dailyLog.perfectDay = false;
-        this.deductKarmaPoints(POINTS.perfectDay);
-      }
-    }
-    this.afterActivity();
-  }
-
-  togglePratikraman(slot) {
-    if (this.isDayLocked()) return;
-
-    const key = slot === 'morning' ? 'pratikramanMorning' : 'pratikramanEvening';
-    const wasDone = this.dailyLog[key];
-    const wasBothDone = this.dailyLog.pratikramanMorning && this.dailyLog.pratikramanEvening;
-
-    if (!wasDone) {
-      // Complete
-      this.dailyLog[key] = true;
-      this.profile.totalPratikraman = (this.profile.totalPratikraman || 0) + 1;
-      this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
-      this.addKarmaPoints(this.applyStreakMultiplier(POINTS.pratikraman), 'Pratikraman');
-      this.showCompletionBurst(document.getElementById(`pratikraman-${slot}`));
-
-      // Both done bonus
-      if (this.dailyLog.pratikramanMorning && this.dailyLog.pratikramanEvening) {
-        this.addKarmaPoints(POINTS.pratikramanBoth, 'Both done!');
-        this.showBonus('pratikraman-bonus', '🙏 Both +15!');
-        this.profile.totalFullPratikraman = (this.profile.totalFullPratikraman || 0) + 1;
-      }
+      this.addKarmaPoints(points, elId);
+      this.showCompletionBurst(document.getElementById(`${elId}-card`));
     } else {
-      // Undo
-      this.dailyLog[key] = false;
-      this.profile.totalPratikraman = Math.max(0, (this.profile.totalPratikraman || 0) - 1);
-      this.deductKarmaPoints(this.applyStreakMultiplier(POINTS.pratikraman));
-
-      // Undo both bonus if it was given
-      if (wasBothDone) {
-        this.deductKarmaPoints(POINTS.pratikramanBoth);
-        this.profile.totalFullPratikraman = Math.max(0, (this.profile.totalFullPratikraman || 0) - 1);
-      }
+      this.deductKarmaPoints(points);
       if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
         this.dailyLog.perfectDay = false;
         this.deductKarmaPoints(POINTS.perfectDay);
@@ -817,38 +793,33 @@ class KalyanMitra {
     this.afterActivity();
   }
 
-  confirmNiyam() {
-    if (this.isDayLocked() || this.dailyLog.niyamFollowed) return;
-
-    this.dailyLog.niyamFollowed = true;
-    this.profile.totalNiyam = (this.profile.totalNiyam || 0) + 1;
-    this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
-
-    let points = this.applyStreakMultiplier(POINTS.niyam);
-    this.addKarmaPoints(points, 'Niyam');
-
-    // Variable reward
-    if (Math.random() < 0.4) {
-      const bonus = POINTS.niyamSurprise[Math.floor(Math.random() * POINTS.niyamSurprise.length)];
-      this.addKarmaPoints(bonus, 'Surprise!');
-      this.showBonus('niyam-bonus', `🎁 Surprise +${bonus}!`);
+  adjustScreenTime(prop, delta) {
+    if (this.isDayLocked()) return;
+    const oldVal = this.dailyLog[prop] || 0;
+    const newVal = Math.max(0, oldVal + delta);
+    if (oldVal === newVal) return;
+    
+    const hOld = this.dailyLog.screenTimeHours || 0;
+    const mOld = this.dailyLog.screenTimeMins || 0;
+    const totalMinsOld = (hOld * 60) + mOld;
+    
+    this.dailyLog[prop] = newVal;
+    
+    const hNew = this.dailyLog.screenTimeHours || 0;
+    const mNew = this.dailyLog.screenTimeMins || 0;
+    const totalMinsNew = (hNew * 60) + mNew;
+    
+    const hoursOld = Math.floor(totalMinsOld / 60);
+    const hoursNew = Math.floor(totalMinsNew / 60);
+    
+    if (hoursNew > hoursOld) {
+      const diff = hoursNew - hoursOld;
+      this.deductKarmaPoints(diff * POINTS.screenTimePenalty);
+    } else if (hoursNew < hoursOld) {
+      const diff = hoursOld - hoursNew;
+      this.addKarmaPoints(diff * POINTS.screenTimePenalty, 'Screen Time Reverted');
     }
-
-    this.showCompletionBurst(document.getElementById('niyam-card'));
-    this.afterActivity();
-  }
-
-  undoNiyam() {
-    if (this.isDayLocked() || !this.dailyLog.niyamFollowed) return;
-
-    this.dailyLog.niyamFollowed = false;
-    this.profile.totalNiyam = Math.max(0, (this.profile.totalNiyam || 0) - 1);
-    this.deductKarmaPoints(this.applyStreakMultiplier(POINTS.niyam));
-
-    if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
-      this.dailyLog.perfectDay = false;
-      this.deductKarmaPoints(POINTS.perfectDay);
-    }
+    
     this.afterActivity();
   }
 
@@ -935,21 +906,34 @@ class KalyanMitra {
 
   isAllTasksComplete() {
     const d = this.dailyLog, s = this.settings;
-    return (d.samayikDone || 0) >= parseInt(s.samayikTarget)
-      && d.poojaDone
-      && (d.swadhyayDone || 0) >= parseInt(s.swadhyayTarget)
-      && d.pratikramanMorning && d.pratikramanEvening
-      && d.niyamFollowed;
+    if (s.enableNavkarsi && !d.navkarsiDone) return false;
+    if (s.enableWakeup && !d.wakeUpDone) return false;
+    if (s.enableSleep && !d.sleepDone) return false;
+    if (s.enablePranam && !d.pranamDone) return false;
+    if (s.enablePooja && !d.poojaDone) return false;
+    if (s.enableSamayik && (d.samayikDone || 0) < parseInt(s.samayikTarget)) return false;
+    if (s.enablePratikraman && (d.pratikramanDone || 0) < parseInt(s.pratikramanTarget)) return false;
+    if (s.enableBookReading && (d.bookReadingMins || 0) < 30) return false;
+    if (s.enableRatriBhojan && !d.ratriBhojanDone) return false;
+    if (s.enableKandmool && !d.kandmoolDone) return false;
+    if (s.enableDailyNiyam && !d.dailyNiyamDone) return false;
+    return true;
   }
 
   getCompletedCount() {
     const d = this.dailyLog, s = this.settings;
     let c = 0;
-    if ((d.samayikDone || 0) >= parseInt(s.samayikTarget)) c++;
-    if (d.poojaDone) c++;
-    if ((d.swadhyayDone || 0) >= parseInt(s.swadhyayTarget)) c++;
-    if (d.pratikramanMorning && d.pratikramanEvening) c++;
-    if (d.niyamFollowed) c++;
+    if (s.enableNavkarsi && d.navkarsiDone) c++;
+    if (s.enableWakeup && d.wakeUpDone) c++;
+    if (s.enableSleep && d.sleepDone) c++;
+    if (s.enablePranam && d.pranamDone) c++;
+    if (s.enablePooja && d.poojaDone) c++;
+    if (s.enableSamayik && (d.samayikDone || 0) >= parseInt(s.samayikTarget)) c++;
+    if (s.enablePratikraman && (d.pratikramanDone || 0) >= parseInt(s.pratikramanTarget)) c++;
+    if (s.enableBookReading && (d.bookReadingMins || 0) >= 30) c++;
+    if (s.enableRatriBhojan && d.ratriBhojanDone) c++;
+    if (s.enableKandmool && d.kandmoolDone) c++;
+    if (s.enableDailyNiyam && d.dailyNiyamDone) c++;
     return c;
   }
 
@@ -1143,11 +1127,29 @@ class KalyanMitra {
   // ===== ADMIN FUNCTIONS =====
   loadAdminSettingsUI() {
     const s = this.settings;
-    document.getElementById('admin-samayik-target').value = s.samayikTarget;
-    document.getElementById('admin-samayik-frequency').value = s.samayikFrequency;
-    document.getElementById('admin-swadhyay-target').value = s.swadhyayTarget;
-    document.getElementById('admin-swadhyay-unit').value = s.swadhyayUnit;
-    document.getElementById('admin-pratikraman-target').value = s.pratikramanTarget;
+    document.getElementById('admin-toggle-navkarsi').checked = s.enableNavkarsi;
+    document.getElementById('admin-toggle-wakeup').checked = s.enableWakeup;
+    document.getElementById('admin-toggle-sleep').checked = s.enableSleep;
+    document.getElementById('admin-toggle-pranam').checked = s.enablePranam;
+    document.getElementById('admin-toggle-pooja').checked = s.enablePooja;
+    document.getElementById('admin-toggle-samayik').checked = s.enableSamayik;
+    document.getElementById('admin-toggle-pratikraman').checked = s.enablePratikraman;
+    document.getElementById('admin-toggle-book').checked = s.enableBookReading;
+    document.getElementById('admin-toggle-ratribhojan').checked = s.enableRatriBhojan;
+    document.getElementById('admin-toggle-kandmool').checked = s.enableKandmool;
+    document.getElementById('admin-toggle-screentime').checked = s.enableScreenTime;
+    document.getElementById('admin-toggle-niyam').checked = s.enableDailyNiyam;
+
+    const niyamSelect = document.getElementById('admin-select-niyam');
+    niyamSelect.innerHTML = '';
+    PACHCHAKHANS.forEach((niyam, idx) => {
+      const opt = document.createElement('option');
+      opt.value = idx;
+      opt.textContent = niyam;
+      niyamSelect.appendChild(opt);
+    });
+    niyamSelect.value = s.currentDailyNiyamId || 0;
+
     const locSelect = document.getElementById('admin-location');
     for (const [key, city] of Object.entries(CITIES)) {
       if (city.lat === s.locationLat && city.lng === s.locationLng) {
@@ -1158,18 +1160,27 @@ class KalyanMitra {
   }
 
   saveAdminSettings() {
-    this.settings.samayikTarget = parseInt(document.getElementById('admin-samayik-target').value);
-    this.settings.samayikFrequency = document.getElementById('admin-samayik-frequency').value;
-    this.settings.swadhyayTarget = parseInt(document.getElementById('admin-swadhyay-target').value);
-    this.settings.swadhyayUnit = document.getElementById('admin-swadhyay-unit').value;
-    this.settings.pratikramanTarget = document.getElementById('admin-pratikraman-target').value;
+    const s = this.settings;
+    s.enableNavkarsi = document.getElementById('admin-toggle-navkarsi').checked;
+    s.enableWakeup = document.getElementById('admin-toggle-wakeup').checked;
+    s.enableSleep = document.getElementById('admin-toggle-sleep').checked;
+    s.enablePranam = document.getElementById('admin-toggle-pranam').checked;
+    s.enablePooja = document.getElementById('admin-toggle-pooja').checked;
+    s.enableSamayik = document.getElementById('admin-toggle-samayik').checked;
+    s.enablePratikraman = document.getElementById('admin-toggle-pratikraman').checked;
+    s.enableBookReading = document.getElementById('admin-toggle-book').checked;
+    s.enableRatriBhojan = document.getElementById('admin-toggle-ratribhojan').checked;
+    s.enableKandmool = document.getElementById('admin-toggle-kandmool').checked;
+    s.enableScreenTime = document.getElementById('admin-toggle-screentime').checked;
+    s.enableDailyNiyam = document.getElementById('admin-toggle-niyam').checked;
+    s.currentDailyNiyamId = parseInt(document.getElementById('admin-select-niyam').value);
 
     const cityKey = document.getElementById('admin-location').value;
     const city = CITIES[cityKey];
     if (city) {
-      this.settings.locationLat = city.lat;
-      this.settings.locationLng = city.lng;
-      this.settings.locationName = city.name;
+      s.locationLat = city.lat;
+      s.locationLng = city.lng;
+      s.locationName = city.name;
     }
 
     this.saveSettings();

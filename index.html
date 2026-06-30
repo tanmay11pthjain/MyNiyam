@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="description" content="Kalyan Mitra V2 — Admin-controlled spiritual companion for daily Jain sadhana.">
+  <meta name="description" content="MyNiyam V3 — Admin-controlled spiritual companion for daily Jain sadhana.">
   <meta name="theme-color" content="#E8722A">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Kalyan Mitra — Aapka Adhyatmik Saathi 🙏</title>
+  <title>MyNiyam — Aapka Adhyatmik Saathi 🙏</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -140,149 +140,222 @@
 
       <!-- Activity Cards -->
       <section id="activities-section">
+        
+        <!-- CATEGORY: MORNING RITUALS -->
+        <div class="category-section" id="cat-morning">
+          <h3 class="category-title">🌅 Morning Rituals</h3>
+          
+          <div class="activity-compact" id="navkarsi-card">
+            <div class="lock-indicator hidden" id="navkarsi-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon">🚰</span>
+              <div class="compact-info">
+                <span class="card-title">Navkarsi</span>
+                <span class="card-kp">+10 KP</span>
+              </div>
+            </div>
+            <div class="compact-actions">
+              <button class="btn-complete-small" id="btn-navkarsi">Done</button>
+              <button class="btn-undo-small hidden" id="btn-navkarsi-undo">Undo</button>
+            </div>
+          </div>
 
-        <!-- SAMAYIK -->
-        <div class="activity-card" id="samayik-card">
-          <div class="lock-indicator hidden" id="samayik-lock">🔒</div>
-          <div class="card-header">
-            <div class="card-title-area">
-              <span class="card-icon">🧘</span>
-              <span class="card-title">Samayik</span>
+          <div class="activity-compact" id="wakeup-card">
+            <div class="lock-indicator hidden" id="wakeup-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon">🌅</span>
+              <div class="compact-info">
+                <span class="card-title">Wake &lt; 7AM</span>
+                <span class="card-kp">+10 KP</span>
+              </div>
             </div>
-            <span class="card-kp">+25 KP</span>
-          </div>
-          <div class="card-body">
-            <div class="progress-ring-container">
-              <svg class="progress-ring" viewBox="0 0 80 80">
-                <circle class="progress-ring-bg" cx="40" cy="40" r="34"></circle>
-                <circle class="progress-ring-fill" id="samayik-ring" cx="40" cy="40" r="34" stroke-dasharray="213.6" stroke-dashoffset="213.6"></circle>
-              </svg>
-              <span class="progress-ring-text" id="samayik-progress-text">0/1</span>
+            <div class="compact-actions">
+              <button class="btn-complete-small" id="btn-wakeup">Done</button>
+              <button class="btn-undo-small hidden" id="btn-wakeup-undo">Undo</button>
             </div>
-            <div class="card-status" id="samayik-status">Tap to mark complete</div>
           </div>
-          <div class="card-actions dual-actions">
-            <button class="btn-complete" id="btn-samayik">
-              <span class="btn-icon">✓</span> Complete
-            </button>
-            <button class="btn-undo hidden" id="btn-samayik-undo">
-              <span class="btn-icon">↩</span> Undo
-            </button>
+
+          <div class="activity-compact" id="sleep-card">
+            <div class="lock-indicator hidden" id="sleep-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon">🌙</span>
+              <div class="compact-info">
+                <span class="card-title">Sleep &lt; 12AM</span>
+                <span class="card-kp">+10 KP</span>
+              </div>
+            </div>
+            <div class="compact-actions">
+              <button class="btn-complete-small" id="btn-sleep">Done</button>
+              <button class="btn-undo-small hidden" id="btn-sleep-undo">Undo</button>
+            </div>
           </div>
-          <div class="card-bonus" id="samayik-bonus"></div>
+
+          <div class="activity-compact" id="pranam-card">
+            <div class="lock-indicator hidden" id="pranam-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon">🙇</span>
+              <div class="compact-info">
+                <span class="card-title">Mata Pita Pranam</span>
+                <span class="card-kp">+20 KP</span>
+              </div>
+            </div>
+            <div class="compact-actions">
+              <button class="btn-complete-small" id="btn-pranam">Done</button>
+              <button class="btn-undo-small hidden" id="btn-pranam-undo">Undo</button>
+            </div>
+          </div>
         </div>
 
-        <!-- POOJA -->
-        <div class="activity-card" id="pooja-card">
-          <div class="lock-indicator hidden" id="pooja-lock">🔒</div>
-          <div class="card-header">
-            <div class="card-title-area">
+        <!-- CATEGORY: SADHANA -->
+        <div class="category-section" id="cat-sadhana">
+          <h3 class="category-title">🧘 Sadhana</h3>
+
+          <div class="activity-compact" id="pooja-card">
+            <div class="lock-indicator hidden" id="pooja-lock">🔒</div>
+            <div class="compact-left">
               <span class="card-icon">🪔</span>
-              <span class="card-title">Pooja</span>
-            </div>
-            <span class="card-kp">+20 KP</span>
-          </div>
-          <div class="card-body">
-            <div class="pooja-status" id="pooja-status">
-              <div class="status-circle" id="pooja-circle"></div>
-              <span id="pooja-status-text">Not done yet</span>
-            </div>
-          </div>
-          <div class="card-actions pooja-actions">
-            <button class="btn-complete" id="btn-pooja">
-              <span class="btn-icon">✓</span> Done
-            </button>
-            <button class="btn-undo hidden" id="btn-pooja-undo">
-              <span class="btn-icon">↩</span> Undo
-            </button>
-            <label class="pakshal-toggle" id="pakshal-toggle">
-              <input type="checkbox" id="pakshal-checkbox">
-              <span class="toggle-slider"></span>
-              <span class="toggle-label">Pakshal</span>
-            </label>
-          </div>
-          <div class="card-bonus" id="pooja-bonus"></div>
-        </div>
-
-        <!-- SWADHYAY -->
-        <div class="activity-card" id="swadhyay-card">
-          <div class="lock-indicator hidden" id="swadhyay-lock">🔒</div>
-          <div class="card-header">
-            <div class="card-title-area">
-              <span class="card-icon">📖</span>
-              <span class="card-title">Swadhyay</span>
-            </div>
-            <span class="card-kp">+15 KP</span>
-          </div>
-          <div class="card-body">
-            <div class="counter-section">
-              <button class="btn-counter btn-minus" id="btn-swadhyay-minus">−</button>
-              <div class="counter-display">
-                <span class="counter-value" id="swadhyay-count">0</span>
-                <span class="counter-unit" id="swadhyay-unit">pages</span>
+              <div class="compact-info">
+                <span class="card-title">Pooja</span>
+                <span class="card-kp">+20 KP</span>
               </div>
-              <button class="btn-counter btn-plus" id="btn-swadhyay-plus">+</button>
             </div>
-            <div class="swadhyay-progress">
-              <div class="swadhyay-progress-track">
-                <div class="swadhyay-progress-fill" id="swadhyay-progress-fill" style="width: 0%"></div>
-              </div>
-              <span class="swadhyay-progress-text" id="swadhyay-progress-text">0/5 pages</span>
+            <div class="compact-actions pooja-complex-actions">
+              <label class="ashta-toggle">
+                <input type="checkbox" id="ashta-checkbox">
+                <span>Ashta (+10)</span>
+              </label>
+              <button class="btn-complete-small" id="btn-pooja">Done</button>
+              <button class="btn-undo-small hidden" id="btn-pooja-undo">Undo</button>
             </div>
           </div>
-          <div class="card-bonus" id="swadhyay-bonus"></div>
-        </div>
 
-        <!-- PRATIKRAMAN -->
-        <div class="activity-card" id="pratikraman-card">
-          <div class="lock-indicator hidden" id="pratikraman-lock">🔒</div>
-          <div class="card-header">
-            <div class="card-title-area">
+          <div class="activity-compact" id="samayik-card">
+            <div class="lock-indicator hidden" id="samayik-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon">🧘</span>
+              <div class="compact-info">
+                <span class="card-title">Samayik</span>
+                <span class="card-kp">+20/ea</span>
+              </div>
+            </div>
+            <div class="compact-actions counter-actions">
+              <button class="btn-counter-small btn-minus" id="btn-samayik-minus">−</button>
+              <span class="counter-val" id="samayik-count">0</span>
+              <button class="btn-counter-small btn-plus" id="btn-samayik-plus">+</button>
+            </div>
+          </div>
+
+          <div class="activity-compact" id="pratikraman-card">
+            <div class="lock-indicator hidden" id="pratikraman-lock">🔒</div>
+            <div class="compact-left">
               <span class="card-icon">🙏</span>
-              <span class="card-title">Pratikraman</span>
+              <div class="compact-info">
+                <span class="card-title">Pratikraman</span>
+                <span class="card-kp">+30/ea</span>
+              </div>
             </div>
-            <span class="card-kp">+30 KP</span>
-          </div>
-          <div class="card-body">
-            <div class="pratikraman-slots">
-              <button class="slot-btn" id="pratikraman-morning">
-                <span class="slot-icon">🌅</span>
-                <span class="slot-label">Morning</span>
-                <span class="slot-check" id="pratikraman-morning-check">○</span>
-              </button>
-              <button class="slot-btn" id="pratikraman-evening">
-                <span class="slot-icon">🌙</span>
-                <span class="slot-label">Evening</span>
-                <span class="slot-check" id="pratikraman-evening-check">○</span>
-              </button>
+            <div class="compact-actions counter-actions">
+              <button class="btn-counter-small btn-minus" id="btn-pratikraman-minus">−</button>
+              <span class="counter-val" id="pratikraman-count">0</span>
+              <button class="btn-counter-small btn-plus" id="btn-pratikraman-plus">+</button>
             </div>
-            <div class="card-status" id="pratikraman-status">0/2 completed</div>
           </div>
-          <div class="card-bonus" id="pratikraman-bonus"></div>
+
+          <div class="activity-compact" id="book-card">
+            <div class="lock-indicator hidden" id="book-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon">📖</span>
+              <div class="compact-info">
+                <span class="card-title">Book Reading (30m)</span>
+                <span class="card-kp">+20/ea</span>
+              </div>
+            </div>
+            <div class="compact-actions counter-actions">
+              <button class="btn-counter-small btn-minus" id="btn-book-minus">−</button>
+              <span class="counter-val" id="book-count">0</span>
+              <button class="btn-counter-small btn-plus" id="btn-book-plus">+</button>
+            </div>
+          </div>
         </div>
 
-        <!-- DAILY NIYAM -->
-        <div class="activity-card niyam-card" id="niyam-card">
-          <div class="lock-indicator hidden" id="niyam-lock">🔒</div>
-          <div class="card-header">
-            <div class="card-title-area">
-              <span class="card-icon">✨</span>
-              <span class="card-title">Aaj Ka Niyam</span>
+        <!-- CATEGORY: TYAG & DISCIPLINE -->
+        <div class="category-section" id="cat-tyag">
+          <h3 class="category-title">🛡️ Tyag &amp; Discipline</h3>
+
+          <div class="activity-compact" id="ratribhojan-card">
+            <div class="lock-indicator hidden" id="ratribhojan-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon">🚫</span>
+              <div class="compact-info">
+                <span class="card-title">Ratri Bhojan Tyag</span>
+                <span class="card-kp">+20 KP</span>
+              </div>
             </div>
-            <span class="card-kp">+20 KP</span>
+            <div class="compact-actions">
+              <button class="btn-complete-small" id="btn-ratribhojan">Done</button>
+              <button class="btn-undo-small hidden" id="btn-ratribhojan-undo">Undo</button>
+            </div>
           </div>
-          <div class="card-body">
-            <div class="niyam-text" id="niyam-text">Loading...</div>
+
+          <div class="activity-compact" id="kandmool-card">
+            <div class="lock-indicator hidden" id="kandmool-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon">🥔</span>
+              <div class="compact-info">
+                <span class="card-title">Kandmool Tyag</span>
+                <span class="card-kp">+20 KP</span>
+              </div>
+            </div>
+            <div class="compact-actions">
+              <button class="btn-complete-small" id="btn-kandmool">Done</button>
+              <button class="btn-undo-small hidden" id="btn-kandmool-undo">Undo</button>
+            </div>
           </div>
-          <div class="card-actions">
-            <button class="btn-complete btn-niyam" id="btn-niyam">
-              <span class="btn-icon">✓</span> Maine Paalan Kiya
-            </button>
-            <button class="btn-undo hidden" id="btn-niyam-undo">
-              <span class="btn-icon">↩</span> Undo
-            </button>
+
+          <div class="activity-compact screentime-container" id="screentime-card">
+            <div class="lock-indicator hidden" id="screentime-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon">📱</span>
+              <div class="compact-info">
+                <span class="card-title">Screen Time</span>
+                <span class="card-kp kp-negative">-5/hr</span>
+              </div>
+            </div>
+            <div class="compact-actions screentime-actions">
+              <div class="time-input-group">
+                <button class="btn-counter-small btn-minus" id="btn-screen-h-minus">−</button>
+                <span class="counter-val" id="screen-h-count">0h</span>
+                <button class="btn-counter-small btn-plus" id="btn-screen-h-plus">+</button>
+              </div>
+              <div class="time-input-group">
+                <button class="btn-counter-small btn-minus" id="btn-screen-m-minus">−</button>
+                <span class="counter-val" id="screen-m-count">0m</span>
+                <button class="btn-counter-small btn-plus" id="btn-screen-m-plus">+</button>
+              </div>
+            </div>
           </div>
-          <div class="card-bonus" id="niyam-bonus"></div>
+
+          <div class="activity-card niyam-card" id="niyam-card">
+            <div class="lock-indicator hidden" id="niyam-lock">🔒</div>
+            <div class="card-header">
+              <div class="card-title-area">
+                <span class="card-icon">✨</span>
+                <span class="card-title">Aaj Ka Niyam</span>
+              </div>
+              <span class="card-kp">+10 KP</span>
+            </div>
+            <div class="card-body">
+              <div class="niyam-text" id="niyam-text">Loading...</div>
+            </div>
+            <div class="card-actions">
+              <button class="btn-complete btn-niyam" id="btn-niyam">
+                <span class="btn-icon">✓</span> Paalan Kiya
+              </button>
+              <button class="btn-undo hidden" id="btn-niyam-undo">
+                <span class="btn-icon">↩</span> Undo
+              </button>
+            </div>
+          </div>
         </div>
 
       </section>
@@ -347,48 +420,71 @@
         <p class="admin-desc">Set daily targets for the user's spiritual practice.</p>
 
         <div class="settings-group">
-          <h3 class="settings-group-title">🧘 Samayik</h3>
+          <h3 class="settings-group-title">🌅 Morning Rituals</h3>
           <div class="setting-item">
-            <label for="admin-samayik-target">Daily Target</label>
-            <select id="admin-samayik-target">
-              <option value="1">1 per day</option>
-              <option value="2">2 per day</option>
-              <option value="3">3 per day</option>
-            </select>
+            <label for="admin-toggle-navkarsi">Navkarsi</label>
+            <input type="checkbox" id="admin-toggle-navkarsi">
           </div>
           <div class="setting-item">
-            <label for="admin-samayik-frequency">Frequency</label>
-            <select id="admin-samayik-frequency">
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="settings-group">
-          <h3 class="settings-group-title">📖 Swadhyay</h3>
-          <div class="setting-item">
-            <label for="admin-swadhyay-target">Daily Target</label>
-            <input type="number" id="admin-swadhyay-target" min="1" max="100" value="5">
+            <label for="admin-toggle-wakeup">Wake up &lt; 7AM</label>
+            <input type="checkbox" id="admin-toggle-wakeup">
           </div>
           <div class="setting-item">
-            <label for="admin-swadhyay-unit">Unit</label>
-            <select id="admin-swadhyay-unit">
-              <option value="pages">Pages</option>
-              <option value="lines">Lines</option>
-            </select>
+            <label for="admin-toggle-sleep">Sleep &lt; 12AM</label>
+            <input type="checkbox" id="admin-toggle-sleep">
+          </div>
+          <div class="setting-item">
+            <label for="admin-toggle-pranam">Mata Pita Pranam</label>
+            <input type="checkbox" id="admin-toggle-pranam">
           </div>
         </div>
 
         <div class="settings-group">
-          <h3 class="settings-group-title">🙏 Pratikraman</h3>
+          <h3 class="settings-group-title">🧘 Sadhana</h3>
           <div class="setting-item">
-            <label for="admin-pratikraman-target">Type</label>
-            <select id="admin-pratikraman-target">
-              <option value="daily">Daily (2 per day)</option>
-              <option value="chaudasi">Chaudasi</option>
-              <option value="monthly">Monthly</option>
+            <label for="admin-toggle-pooja">Pooja (incl. Ashta)</label>
+            <input type="checkbox" id="admin-toggle-pooja">
+          </div>
+          <div class="setting-item">
+            <label for="admin-toggle-samayik">Samayik</label>
+            <input type="checkbox" id="admin-toggle-samayik">
+          </div>
+          <div class="setting-item">
+            <label for="admin-toggle-pratikraman">Pratikraman</label>
+            <input type="checkbox" id="admin-toggle-pratikraman">
+          </div>
+          <div class="setting-item">
+            <label for="admin-toggle-book">Book Reading</label>
+            <input type="checkbox" id="admin-toggle-book">
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">🛡️ Tyag &amp; Discipline</h3>
+          <div class="setting-item">
+            <label for="admin-toggle-ratribhojan">Ratri Bhojan Tyag</label>
+            <input type="checkbox" id="admin-toggle-ratribhojan">
+          </div>
+          <div class="setting-item">
+            <label for="admin-toggle-kandmool">Kandmool Tyag</label>
+            <input type="checkbox" id="admin-toggle-kandmool">
+          </div>
+          <div class="setting-item">
+            <label for="admin-toggle-screentime">Screen Time Tracking</label>
+            <input type="checkbox" id="admin-toggle-screentime">
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">✨ Daily Niyam</h3>
+          <div class="setting-item">
+            <label for="admin-toggle-niyam">Enable Daily Niyam</label>
+            <input type="checkbox" id="admin-toggle-niyam">
+          </div>
+          <div class="setting-item">
+            <label for="admin-select-niyam" style="flex:0 0 100px;">Select Niyam</label>
+            <select id="admin-select-niyam" style="flex:1; max-width:200px;">
+              <!-- Populated by JS -->
             </select>
           </div>
         </div>

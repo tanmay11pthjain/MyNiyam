@@ -160,13 +160,22 @@ const MOTIVATIONAL_MESSAGES = {
 
 // ===== DEFAULT SETTINGS =====
 const DEFAULT_SETTINGS = {
-  samayikTarget: 1,        // 1, 2, or 3 daily
-  samayikFrequency: 'daily', // daily, weekly, monthly
-  swadhyayTarget: 5,       // pages or lines per day
-  swadhyayUnit: 'pages',   // 'pages' or 'lines'
-  pratikramanTarget: 'daily', // daily, chaudasi, monthly
-  pratikramanDaily: 2,      // number per day
-  locationLat: 12.9716,    // Bangalore
+  enablePooja: true,
+  enableSamayik: true,
+  enableNavkarsi: true,
+  enablePranam: true,
+  enablePratikraman: true,
+  enableBookReading: true,
+  enableRatriBhojan: true,
+  enableKandmool: true,
+  enableWakeup: true,
+  enableSleep: true,
+  enableScreenTime: true,
+  enableDailyNiyam: true,
+  currentDailyNiyamId: 0, // Index of PACHCHAKHANS array
+  samayikTarget: 1,        // Maintain for counter max if needed
+  pratikramanTarget: 2,    // Max 2
+  locationLat: 12.9716,
   locationLng: 77.5946,
   locationName: 'Bangalore',
   introSeen: false,
@@ -197,13 +206,20 @@ const DEFAULT_PROFILE = {
 // ===== DEFAULT DAILY LOG =====
 const DEFAULT_DAILY_LOG = {
   date: null,
-  samayikDone: 0,
   poojaDone: false,
-  pakshalDone: false,
-  swadhyayDone: 0,
-  pratikramanMorning: false,
-  pratikramanEvening: false,
-  niyamFollowed: false,
+  ashtaPrakariDone: false,
+  samayikDone: 0,
+  navkarsiDone: false,
+  pranamDone: false,
+  pratikramanDone: 0,
+  bookReadingMins: 0,
+  ratriBhojanDone: false,
+  kandmoolDone: false,
+  wakeUpDone: false,
+  sleepDone: false,
+  screenTimeHours: 0,
+  screenTimeMins: 0,
+  dailyNiyamDone: false,
   kpEarned: 0,
   perfectDay: false,
   bonuses: [],
@@ -211,16 +227,19 @@ const DEFAULT_DAILY_LOG = {
 
 // ===== POINT VALUES =====
 const POINTS = {
-  samayik: 25,
-  samayikEarly: 10,        // Before 8 AM
   pooja: 20,
-  poojaPakshal: 5,         // Pakshal attendance bonus
-  swadhyay: 15,            // Per target completion
-  swadhyayExceed: 10,      // For exceeding target
-  pratikraman: 30,
-  pratikramanBoth: 15,     // Both morning+evening bonus
-  niyam: 20,
-  niyamSurprise: [10, 15, 20, 25, 30, 50], // Random bonus pool
+  ashtaPrakari: 10,
+  samayik: 20, // per samayik
+  navkarsi: 10,
+  pranam: 20,
+  pratikraman: 30, // per pratikraman
+  bookReading: 20, // per 30 mins
+  ratriBhojan: 20,
+  kandmool: 20,
+  wakeUpEarly: 10,
+  sleepEarly: 10,
+  screenTimePenalty: 5, // per hour
+  dailyNiyam: 10,
   perfectDay: 50,
   dailyLogin: 10,
 };
