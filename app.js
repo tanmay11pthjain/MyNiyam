@@ -371,7 +371,11 @@ class KalyanMitra {
   updateLockUI() {
     const locked = this.isDayLocked();
     const banner = document.getElementById('lock-banner');
-    const lockIds = ['samayik', 'pooja', 'swadhyay', 'pratikraman', 'niyam'];
+    const lockIds = [
+      'navkarsi', 'wakeup', 'sleep', 'pranam',
+      'pooja', 'samayik', 'pratikraman', 'book',
+      'ratribhojan', 'kandmool', 'screentime', 'niyam'
+    ];
 
     if (locked) {
       banner.classList.remove('hidden');
@@ -381,8 +385,8 @@ class KalyanMitra {
         if (card) card.classList.add('locked');
         if (lockEl) lockEl.classList.remove('hidden');
       });
-      // Disable all action buttons
-      document.querySelectorAll('.btn-complete, .btn-undo, .btn-counter, .slot-btn, .btn-niyam, .pakshal-toggle input').forEach(el => {
+      // Disable ALL interactive buttons (V3 classes)
+      document.querySelectorAll('.btn-complete, .btn-complete-small, .btn-undo, .btn-undo-small, .btn-counter-small, .btn-niyam, .ashta-toggle input').forEach(el => {
         el.disabled = true;
       });
     } else {
@@ -393,13 +397,7 @@ class KalyanMitra {
         if (card) card.classList.remove('locked');
         if (lockEl) lockEl.classList.add('hidden');
       });
-      // Enable all action buttons
-      document.querySelectorAll('.btn-complete, .btn-undo, .btn-counter, .slot-btn, .btn-niyam, .pakshal-toggle input').forEach(el => {
-        el.disabled = false;
-      });
-      // Specifically disable swadhyay minus if count is 0
-      const swDone = this.dailyLog.swadhyayDone || 0;
-      document.getElementById('btn-swadhyay-minus').disabled = swDone <= 0;
+      // Re-enable — renderActivities will handle per-button disabled states
     }
   }
 
@@ -700,8 +698,9 @@ class KalyanMitra {
 
   renderMotivation() {
     const completed = this.getCompletedCount();
+    const total = this.getTotalTasksCount();
     let pool;
-    if (completed >= 5) pool = MOTIVATIONAL_MESSAGES.complete;
+    if (completed >= total && total > 0) pool = MOTIVATIONAL_MESSAGES.complete;
     else if (completed > 0) pool = MOTIVATIONAL_MESSAGES.progress;
     else pool = MOTIVATIONAL_MESSAGES.morning;
     document.getElementById('motivation-text').textContent = pool[Math.floor(Math.random() * pool.length)];
@@ -1206,24 +1205,28 @@ class KalyanMitra {
     else if (st >= 3) flame.textContent = '🔥';
     else flame.textContent = '🕯️';
 
-    // Today's activities
-    const samTarget = parseInt(s.samayikTarget);
-    document.getElementById('admin-samayik-status').textContent = `${d.samayikDone || 0}/${samTarget}`;
-    document.getElementById('admin-samayik-status').className = `admin-act-status ${(d.samayikDone || 0) >= samTarget ? 'done' : ''}`;
-
-    document.getElementById('admin-pooja-status').textContent = d.poojaDone ? '✓' : '✗';
-    document.getElementById('admin-pooja-status').className = `admin-act-status ${d.poojaDone ? 'done' : ''}`;
-
-    const swTarget = parseInt(s.swadhyayTarget);
-    document.getElementById('admin-swadhyay-status').textContent = `${d.swadhyayDone || 0}/${swTarget}`;
-    document.getElementById('admin-swadhyay-status').className = `admin-act-status ${(d.swadhyayDone || 0) >= swTarget ? 'done' : ''}`;
-
-    const pratDone = (d.pratikramanMorning ? 1 : 0) + (d.pratikramanEvening ? 1 : 0);
-    document.getElementById('admin-pratikraman-status').textContent = `${pratDone}/2`;
-    document.getElementById('admin-pratikraman-status').className = `admin-act-status ${pratDone >= 2 ? 'done' : ''}`;
-
-    document.getElementById('admin-niyam-status').textContent = d.niyamFollowed ? '✓' : '✗';
-    document.getElementById('admin-niyam-status').className = `admin-act-status ${d.niyamFollowed ? 'done' : ''}`;
+    // Today's activities — build dynamically from enabled settings
+    const grid = document.getElementById('admin-today-grid');
+    if (grid) {
+      const activities = [
+        { key: 'enableNavkarsi', icon: '🚰', name: 'Navkarsi', status: d.navkarsiDone ? '✓' : '✗', done: !!d.navkarsiDone },
+        { key: 'enableWakeup', icon: '🌅', name: 'Wake < 7AM', status: d.wakeUpDone ? '✓' : '✗', done: !!d.wakeUpDone },
+        { key: 'enableSleep', icon: '🌙', name: 'Sleep < 12AM', status: d.sleepDone ? '✓' : '✗', done: !!d.sleepDone },
+        { key: 'enablePranam', icon: '🙇', name: 'Pranam', status: d.pranamDone ? '✓' : '✗', done: !!d.pranamDone },
+        { key: 'enablePooja', icon: '🪔', name: 'Pooja', status: d.poojaDone ? (d.ashtaPrakariDone ? '✓ +Ashta' : '✓') : '✗', done: !!d.poojaDone },
+        { key: 'enableSamayik', icon: '🧘', name: 'Samayik', status: `${d.samayikDone || 0}`, done: (d.samayikDone || 0) > 0 },
+        { key: 'enablePratikraman', icon: '🙏', name: 'Pratikraman', status: `${d.pratikramanDone || 0}`, done: (d.pratikramanDone || 0) > 0 },
+        { key: 'enableBookReading', icon: '📖', name: 'Book Reading', status: `${d.bookReadingMins || 0} min`, done: (d.bookReadingMins || 0) >= 30 },
+        { key: 'enableRatriBhojan', icon: '🚫', name: 'Ratri Bhojan Tyag', status: d.ratriBhojanDone ? '✓' : '✗', done: !!d.ratriBhojanDone },
+        { key: 'enableKandmool', icon: '🥔', name: 'Kandmool Tyag', status: d.kandmoolDone ? '✓' : '✗', done: !!d.kandmoolDone },
+        { key: 'enableScreenTime', icon: '📱', name: 'Screen Time', status: `${d.screenTimeHours || 0}h ${d.screenTimeMins || 0}m`, done: false },
+        { key: 'enableDailyNiyam', icon: '✨', name: 'Daily Niyam', status: d.dailyNiyamDone ? '✓' : '✗', done: !!d.dailyNiyamDone },
+      ];
+      grid.innerHTML = activities
+        .filter(a => s[a.key])
+        .map(a => `<div class="admin-activity-item"><span class="admin-act-icon">${a.icon}</span><span class="admin-act-name">${a.name}</span><span class="admin-act-status ${a.done ? 'done' : ''}">${a.status}</span></div>`)
+        .join('');
+    }
 
     // Lifetime stats
     document.getElementById('admin-stat-kp').textContent = p.totalKP;
@@ -1267,12 +1270,21 @@ class KalyanMitra {
     // Lock preview
     const d = this.dailyLog, s = this.settings;
     const preview = document.getElementById('lock-preview-list');
-    preview.innerHTML = `
-      <div class="lock-preview-item"><span>🧘 Samayik:</span> <strong>${d.samayikDone || 0}/${s.samayikTarget}</strong></div>
-      <div class="lock-preview-item"><span>🪔 Pooja:</span> <strong>${d.poojaDone ? 'Done' : 'Not done'}</strong></div>
-      <div class="lock-preview-item"><span>📖 Swadhyay:</span> <strong>${d.swadhyayDone || 0}/${s.swadhyayTarget} ${s.swadhyayUnit}</strong></div>
-      <div class="lock-preview-item"><span>🙏 Pratikraman:</span> <strong>${(d.pratikramanMorning ? 1 : 0) + (d.pratikramanEvening ? 1 : 0)}/2</strong></div>
-      <div class="lock-preview-item"><span>✨ Niyam:</span> <strong>${d.niyamFollowed ? 'Followed' : 'Not followed'}</strong></div>`;
+    const items = [
+      s.enableNavkarsi ? `<div class="lock-preview-item"><span>🚰 Navkarsi:</span> <strong>${d.navkarsiDone ? '✓' : '✗'}</strong></div>` : '',
+      s.enableWakeup ? `<div class="lock-preview-item"><span>🌅 Wake < 7AM:</span> <strong>${d.wakeUpDone ? '✓' : '✗'}</strong></div>` : '',
+      s.enableSleep ? `<div class="lock-preview-item"><span>🌙 Sleep < 12AM:</span> <strong>${d.sleepDone ? '✓' : '✗'}</strong></div>` : '',
+      s.enablePranam ? `<div class="lock-preview-item"><span>🙇 Pranam:</span> <strong>${d.pranamDone ? '✓' : '✗'}</strong></div>` : '',
+      s.enablePooja ? `<div class="lock-preview-item"><span>🪔 Pooja:</span> <strong>${d.poojaDone ? 'Done' : 'Not done'}${d.ashtaPrakariDone ? ' +Ashta' : ''}</strong></div>` : '',
+      s.enableSamayik ? `<div class="lock-preview-item"><span>🧘 Samayik:</span> <strong>${d.samayikDone || 0}</strong></div>` : '',
+      s.enablePratikraman ? `<div class="lock-preview-item"><span>🙏 Pratikraman:</span> <strong>${d.pratikramanDone || 0}</strong></div>` : '',
+      s.enableBookReading ? `<div class="lock-preview-item"><span>📖 Reading:</span> <strong>${d.bookReadingMins || 0} min</strong></div>` : '',
+      s.enableRatriBhojan ? `<div class="lock-preview-item"><span>🚫 Ratri Bhojan:</span> <strong>${d.ratriBhojanDone ? '✓' : '✗'}</strong></div>` : '',
+      s.enableKandmool ? `<div class="lock-preview-item"><span>🥔 Kandmool:</span> <strong>${d.kandmoolDone ? '✓' : '✗'}</strong></div>` : '',
+      s.enableScreenTime ? `<div class="lock-preview-item"><span>📱 Screen:</span> <strong>${d.screenTimeHours || 0}h ${d.screenTimeMins || 0}m</strong></div>` : '',
+      s.enableDailyNiyam ? `<div class="lock-preview-item"><span>✨ Niyam:</span> <strong>${d.dailyNiyamDone ? '✓' : '✗'}</strong></div>` : '',
+    ];
+    preview.innerHTML = items.filter(Boolean).join('');
   }
 
   adminLockDay() {
