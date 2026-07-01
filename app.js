@@ -151,6 +151,7 @@ class KalyanMitra {
     await this.setupRealtimeSync();
     this.initializing = false;
 
+    document.getElementById('app').classList.remove('hidden');
     document.getElementById('app').classList.remove('app-hidden');
     document.getElementById('app').classList.add('app-visible');
     document.getElementById('admin-panel').classList.add('hidden');
@@ -190,6 +191,7 @@ class KalyanMitra {
     this.initializing = false;
 
     document.getElementById('admin-panel').classList.remove('hidden');
+    document.getElementById('app').classList.add('hidden');
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('app').classList.remove('app-visible');
 
