@@ -44,18 +44,20 @@ class KalyanMitra {
 
   // ===== INITIALIZATION =====
   async init() {
-    const session = Auth.validateSession();
-    if (session) {
-      this.currentRole = session.role;
-      document.getElementById('login-screen').classList.add('hidden');
-      if (session.role === 'admin') {
-        this.initAdmin();
+    Auth.onAuthStateChanged(user => {
+      if (user) {
+        this.uid = user.uid;
+        this.currentRole = user.role;
+        document.getElementById('login-screen').classList.add('hidden');
+        if (user.role === 'admin') {
+          this.initAdmin();
+        } else {
+          this.initUser();
+        }
       } else {
-        this.initUser();
+        this.showLoginScreen();
       }
-    } else {
-      this.showLoginScreen();
-    }
+    });
   }
 
   showLoginScreen() {
@@ -91,8 +93,8 @@ class KalyanMitra {
   }
 
   async handleLogin() {
-    const username = document.getElementById('login-username').value;
-    const password = document.getElementById('login-password').value;
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value.trim();
     const errorEl = document.getElementById('login-error');
     const btnEl = document.getElementById('btn-login');
     const loadingEl = document.getElementById('btn-login-loading');
@@ -100,22 +102,14 @@ class KalyanMitra {
     // Disable button during login
     btnEl.disabled = true;
     loadingEl.classList.remove('hidden');
+    errorEl.classList.add('hidden');
 
-    const result = await Auth.login(username, password);
+    const result = await Auth.signIn(username, password);
 
-    loadingEl.classList.add('hidden');
     btnEl.disabled = false;
+    loadingEl.classList.add('hidden');
 
-    if (result.success) {
-      errorEl.classList.add('hidden');
-      this.currentRole = result.role;
-      document.getElementById('login-screen').classList.add('hidden');
-      if (result.role === 'admin') {
-        this.initAdmin();
-      } else {
-        this.initUser();
-      }
-    } else {
+    if (!result.success) {
       errorEl.textContent = result.error;
       errorEl.classList.remove('hidden');
       errorEl.classList.add('show');
@@ -124,11 +118,6 @@ class KalyanMitra {
       const card = document.querySelector('.login-card');
       card.classList.add('shake');
       setTimeout(() => card.classList.remove('shake'), 500);
-
-      // Rate limit countdown
-      if (result.rateLimited) {
-        this.startRateLimitCountdown(errorEl);
-      }
     }
   }
 
@@ -186,8 +175,6 @@ class KalyanMitra {
 
   // ===== ADMIN INITIALIZATION =====
   async initAdmin() {
-    this.initializing = true;
-    await this.setupRealtimeSync();
     this.initializing = false;
 
     document.getElementById('admin-panel').classList.remove('hidden');
@@ -195,10 +182,86 @@ class KalyanMitra {
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('app').classList.remove('app-visible');
 
+    // Setup Admin Event Listeners (Tabs, Logout, etc.)
+    this.setupAdminEventListeners();
+
+    // Fetch and render Leaderboard
+    await this.renderAdminLeaderboard();
+  }
+
+  async renderAdminLeaderboard() {
+    const listEl = document.getElementById('admin-leaderboard-list');
+    if (!listEl) return;
+
+    listEl.innerHTML = '<div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>';
+
+    try {
+      const snap = await db.ref('users').once('value');
+      const allUsers = snap.val() || {};
+      
+      const users = [];
+      Object.entries(allUsers).forEach(([uid, data]) => {
+        // Only show regular users on leaderboard
+        if (!data.role || data.role === 'user' || data.profile) {
+          users.push({
+            uid,
+            name: data.name || uid,
+            kp: data.profile?.totalKP || 0,
+            streak: data.profile?.currentStreak || 0
+          });
+        }
+      });
+
+      // Sort by KP descending
+      users.sort((a, b) => b.kp - a.kp);
+
+      if (users.length === 0) {
+        listEl.innerHTML = '<div class="admin-desc">No users found. Login with a user account first.</div>';
+        return;
+      }
+
+      listEl.innerHTML = users.map((u, index) => `
+        <div class="leaderboard-card" data-uid="${u.uid}">
+          <div class="lb-rank">#${index + 1}</div>
+          <div class="lb-info">
+            <span class="lb-name">${u.name}</span>
+            <span class="lb-stats">${u.kp} KP • 🔥 ${u.streak}</span>
+          </div>
+          <div class="lb-action">👁️ View</div>
+        </div>
+      `).join('');
+
+      // Add click listeners to cards
+      listEl.querySelectorAll('.leaderboard-card').forEach(card => {
+        card.addEventListener('click', () => {
+          this.selectAdminUser(card.dataset.uid);
+        });
+      });
+
+    } catch (error) {
+      console.error("Failed to load leaderboard:", error);
+      listEl.innerHTML = '<div class="admin-desc" style="color:red">Failed to load users.</div>';
+    }
+  }
+
+  async selectAdminUser(uid) {
+    // Detach old listeners
+    this._detachAllListeners();
+    
+    // Set new target
+    this.uid = uid;
+    this.initializing = true;
+    
+    // Switch to Progress tab automatically
+    this.switchAdminTab('admin-progress');
+    
+    // Start syncing for this user
+    await this.setupRealtimeSync();
+    
+    this.initializing = false;
     this.loadAdminSettingsUI();
     this.renderAdminProgress();
     this.renderAdminLock();
-    this.setupAdminEventListeners();
   }
 
   // ===== EVENT LISTENERS =====
@@ -281,22 +344,35 @@ class KalyanMitra {
 
   // ===== FIREBASE SYNC & REALTIME LISTENERS =====
   listenToRef(path, callback) {
+    if (!this._activeListeners) this._activeListeners = [];
     return new Promise(resolve => {
       let first = true;
-      db.ref(path).on('value', snap => {
+      const ref = db.ref(path);
+      const listener = ref.on('value', snap => {
         callback(snap.val());
         if (first) {
           first = false;
           resolve();
         }
       });
+      this._activeListeners.push({ ref, listener });
     });
+  }
+
+  _detachAllListeners() {
+    if (this._activeListeners) {
+      this._activeListeners.forEach(({ ref, listener }) => {
+        ref.off('value', listener);
+      });
+      this._activeListeners = [];
+    }
   }
 
   async setupRealtimeSync() {
     const todayKey = this.getTodayKey();
+    const userPath = `users/${this.uid}`;
 
-    const p1 = this.listenToRef('kalyan_mitra/settings', val => {
+    const p1 = this.listenToRef(`${userPath}/settings`, val => {
       this.settings = val ? { ...DEFAULT_SETTINGS, ...val } : { ...DEFAULT_SETTINGS };
       if (!this.initializing) {
         if (this.currentRole === 'user') {
@@ -308,7 +384,7 @@ class KalyanMitra {
       }
     });
 
-    const p2 = this.listenToRef('kalyan_mitra/profile', val => {
+    const p2 = this.listenToRef(`${userPath}/profile`, val => {
       this.profile = val ? { ...DEFAULT_PROFILE, ...val } : { ...DEFAULT_PROFILE };
       if (!this.initializing) {
         if (this.currentRole === 'admin') this.renderAdminProgress();
@@ -316,7 +392,7 @@ class KalyanMitra {
       }
     });
 
-    const p3 = this.listenToRef(`kalyan_mitra/daily_logs/${todayKey}`, val => {
+    const p3 = this.listenToRef(`${userPath}/daily_logs/${todayKey}`, val => {
       if (val) this.dailyLog = { ...DEFAULT_DAILY_LOG, ...val };
       else this.dailyLog = { ...DEFAULT_DAILY_LOG, date: todayKey };
       if (!this.initializing) {
@@ -329,7 +405,7 @@ class KalyanMitra {
       }
     });
 
-    const p4 = this.listenToRef(`kalyan_mitra/lock_status/${todayKey}`, val => {
+    const p4 = this.listenToRef(`${userPath}/lock_status/${todayKey}`, val => {
       this.currentDayLocked = !!val;
       if (!this.initializing) {
         if (this.currentRole === 'user') this.updateLockUI();
@@ -340,16 +416,16 @@ class KalyanMitra {
     await Promise.all([p1, p2, p3, p4]);
   }
 
-  saveSettings() { db.ref('kalyan_mitra/settings').set(this.settings); }
-  saveProfile() { db.ref('kalyan_mitra/profile').set(this.profile); }
+  saveSettings() { db.ref(`users/${this.uid}/settings`).set(this.settings); }
+  saveProfile() { db.ref(`users/${this.uid}/profile`).set(this.profile); }
   saveDailyLog() {
-    this.dailyLog.date = this.getTodayKey();
-    db.ref(`kalyan_mitra/daily_logs/${this.getTodayKey()}`).set(this.dailyLog);
+    db.ref(`users/${this.uid}/daily_logs/${this.getTodayKey()}`).set(this.dailyLog);
   }
   saveAll() { this.saveSettings(); this.saveProfile(); this.saveDailyLog(); }
 
-  getTodayKey() {
+  getTodayKey(offset = 0) {
     const d = new Date();
+    d.setDate(d.getDate() + offset);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
@@ -358,9 +434,9 @@ class KalyanMitra {
     return this.currentDayLocked;
   }
 
-  lockDay() {
-    const lockKey = `kalyan_mitra/lock_status/${this.getTodayKey()}`;
-    db.ref(lockKey).set(true);
+  async lockDay() {
+    const lockKey = `users/${this.uid}/lock_status/${this.getTodayKey()}`;
+    await db.ref(lockKey).set(true);
     // Process end-of-day when locked
     this.processEndOfDay();
   }
@@ -371,13 +447,11 @@ class KalyanMitra {
       const now = new Date();
       if (now.getHours() === 0 && now.getMinutes() === 0) {
         // Midnight — lock previous day
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
-        const lockKey = `kalyan_mitra/lock_status/${yKey}`;
-        const snap = await db.ref(lockKey).once('value');
+        const yKey = this.getTodayKey(-1);
+        const yLockKey = `users/${this.uid}/lock_status/${yKey}`;
+        const snap = await db.ref(yLockKey).once('value');
         if (!snap.val()) {
-          db.ref(lockKey).set(true);
+          db.ref(yLockKey).set(true);
         }
         // Reset for new day
         this.checkDailyReset();
@@ -426,7 +500,7 @@ class KalyanMitra {
     const todayKey = this.getTodayKey();
     if (this.dailyLog.date && this.dailyLog.date !== todayKey) {
       // Lock yesterday if not already locked
-      const yLockKey = `kalyan_mitra/lock_status/${this.dailyLog.date}`;
+      const yLockKey = `users/${this.uid}/lock_status/${this.dailyLog.date}`;
       const snap = await db.ref(yLockKey).once('value');
       if (!snap.val()) {
         db.ref(yLockKey).set(true);
@@ -1340,7 +1414,7 @@ class KalyanMitra {
 
   // ===== LOGOUT =====
   logout() {
-    Auth.logout();
+    Auth.signOut();
     this.currentRole = null;
     if (this.autoLockInterval) clearInterval(this.autoLockInterval);
 
@@ -1357,15 +1431,13 @@ class KalyanMitra {
   }
 
   resetProgress() {
-    if (confirm('⚠️ Reset ALL user progress? This erases KP, badges, streaks — everything!')) {
-      if (confirm('🙏 Last chance — really reset?')) {
-        // Keep settings, clear profile, daily_logs, lock_status
-        db.ref('kalyan_mitra/profile').remove();
-        db.ref('kalyan_mitra/daily_logs').remove();
-        db.ref('kalyan_mitra/lock_status').remove().then(() => {
+    if (confirm('DANGER! This will delete all progress, points, and logs for this user. Are you sure?')) {
+        db.ref(`users/${this.uid}/profile`).remove();
+        db.ref(`users/${this.uid}/daily_logs`).remove();
+        db.ref(`users/${this.uid}/lock_status`).remove().then(() => {
+          alert('Progress reset successfully!');
           location.reload();
         });
-      }
     }
   }
 

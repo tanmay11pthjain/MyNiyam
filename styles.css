@@ -2882,3 +2882,13 @@ body {
 .setting-item input[type="checkbox"]:checked::before {
   transform: translateX(20px);
 }
+
+/* ===== LEADERBOARD ===== */
+.leaderboard-list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.leaderboard-card { display: flex; align-items: center; background: white; border-radius: 16px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s; }
+.leaderboard-card:active { transform: scale(0.98); }
+.lb-rank { font-size: 18px; font-weight: 800; color: var(--primary); width: 40px; }
+.lb-info { flex: 1; display: flex; flex-direction: column; }
+.lb-name { font-size: 16px; font-weight: 600; color: var(--text-dark); margin-bottom: 4px; }
+.lb-stats { font-size: 13px; color: var(--text-light); }
+.lb-action { font-size: 14px; font-weight: 600; color: var(--secondary); background: #fef0ea; padding: 6px 12px; border-radius: 20px; }

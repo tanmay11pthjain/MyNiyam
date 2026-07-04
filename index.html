@@ -401,8 +401,20 @@
       </div>
     </header>
 
+    <!-- ADMIN TAB: LEADERBOARD -->
+    <div id="admin-tab-leaderboard" class="admin-tab-content active">
+      <div class="admin-section">
+        <h2 class="section-heading">🏆 Leaderboard</h2>
+        <p class="admin-desc">Click a user to view their detailed progress.</p>
+        <div id="admin-leaderboard-list" class="leaderboard-list">
+          <!-- Populated by JS -->
+          <div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>
+        </div>
+      </div>
+    </div>
+
     <!-- ADMIN TAB: SETTINGS -->
-    <div id="admin-tab-settings" class="admin-tab-content active">
+    <div id="admin-tab-settings" class="admin-tab-content">
       <div class="admin-section">
         <h2 class="section-heading">⚙️ Target Settings</h2>
         <p class="admin-desc">Set daily targets for the user's spiritual practice.</p>
@@ -578,7 +590,10 @@
 
     <!-- ADMIN BOTTOM NAV -->
     <nav id="admin-bottom-nav">
-      <button class="nav-item active" data-tab="admin-settings">
+      <button class="nav-item active" data-tab="admin-leaderboard">
+        <span class="nav-icon">🏆</span><span class="nav-label">Leaders</span>
+      </button>
+      <button class="nav-item" data-tab="admin-settings">
         <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
       </button>
       <button class="nav-item" data-tab="admin-progress">
