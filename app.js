@@ -3,21 +3,6 @@
 
 let app; // Global reference
 
-// ===== CITY COORDINATES =====
-const CITIES = {
-  bangalore: { lat: 12.9716, lng: 77.5946, name: 'Bangalore' },
-  mumbai:    { lat: 19.0760, lng: 72.8777, name: 'Mumbai' },
-  ahmedabad: { lat: 23.0225, lng: 72.5714, name: 'Ahmedabad' },
-  delhi:     { lat: 28.7041, lng: 77.1025, name: 'Delhi' },
-  jaipur:    { lat: 26.9124, lng: 75.7873, name: 'Jaipur' },
-  kolkata:   { lat: 22.5726, lng: 88.3639, name: 'Kolkata' },
-  chennai:   { lat: 13.0827, lng: 80.2707, name: 'Chennai' },
-  pune:      { lat: 18.5204, lng: 73.8567, name: 'Pune' },
-  surat:     { lat: 21.1702, lng: 72.8311, name: 'Surat' },
-  udaipur:   { lat: 24.5854, lng: 73.7125, name: 'Udaipur' },
-  palitana:  { lat: 21.5260, lng: 71.8230, name: 'Palitana' },
-  indore:    { lat: 22.7196, lng: 75.8577, name: 'Indore' },
-};
 
 // ===== FIREBASE INITIALIZATION =====
 const firebaseConfig = {
@@ -93,7 +78,7 @@ class KalyanMitra {
   }
 
   async handleLogin() {
-    const username = document.getElementById('login-username').value.trim();
+    const username = document.getElementById('login-username').value.trim().toLowerCase();
     const password = document.getElementById('login-password').value.trim();
     const errorEl = document.getElementById('login-error');
     const btnEl = document.getElementById('btn-login');
@@ -121,18 +106,7 @@ class KalyanMitra {
     }
   }
 
-  startRateLimitCountdown(errorEl) {
-    const interval = setInterval(() => {
-      const remaining = Auth.getRateLimitRemaining();
-      if (remaining <= 0) {
-        errorEl.textContent = 'You can try again now.';
-        setTimeout(() => errorEl.classList.add('hidden'), 2000);
-        clearInterval(interval);
-      } else {
-        errorEl.textContent = `Too many attempts. Wait ${remaining}s...`;
-      }
-    }, 1000);
-  }
+
 
   // ===== USER INITIALIZATION =====
   async initUser() {
@@ -140,7 +114,6 @@ class KalyanMitra {
     await this.setupRealtimeSync();
     this.initializing = false;
 
-    document.getElementById('app').classList.remove('hidden');
     document.getElementById('app').classList.remove('app-hidden');
     document.getElementById('app').classList.add('app-visible');
     document.getElementById('admin-panel').classList.add('hidden');
@@ -178,7 +151,6 @@ class KalyanMitra {
     this.initializing = false;
 
     document.getElementById('admin-panel').classList.remove('hidden');
-    document.getElementById('app').classList.add('hidden');
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('app').classList.remove('app-visible');
 
@@ -525,9 +497,9 @@ class KalyanMitra {
 
   grantDailyLogin() {
     const todayKey = this.getTodayKey();
-    const lastLogin = localStorage.getItem('km_lastLogin');
+    const lastLogin = localStorage.getItem(`km_lastLogin_${this.uid}`);
     if (lastLogin !== todayKey) {
-      localStorage.setItem('km_lastLogin', todayKey);
+      localStorage.setItem(`km_lastLogin_${this.uid}`, todayKey);
       this.addKarmaPoints(POINTS.dailyLogin, 'Daily Login Bonus!');
       this.profile.daysActive = (this.profile.daysActive || 0) + 1;
     }
@@ -770,7 +742,7 @@ class KalyanMitra {
     };
     updateCounterCard('samayik', d.samayikDone || 0);
     updateCounterCard('pratikraman', d.pratikramanDone || 0);
-    updateCounterCard('book', d.bookReadingMins || 0);
+    updateCounterCard('book', Math.floor((d.bookReadingMins || 0) / 30));
 
     // Screen Time
     const stH = d.screenTimeHours || 0;
@@ -853,8 +825,12 @@ class KalyanMitra {
     if (isDone) {
       this.addKarmaPoints(actualPoints, elId);
       this.showCompletionBurst(document.getElementById(`${elId}-card`));
+      // Track lifetime stats
+      this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
+      if (prop === 'dailyNiyamDone') this.profile.totalNiyam = (this.profile.totalNiyam || 0) + 1;
     } else {
       this.deductKarmaPoints(actualPoints);
+      if (prop === 'dailyNiyamDone') this.profile.totalNiyam = Math.max(0, (this.profile.totalNiyam || 0) - 1);
       if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
         this.dailyLog.perfectDay = false;
         this.deductKarmaPoints(POINTS.perfectDay);
@@ -870,6 +846,9 @@ class KalyanMitra {
     if (this.dailyLog.ashtaPrakariDone) points += POINTS.ashtaPrakari; 
     this.addKarmaPoints(points, 'Pooja');
     this.showCompletionBurst(document.getElementById('pooja-card'));
+    this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
+    // Track early pooja (before 8 AM)
+    if (new Date().getHours() < 8) this.profile.earlyPooja = (this.profile.earlyPooja || 0) + 1;
     this.afterActivity();
   }
 
@@ -911,8 +890,23 @@ class KalyanMitra {
     if (delta > 0) {
       this.addKarmaPoints(points, elId);
       this.showCompletionBurst(document.getElementById(`${elId}-card`));
+      // Track lifetime stats for counters
+      this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
+      if (prop === 'samayikDone') this.profile.totalSamayik = (this.profile.totalSamayik || 0) + 1;
+      if (prop === 'pratikramanDone') {
+        this.profile.totalPratikraman = (this.profile.totalPratikraman || 0) + 1;
+        this.profile.totalFullPratikraman = (this.profile.totalFullPratikraman || 0) + 1;
+      }
+      if (prop === 'bookReadingMins') this.profile.totalSwadhyay = (this.profile.totalSwadhyay || 0) + 1;
     } else {
       this.deductKarmaPoints(points);
+      // Reverse lifetime stats
+      if (prop === 'samayikDone') this.profile.totalSamayik = Math.max(0, (this.profile.totalSamayik || 0) - 1);
+      if (prop === 'pratikramanDone') {
+        this.profile.totalPratikraman = Math.max(0, (this.profile.totalPratikraman || 0) - 1);
+        this.profile.totalFullPratikraman = Math.max(0, (this.profile.totalFullPratikraman || 0) - 1);
+      }
+      if (prop === 'bookReadingMins') this.profile.totalSwadhyay = Math.max(0, (this.profile.totalSwadhyay || 0) - 1);
       if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
         this.dailyLog.perfectDay = false;
         this.deductKarmaPoints(POINTS.perfectDay);
@@ -980,17 +974,12 @@ class KalyanMitra {
 
     const newLevel = this.getCurrentLevel();
     if (newLevel.level > prevLevel.level) this.showLevelUp(newLevel);
-
-    this.saveProfile();
-    this.saveDailyLog();
   }
 
   deductKarmaPoints(points) {
     this.profile.totalKP = Math.max(0, this.profile.totalKP - points);
     this.dailyLog.kpEarned = Math.max(0, (this.dailyLog.kpEarned || 0) - points);
     this.showKPPopup(-points);
-    this.saveProfile();
-    this.saveDailyLog();
   }
 
   applyStreakMultiplier(points) {
@@ -1026,7 +1015,6 @@ class KalyanMitra {
   checkPerfectDay() {
     if (this.isAllTasksComplete() && !this.dailyLog.perfectDay) {
       this.dailyLog.perfectDay = true;
-      this.profile.perfectDays = (this.profile.perfectDays || 0) + 1;
       this.profile.totalPerfectDays = (this.profile.totalPerfectDays || 0) + 1;
       this.addKarmaPoints(POINTS.perfectDay, 'Perfect Day! 🎊');
     }
@@ -1250,6 +1238,7 @@ class KalyanMitra {
     document.querySelector(`#admin-bottom-nav .nav-item[data-tab="${tabName}"]`).classList.add('active');
     if (tabName === 'admin-progress') this.renderAdminProgress();
     if (tabName === 'admin-lock') this.renderAdminLock();
+    if (tabName === 'admin-leaderboard') this.renderAdminLeaderboard();
   }
 
   // ===== ADMIN FUNCTIONS =====
