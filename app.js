@@ -233,6 +233,12 @@ class KalyanMitra {
     this.uid = uid;
     this.initializing = true;
     
+    // Show the "viewing user" banner
+    const banner = document.getElementById('admin-user-banner');
+    const nameEl = document.getElementById('admin-viewing-name');
+    if (banner) banner.classList.remove('hidden');
+    if (nameEl) nameEl.textContent = `Viewing: ${uid}`;
+    
     // Switch to Progress tab automatically
     this.switchAdminTab('admin-progress');
     
@@ -240,6 +246,8 @@ class KalyanMitra {
     await this.setupRealtimeSync();
     
     this.initializing = false;
+    // Update banner with actual name from profile if available
+    if (nameEl) nameEl.textContent = `Viewing: ${this.profile?.name || uid}`;
     this.loadAdminSettingsUI();
     this.renderAdminProgress();
     this.renderAdminLock();
@@ -321,6 +329,14 @@ class KalyanMitra {
 
     // Logout
     document.getElementById('btn-admin-logout').addEventListener('click', () => this.logout());
+
+    // Back to leaderboard
+    const backBtn = document.getElementById('btn-back-leaderboard');
+    if (backBtn) backBtn.addEventListener('click', () => {
+      document.getElementById('admin-user-banner').classList.add('hidden');
+      this._detachAllListeners();
+      this.switchAdminTab('admin-leaderboard');
+    });
   }
 
   // ===== FIREBASE SYNC & REALTIME LISTENERS =====
