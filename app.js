@@ -384,7 +384,7 @@ class KalyanMitra {
     const todayKey = this.getTodayKey();
     const userPath = `users/${this.uid}`;
 
-    const p1 = this.listenToRef(`${userPath}/settings`, val => {
+    const p1 = this.listenToRef('settings', val => {
       this.settings = val ? { ...DEFAULT_SETTINGS, ...val } : { ...DEFAULT_SETTINGS };
       if (!this.initializing) {
         if (this.currentRole === 'user') {
@@ -428,7 +428,7 @@ class KalyanMitra {
     await Promise.all([p1, p2, p3, p4]);
   }
 
-  saveSettings() { db.ref(`users/${this.uid}/settings`).set(this.settings); }
+  saveSettings() { db.ref('settings').set(this.settings); }
   saveProfile() { db.ref(`users/${this.uid}/profile`).set(this.profile); }
   saveDailyLog() {
     db.ref(`users/${this.uid}/daily_logs/${this.getTodayKey()}`).set(this.dailyLog);
