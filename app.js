@@ -33,6 +33,9 @@ class KalyanMitra {
       if (user) {
         this.uid = user.uid;
         this.currentRole = user.role;
+        // Save user identity to Firebase so admin can see names
+        db.ref(`users/${user.uid}/name`).set(user.name || user.uid);
+        db.ref(`users/${user.uid}/role`).set(user.role);
         document.getElementById('login-screen').classList.add('hidden');
         if (user.role === 'admin') {
           this.initAdmin();
@@ -230,28 +233,36 @@ class KalyanMitra {
   }
 
   async selectAdminUser(uid) {
-    // Detach old listeners
+    // Detach old user listeners (but keep leaderboard listener alive)
     this._detachAllListeners();
     
     // Set new target
     this.uid = uid;
     this.initializing = true;
     
+    // Initialize defaults so renderAdminProgress doesn't read undefined
+    this.profile = { ...DEFAULT_PROFILE };
+    this.dailyLog = { ...DEFAULT_DAILY_LOG, date: this.getTodayKey() };
+    this.settings = { ...DEFAULT_SETTINGS };
+    this.currentDayLocked = false;
+    
     // Show the "viewing user" banner
     const banner = document.getElementById('admin-user-banner');
     const nameEl = document.getElementById('admin-viewing-name');
     if (banner) banner.classList.remove('hidden');
-    if (nameEl) nameEl.textContent = `Viewing: ${uid}`;
+    
+    // Fetch user name from top-level user record
+    const nameSnap = await db.ref(`users/${uid}/name`).once('value');
+    const userName = nameSnap.val() || uid;
+    if (nameEl) nameEl.textContent = `Viewing: ${userName}`;
     
     // Switch to Progress tab automatically
     this.switchAdminTab('admin-progress');
     
-    // Start syncing for this user
+    // Start real-time syncing for this user's data
     await this.setupRealtimeSync();
     
     this.initializing = false;
-    // Update banner with actual name from profile if available
-    if (nameEl) nameEl.textContent = `Viewing: ${this.profile?.name || uid}`;
     this.loadAdminSettingsUI();
     this.renderAdminProgress();
     this.renderAdminLock();
