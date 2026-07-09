@@ -161,58 +161,67 @@ class KalyanMitra {
     await this.renderAdminLeaderboard();
   }
 
-  async renderAdminLeaderboard() {
+  startLeaderboardListener() {
+    // Detach previous leaderboard listener if any
+    if (this._leaderboardRef) {
+      this._leaderboardRef.off('value', this._leaderboardListener);
+    }
+
+    this._leaderboardRef = db.ref('users');
+    this._leaderboardListener = this._leaderboardRef.on('value', snap => {
+      this._renderLeaderboardFromSnap(snap);
+    });
+  }
+
+  _renderLeaderboardFromSnap(snap) {
     const listEl = document.getElementById('admin-leaderboard-list');
     if (!listEl) return;
 
-    listEl.innerHTML = '<div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>';
-
-    try {
-      const snap = await db.ref('users').once('value');
-      const allUsers = snap.val() || {};
-      
-      const users = [];
-      Object.entries(allUsers).forEach(([uid, data]) => {
-        // Only show regular users on leaderboard
-        if (!data.role || data.role === 'user' || data.profile) {
-          users.push({
-            uid,
-            name: data.name || uid,
-            kp: data.profile?.totalKP || 0,
-            streak: data.profile?.currentStreak || 0
-          });
-        }
-      });
-
-      // Sort by KP descending
-      users.sort((a, b) => b.kp - a.kp);
-
-      if (users.length === 0) {
-        listEl.innerHTML = '<div class="admin-desc">No users found. Login with a user account first.</div>';
-        return;
-      }
-
-      listEl.innerHTML = users.map((u, index) => `
-        <div class="leaderboard-card" data-uid="${u.uid}">
-          <div class="lb-rank">#${index + 1}</div>
-          <div class="lb-info">
-            <span class="lb-name">${u.name}</span>
-            <span class="lb-stats">${u.kp} KP • 🔥 ${u.streak}</span>
-          </div>
-          <div class="lb-action">👁️ View</div>
-        </div>
-      `).join('');
-
-      // Add click listeners to cards
-      listEl.querySelectorAll('.leaderboard-card').forEach(card => {
-        card.addEventListener('click', () => {
-          this.selectAdminUser(card.dataset.uid);
+    const allUsers = snap.val() || {};
+    const users = [];
+    Object.entries(allUsers).forEach(([uid, data]) => {
+      if (!data.role || data.role === 'user' || data.profile) {
+        users.push({
+          uid,
+          name: data.name || uid,
+          kp: data.profile?.totalKP || 0,
+          streak: data.profile?.currentStreak || 0
         });
-      });
+      }
+    });
 
-    } catch (error) {
-      console.error("Failed to load leaderboard:", error);
-      listEl.innerHTML = '<div class="admin-desc" style="color:red">Failed to load users.</div>';
+    users.sort((a, b) => b.kp - a.kp);
+
+    if (users.length === 0) {
+      listEl.innerHTML = '<div class="admin-desc">No users found. Login with a user account first.</div>';
+      return;
+    }
+
+    listEl.innerHTML = users.map((u, index) => `
+      <div class="leaderboard-card" data-uid="${u.uid}">
+        <div class="lb-rank">#${index + 1}</div>
+        <div class="lb-info">
+          <span class="lb-name">${u.name}</span>
+          <span class="lb-stats">${u.kp} KP • 🔥 ${u.streak}</span>
+        </div>
+        <div class="lb-action">👁️ View</div>
+      </div>
+    `).join('');
+
+    listEl.querySelectorAll('.leaderboard-card').forEach(card => {
+      card.addEventListener('click', () => {
+        this.selectAdminUser(card.dataset.uid);
+      });
+    });
+  }
+
+  async renderAdminLeaderboard() {
+    const listEl = document.getElementById('admin-leaderboard-list');
+    if (!listEl) return;
+    listEl.innerHTML = '<div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>';
+    // If listener isn't started yet, start it (first render triggers immediately)
+    if (!this._leaderboardRef) {
+      this.startLeaderboardListener();
     }
   }
 
@@ -1406,6 +1415,12 @@ class KalyanMitra {
     Auth.signOut();
     this.currentRole = null;
     if (this.autoLockInterval) clearInterval(this.autoLockInterval);
+    this._detachAllListeners();
+    // Detach leaderboard listener
+    if (this._leaderboardRef) {
+      this._leaderboardRef.off('value', this._leaderboardListener);
+      this._leaderboardRef = null;
+    }
 
     // Reset UI
     document.getElementById('app').classList.add('app-hidden');
