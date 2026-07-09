@@ -219,9 +219,13 @@ class KalyanMitra {
     const listEl = document.getElementById('admin-leaderboard-list');
     if (!listEl) return;
     listEl.innerHTML = '<div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>';
-    // If listener isn't started yet, start it (first render triggers immediately)
     if (!this._leaderboardRef) {
+      // First time — start real-time listener (fires immediately)
       this.startLeaderboardListener();
+    } else {
+      // Listener already running — do a one-time read to refresh now
+      const snap = await db.ref('users').once('value');
+      this._renderLeaderboardFromSnap(snap);
     }
   }
 
