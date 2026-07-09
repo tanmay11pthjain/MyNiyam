@@ -152,6 +152,7 @@ class KalyanMitra {
   // ===== ADMIN INITIALIZATION =====
   async initAdmin() {
     this.initializing = false;
+    this.settings = { ...DEFAULT_SETTINGS };
 
     document.getElementById('admin-panel').classList.remove('hidden');
     document.getElementById('app').classList.add('app-hidden');
@@ -159,6 +160,13 @@ class KalyanMitra {
 
     // Setup Admin Event Listeners (Tabs, Logout, etc.)
     this.setupAdminEventListeners();
+
+    // Start global settings listener so Settings tab works immediately
+    this._settingsRef = db.ref('settings');
+    this._settingsListener = this._settingsRef.on('value', snap => {
+      this.settings = snap.val() ? { ...DEFAULT_SETTINGS, ...snap.val() } : { ...DEFAULT_SETTINGS };
+      this.loadAdminSettingsUI();
+    });
 
     // Fetch and render Leaderboard
     await this.renderAdminLeaderboard();
@@ -1513,6 +1521,11 @@ class KalyanMitra {
     if (this._leaderboardRef) {
       this._leaderboardRef.off('value', this._leaderboardListener);
       this._leaderboardRef = null;
+    }
+    // Detach global settings listener
+    if (this._settingsRef) {
+      this._settingsRef.off('value', this._settingsListener);
+      this._settingsRef = null;
     }
 
     // Reset UI
