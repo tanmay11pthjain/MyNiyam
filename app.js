@@ -173,7 +173,66 @@ class KalyanMitra {
     this._leaderboardRef = db.ref('users');
     this._leaderboardListener = this._leaderboardRef.on('value', snap => {
       this._renderLeaderboardFromSnap(snap);
+      this._renderOverviewFromSnap(snap);
     });
+  }
+
+  _renderOverviewFromSnap(snap) {
+    const grid = document.getElementById('admin-overview-grid');
+    if (!grid) return;
+
+    const allUsers = snap.val() || {};
+    const todayKey = this.getTodayKey();
+    let totalUsers = 0, activeToday = 0, totalKP = 0;
+
+    // Activity counters
+    const acts = {
+      navkarsi: { icon: '🌅', name: 'Navkarsi', count: 0 },
+      wakeup: { icon: '⏰', name: 'Wake < 7AM', count: 0 },
+      sleep: { icon: '🌙', name: 'Sleep < 12AM', count: 0 },
+      pranam: { icon: '🙇', name: 'Pranam', count: 0 },
+      pooja: { icon: '🪔', name: 'Pooja', count: 0 },
+      samayik: { icon: '🧘', name: 'Samayik', count: 0 },
+      pratikraman: { icon: '🙏', name: 'Pratikraman', count: 0 },
+      book: { icon: '📖', name: 'Book Reading', count: 0 },
+      ratribhojan: { icon: '🍽️', name: 'Ratri Bhojan Tyag', count: 0 },
+      kandmool: { icon: '🌱', name: 'Kandmool Tyag', count: 0 },
+      niyam: { icon: '✨', name: 'Daily Niyam', count: 0 },
+    };
+
+    Object.entries(allUsers).forEach(([uid, data]) => {
+      if (data.role === 'admin') return; // skip admin accounts
+      totalUsers++;
+      totalKP += data.profile?.totalKP || 0;
+
+      const dayLog = data.daily_logs?.[todayKey];
+      if (dayLog) {
+        activeToday++;
+        if (dayLog.navkarsiDone) acts.navkarsi.count++;
+        if (dayLog.wakeUpDone) acts.wakeup.count++;
+        if (dayLog.sleepDone) acts.sleep.count++;
+        if (dayLog.pranamDone) acts.pranam.count++;
+        if (dayLog.poojaDone) acts.pooja.count++;
+        if ((dayLog.samayikDone || 0) > 0) acts.samayik.count++;
+        if ((dayLog.pratikramanDone || 0) > 0) acts.pratikraman.count++;
+        if ((dayLog.bookReadingMins || 0) >= 30) acts.book.count++;
+        if (dayLog.ratriBhojanDone) acts.ratribhojan.count++;
+        if (dayLog.kandmoolDone) acts.kandmool.count++;
+        if (dayLog.dailyNiyamDone) acts.niyam.count++;
+      }
+    });
+
+    document.getElementById('ov-total-users').textContent = totalUsers;
+    document.getElementById('ov-active-today').textContent = activeToday;
+    document.getElementById('ov-total-kp').textContent = totalKP;
+
+    grid.innerHTML = Object.values(acts).map(a => `
+      <div class="admin-activity-item">
+        <span class="admin-act-icon">${a.icon}</span>
+        <span class="admin-act-name">${a.name}</span>
+        <span class="admin-act-status ${a.count > 0 ? 'done' : ''}">${a.count}/${totalUsers}</span>
+      </div>
+    `).join('');
   }
 
   _renderLeaderboardFromSnap(snap) {
@@ -183,6 +242,7 @@ class KalyanMitra {
     const allUsers = snap.val() || {};
     const users = [];
     Object.entries(allUsers).forEach(([uid, data]) => {
+      if (data.role === 'admin') return;
       if (!data.role || data.role === 'user' || data.profile) {
         users.push({
           uid,
@@ -246,10 +306,11 @@ class KalyanMitra {
     this.settings = { ...DEFAULT_SETTINGS };
     this.currentDayLocked = false;
     
-    // Show the "viewing user" banner
-    const banner = document.getElementById('admin-user-banner');
+    // Show the individual view, hide the overview
+    document.getElementById('admin-overview').classList.add('hidden');
+    document.getElementById('admin-individual').classList.remove('hidden');
+    
     const nameEl = document.getElementById('admin-viewing-name');
-    if (banner) banner.classList.remove('hidden');
     
     // Fetch user name from top-level user record
     const nameSnap = await db.ref(`users/${uid}/name`).once('value');
@@ -348,7 +409,8 @@ class KalyanMitra {
     // Back to leaderboard
     const backBtn = document.getElementById('btn-back-leaderboard');
     if (backBtn) backBtn.addEventListener('click', () => {
-      document.getElementById('admin-user-banner').classList.add('hidden');
+      document.getElementById('admin-individual').classList.add('hidden');
+      document.getElementById('admin-overview').classList.remove('hidden');
       this._detachAllListeners();
       this.switchAdminTab('admin-leaderboard');
     });

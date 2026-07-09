@@ -497,69 +497,70 @@
     <!-- ADMIN TAB: USER PROGRESS -->
     <div id="admin-tab-progress" class="admin-tab-content">
       <div class="admin-section">
-        <div id="admin-user-banner" class="admin-user-banner hidden">
-          <button id="btn-back-leaderboard" class="btn-back-lb">← Back</button>
-          <span id="admin-viewing-name" class="admin-viewing-name">Viewing: User</span>
-        </div>
-        <h2 class="section-heading">📊 User Progress</h2>
 
-        <div class="admin-profile-card">
-          <div class="admin-profile-header">
-            <span class="admin-profile-icon" id="admin-user-level-icon">💒</span>
-            <div class="admin-profile-info">
-              <span class="admin-profile-title" id="admin-user-level">Balak</span>
-              <span class="admin-profile-kp" id="admin-user-kp">10 KP</span>
+        <!-- AGGREGATE OVERVIEW (default view) -->
+        <div id="admin-overview">
+          <h2 class="section-heading">📊 Overall Progress</h2>
+          <div class="overview-summary-row">
+            <div class="overview-card">
+              <span class="overview-value" id="ov-total-users">0</span>
+              <span class="overview-label">Total Users</span>
             </div>
-            <div class="admin-profile-streak">
-              <span id="admin-user-streak-flame">🕯️</span>
-              <span id="admin-user-streak">0 day streak</span>
+            <div class="overview-card">
+              <span class="overview-value" id="ov-active-today">0</span>
+              <span class="overview-label">Active Today</span>
+            </div>
+            <div class="overview-card">
+              <span class="overview-value" id="ov-total-kp">0</span>
+              <span class="overview-label">Total KP</span>
             </div>
           </div>
+
+          <h3 class="sub-heading">Today's Activity Breakdown</h3>
+          <div class="admin-today-grid" id="admin-overview-grid"></div>
         </div>
 
-        <h3 class="sub-heading">Today's Activities</h3>
-        <div class="admin-today-grid" id="admin-today-grid">
-          <div class="admin-activity-item" id="admin-act-samayik">
-            <span class="admin-act-icon">🧘</span>
-            <span class="admin-act-name">Samayik</span>
-            <span class="admin-act-status" id="admin-samayik-status">0/1</span>
+        <!-- INDIVIDUAL USER VIEW (shown on "View" click) -->
+        <div id="admin-individual" class="hidden">
+          <div id="admin-user-banner" class="admin-user-banner">
+            <button id="btn-back-leaderboard" class="btn-back-lb">← Back</button>
+            <span id="admin-viewing-name" class="admin-viewing-name">Viewing: User</span>
           </div>
-          <div class="admin-activity-item" id="admin-act-pooja">
-            <span class="admin-act-icon">🪔</span>
-            <span class="admin-act-name">Pooja</span>
-            <span class="admin-act-status" id="admin-pooja-status">✗</span>
+          <h2 class="section-heading">📊 User Progress</h2>
+
+          <div class="admin-profile-card">
+            <div class="admin-profile-header">
+              <span class="admin-profile-icon" id="admin-user-level-icon">💒</span>
+              <div class="admin-profile-info">
+                <span class="admin-profile-title" id="admin-user-level">Balak</span>
+                <span class="admin-profile-kp" id="admin-user-kp">10 KP</span>
+              </div>
+              <div class="admin-profile-streak">
+                <span id="admin-user-streak-flame">🕯️</span>
+                <span id="admin-user-streak">0 day streak</span>
+              </div>
+            </div>
           </div>
-          <div class="admin-activity-item" id="admin-act-swadhyay">
-            <span class="admin-act-icon">📖</span>
-            <span class="admin-act-name">Swadhyay</span>
-            <span class="admin-act-status" id="admin-swadhyay-status">0/5</span>
+
+          <h3 class="sub-heading">Today's Activities</h3>
+          <div class="admin-today-grid" id="admin-today-grid"></div>
+
+          <h3 class="sub-heading">Lifetime Stats</h3>
+          <div class="admin-stats-grid">
+            <div class="stat-item"><span class="stat-value" id="admin-stat-kp">0</span><span class="stat-label">Total KP</span></div>
+            <div class="stat-item"><span class="stat-value" id="admin-stat-streak">0</span><span class="stat-label">Best Streak</span></div>
+            <div class="stat-item"><span class="stat-value" id="admin-stat-samayik">0</span><span class="stat-label">Samayiks</span></div>
+            <div class="stat-item"><span class="stat-value" id="admin-stat-swadhyay">0</span><span class="stat-label">Pages</span></div>
+            <div class="stat-item"><span class="stat-value" id="admin-stat-pratikraman">0</span><span class="stat-label">Pratikramans</span></div>
+            <div class="stat-item"><span class="stat-value" id="admin-stat-perfect">0</span><span class="stat-label">Perfect Days</span></div>
           </div>
-          <div class="admin-activity-item" id="admin-act-pratikraman">
-            <span class="admin-act-icon">🙏</span>
-            <span class="admin-act-name">Pratikraman</span>
-            <span class="admin-act-status" id="admin-pratikraman-status">0/2</span>
-          </div>
-          <div class="admin-activity-item" id="admin-act-niyam">
-            <span class="admin-act-icon">✨</span>
-            <span class="admin-act-name">Niyam</span>
-            <span class="admin-act-status" id="admin-niyam-status">✗</span>
+
+          <h3 class="sub-heading">🏆 Badges Earned</h3>
+          <div class="admin-badges-list" id="admin-badges-list">
+            <p class="admin-no-badges">No badges earned yet.</p>
           </div>
         </div>
 
-        <h3 class="sub-heading">Lifetime Stats</h3>
-        <div class="admin-stats-grid">
-          <div class="stat-item"><span class="stat-value" id="admin-stat-kp">10</span><span class="stat-label">Total KP</span></div>
-          <div class="stat-item"><span class="stat-value" id="admin-stat-streak">0</span><span class="stat-label">Best Streak</span></div>
-          <div class="stat-item"><span class="stat-value" id="admin-stat-samayik">0</span><span class="stat-label">Samayiks</span></div>
-          <div class="stat-item"><span class="stat-value" id="admin-stat-swadhyay">0</span><span class="stat-label">Pages</span></div>
-          <div class="stat-item"><span class="stat-value" id="admin-stat-pratikraman">0</span><span class="stat-label">Pratikramans</span></div>
-          <div class="stat-item"><span class="stat-value" id="admin-stat-perfect">0</span><span class="stat-label">Perfect Days</span></div>
-        </div>
-
-        <h3 class="sub-heading">🏆 Badges Earned</h3>
-        <div class="admin-badges-list" id="admin-badges-list">
-          <p class="admin-no-badges">No badges earned yet.</p>
-        </div>
       </div>
     </div>
 
