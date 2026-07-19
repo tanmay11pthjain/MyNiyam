@@ -378,10 +378,25 @@
       <div class="bottom-spacer"></div>
     </div>
 
-    <!-- BOTTOM NAV (User: 2 tabs only) -->
+    <!-- TAB: HISTORY -->
+    <div id="tab-history" class="tab-content">
+      <h2 class="section-heading">📅 My Progress History</h2>
+      <div class="history-nav">
+        <button id="btn-history-prev" class="btn-history-nav">← Prev</button>
+        <span id="history-month-label" class="history-month-label">July 2026</span>
+        <button id="btn-history-next" class="btn-history-nav">Next →</button>
+      </div>
+      <div class="history-list" id="history-list"></div>
+      <div class="bottom-spacer"></div>
+    </div>
+
+    <!-- BOTTOM NAV (User: 3 tabs) -->
     <nav id="bottom-nav">
       <button class="nav-item active" data-tab="home">
         <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+      </button>
+      <button class="nav-item" data-tab="history">
+        <span class="nav-icon">📅</span><span class="nav-label">History</span>
       </button>
       <button class="nav-item" data-tab="achievements">
         <span class="nav-icon">🏆</span><span class="nav-label">Badges</span>
@@ -559,6 +574,14 @@
           <div class="admin-badges-list" id="admin-badges-list">
             <p class="admin-no-badges">No badges earned yet.</p>
           </div>
+
+          <h3 class="sub-heading">📅 Activity History</h3>
+          <div class="history-nav">
+            <button id="btn-admin-history-prev" class="btn-history-nav">← Prev</button>
+            <span id="admin-history-month-label" class="history-month-label">July 2026</span>
+            <button id="btn-admin-history-next" class="btn-history-nav">Next →</button>
+          </div>
+          <div class="history-list" id="admin-history-list"></div>
         </div>
 
       </div>

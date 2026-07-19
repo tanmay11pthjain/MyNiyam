@@ -325,6 +325,11 @@ class KalyanMitra {
     const userName = nameSnap.val() || uid;
     if (nameEl) nameEl.textContent = `Viewing: ${userName}`;
     
+    // Reset admin history state to current month for new user
+    const now = new Date();
+    this._adminHistoryMonth = now.getMonth();
+    this._adminHistoryYear = now.getFullYear();
+    
     // Switch to Progress tab automatically
     this.switchAdminTab('admin-progress');
     
@@ -335,6 +340,7 @@ class KalyanMitra {
     this.loadAdminSettingsUI();
     this.renderAdminProgress();
     this.renderAdminLock();
+    this.renderAdminHistory();
   }
 
   // ===== EVENT LISTENERS =====
@@ -387,6 +393,12 @@ class KalyanMitra {
       btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
     });
 
+    // History month navigation
+    const hPrev = document.getElementById('btn-history-prev');
+    const hNext = document.getElementById('btn-history-next');
+    if (hPrev) hPrev.addEventListener('click', () => this._changeHistoryMonth(-1, false));
+    if (hNext) hNext.addEventListener('click', () => this._changeHistoryMonth(1, false));
+
     // Logout
     document.getElementById('btn-user-logout').addEventListener('click', () => this.logout());
 
@@ -422,6 +434,12 @@ class KalyanMitra {
       this._detachAllListeners();
       this.switchAdminTab('admin-leaderboard');
     });
+
+    // Admin history month navigation
+    const ahPrev = document.getElementById('btn-admin-history-prev');
+    const ahNext = document.getElementById('btn-admin-history-next');
+    if (ahPrev) ahPrev.addEventListener('click', () => this._changeHistoryMonth(-1, true));
+    if (ahNext) ahNext.addEventListener('click', () => this._changeHistoryMonth(1, true));
   }
 
   // ===== FIREBASE SYNC & REALTIME LISTENERS =====
@@ -1332,6 +1350,154 @@ class KalyanMitra {
     }
   }
 
+  // ===== HISTORY =====
+  _initHistoryState() {
+    if (this._historyMonth === undefined) {
+      const now = new Date();
+      this._historyMonth = now.getMonth();
+      this._historyYear = now.getFullYear();
+    }
+  }
+
+  _initAdminHistoryState() {
+    if (!this._adminHistoryMonth && this._adminHistoryMonth !== 0) {
+      const now = new Date();
+      this._adminHistoryMonth = now.getMonth();
+      this._adminHistoryYear = now.getFullYear();
+    }
+  }
+
+  async renderHistory() {
+    this._initHistoryState();
+    const listEl = document.getElementById('history-list');
+    const labelEl = document.getElementById('history-month-label');
+    if (!listEl || !labelEl) return;
+
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    labelEl.textContent = `${monthNames[this._historyMonth]} ${this._historyYear}`;
+
+    listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#795548;">Loading...</div>';
+
+    try {
+      const snap = await db.ref(`users/${this.uid}/daily_logs`).once('value');
+      const allLogs = snap.val() || {};
+      this._renderHistoryDays(listEl, allLogs, this._historyYear, this._historyMonth);
+    } catch (e) {
+      listEl.innerHTML = '<div style="text-align:center; color:red;">Failed to load history.</div>';
+    }
+  }
+
+  async renderAdminHistory() {
+    this._initAdminHistoryState();
+    const listEl = document.getElementById('admin-history-list');
+    const labelEl = document.getElementById('admin-history-month-label');
+    if (!listEl || !labelEl) return;
+
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    labelEl.textContent = `${monthNames[this._adminHistoryMonth]} ${this._adminHistoryYear}`;
+
+    listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#795548;">Loading...</div>';
+
+    try {
+      const snap = await db.ref(`users/${this.uid}/daily_logs`).once('value');
+      const allLogs = snap.val() || {};
+      this._renderHistoryDays(listEl, allLogs, this._adminHistoryYear, this._adminHistoryMonth);
+    } catch (e) {
+      listEl.innerHTML = '<div style="text-align:center; color:red;">Failed to load history.</div>';
+    }
+  }
+
+  _renderHistoryDays(container, allLogs, year, month) {
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = this.getTodayKey();
+    const s = this.settings || DEFAULT_SETTINGS;
+    let html = '';
+
+    for (let day = daysInMonth; day >= 1; day--) {
+      const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (dateKey > today) continue; // skip future dates
+
+      const log = allLogs[dateKey];
+      if (!log) {
+        html += `<div class="history-day history-empty">
+          <div class="history-date">${this._formatHistoryDate(dateKey)}</div>
+          <div class="history-summary">No data recorded</div>
+        </div>`;
+        continue;
+      }
+
+      // Count completed activities
+      let done = 0, total = 0;
+      const checks = [
+        { enabled: s.enableNavkarsi, val: log.navkarsiDone },
+        { enabled: s.enableWakeup, val: log.wakeUpDone },
+        { enabled: s.enableSleep, val: log.sleepDone },
+        { enabled: s.enablePranam, val: log.pranamDone },
+        { enabled: s.enablePooja, val: log.poojaDone },
+        { enabled: s.enableSamayik, val: (log.samayikDone || 0) >= parseInt(s.samayikTarget || 1) },
+        { enabled: s.enablePratikraman, val: (log.pratikramanDone || 0) >= parseInt(s.pratikramanTarget || 1) },
+        { enabled: s.enableBookReading, val: (log.bookReadingMins || 0) >= 30 },
+        { enabled: s.enableRatriBhojan, val: log.ratriBhojanDone },
+        { enabled: s.enableKandmool, val: log.kandmoolDone },
+        { enabled: s.enableDailyNiyam, val: log.dailyNiyamDone },
+      ];
+      checks.forEach(c => { if (c.enabled) { total++; if (c.val) done++; } });
+
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+      const kp = log.kpEarned || 0;
+      const isPerfect = log.perfectDay;
+      const statusClass = isPerfect ? 'history-perfect' : (pct >= 50 ? 'history-good' : 'history-low');
+
+      // Build mini activity icons
+      const icons = [];
+      if (s.enableNavkarsi && log.navkarsiDone) icons.push('🌅');
+      if (s.enableWakeup && log.wakeUpDone) icons.push('⏰');
+      if (s.enablePooja && log.poojaDone) icons.push('🪔');
+      if (s.enableSamayik && (log.samayikDone || 0) > 0) icons.push('🧘');
+      if (s.enablePratikraman && (log.pratikramanDone || 0) > 0) icons.push('🙏');
+      if (s.enableBookReading && (log.bookReadingMins || 0) >= 30) icons.push('📖');
+      if (s.enableRatriBhojan && log.ratriBhojanDone) icons.push('🍽️');
+      if (s.enableKandmool && log.kandmoolDone) icons.push('🌱');
+      if (s.enableDailyNiyam && log.dailyNiyamDone) icons.push('✨');
+
+      html += `<div class="history-day ${statusClass}">
+        <div class="history-date">${this._formatHistoryDate(dateKey)}${isPerfect ? ' ⭐' : ''}</div>
+        <div class="history-bar-wrap">
+          <div class="history-bar" style="width:${pct}%"></div>
+        </div>
+        <div class="history-meta">
+          <span class="history-pct">${done}/${total} (${pct}%)</span>
+          <span class="history-kp">+${kp} KP</span>
+        </div>
+        <div class="history-icons">${icons.join(' ')}</div>
+      </div>`;
+    }
+
+    container.innerHTML = html || '<div style="text-align:center; padding:20px; color:#795548;">No history for this month.</div>';
+  }
+
+  _formatHistoryDate(dateKey) {
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const d = new Date(dateKey + 'T00:00:00');
+    return `${days[d.getDay()]}, ${d.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]}`;
+  }
+
+  _changeHistoryMonth(delta, isAdmin) {
+    if (isAdmin) {
+      this._initAdminHistoryState();
+      this._adminHistoryMonth += delta;
+      if (this._adminHistoryMonth > 11) { this._adminHistoryMonth = 0; this._adminHistoryYear++; }
+      if (this._adminHistoryMonth < 0) { this._adminHistoryMonth = 11; this._adminHistoryYear--; }
+      this.renderAdminHistory();
+    } else {
+      this._initHistoryState();
+      this._historyMonth += delta;
+      if (this._historyMonth > 11) { this._historyMonth = 0; this._historyYear++; }
+      if (this._historyMonth < 0) { this._historyMonth = 11; this._historyYear--; }
+      this.renderHistory();
+    }
+  }
+
   // ===== NAVIGATION =====
   switchTab(tabName) {
     document.querySelectorAll('#app .tab-content').forEach(t => t.classList.remove('active'));
@@ -1339,6 +1505,7 @@ class KalyanMitra {
     document.getElementById(`tab-${tabName}`).classList.add('active');
     document.querySelector(`#bottom-nav .nav-item[data-tab="${tabName}"]`).classList.add('active');
     if (tabName === 'achievements') this.renderAchievements();
+    if (tabName === 'history') this.renderHistory();
   }
 
   switchAdminTab(tabName) {
