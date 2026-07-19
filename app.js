@@ -515,6 +515,8 @@ class KalyanMitra {
         this._cachedDailyLogs = val || {};
         if (!this.initializing) {
           this.renderAdminHistory();
+          // Re-render open day detail modal if visible
+          if (this._openDayDetailKey) this.showDayDetail(this._openDayDetailKey);
         }
       });
     }
@@ -1546,9 +1548,11 @@ class KalyanMitra {
 
     overlay.classList.remove('hidden');
     overlay.classList.add('show');
+    this._openDayDetailKey = dateKey;
   }
 
   closeDayDetail() {
+    this._openDayDetailKey = null;
     const o = document.getElementById('day-detail-overlay');
     if (o) { o.classList.remove('show'); o.classList.add('hidden'); }
   }
