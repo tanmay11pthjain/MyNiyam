@@ -440,6 +440,10 @@ class KalyanMitra {
     const ahNext = document.getElementById('btn-admin-history-next');
     if (ahPrev) ahPrev.addEventListener('click', () => this._changeHistoryMonth(-1, true));
     if (ahNext) ahNext.addEventListener('click', () => this._changeHistoryMonth(1, true));
+
+    // Day detail close
+    const closeDayBtn = document.getElementById('btn-close-day-detail');
+    if (closeDayBtn) closeDayBtn.addEventListener('click', () => this.closeDayDetail());
   }
 
   // ===== FIREBASE SYNC & REALTIME LISTENERS =====
@@ -1391,7 +1395,7 @@ class KalyanMitra {
     try {
       const snap = await db.ref(`users/${this.uid}/daily_logs`).once('value');
       const allLogs = snap.val() || {};
-      this._renderHistoryDays(listEl, allLogs, this._historyYear, this._historyMonth);
+      this._renderHistoryDays(listEl, allLogs, this._historyYear, this._historyMonth, false);
     } catch (e) {
       listEl.innerHTML = '<div style="text-align:center; color:red;">Failed to load history.</div>';
     }
@@ -1407,10 +1411,10 @@ class KalyanMitra {
     labelEl.textContent = `${monthNames[this._adminHistoryMonth]} ${this._adminHistoryYear}`;
 
     const allLogs = this._cachedDailyLogs || {};
-    this._renderHistoryDays(listEl, allLogs, this._adminHistoryYear, this._adminHistoryMonth);
+    this._renderHistoryDays(listEl, allLogs, this._adminHistoryYear, this._adminHistoryMonth, true);
   }
 
-  _renderHistoryDays(container, allLogs, year, month) {
+  _renderHistoryDays(container, allLogs, year, month, isAdmin) {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const today = this.getTodayKey();
     const s = this.settings || DEFAULT_SETTINGS;
@@ -1418,9 +1422,11 @@ class KalyanMitra {
 
     for (let day = daysInMonth; day >= 1; day--) {
       const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      if (dateKey > today) continue; // skip future dates
+      if (dateKey > today) continue;
 
       const log = allLogs[dateKey];
+      const clickAttr = isAdmin && log ? `data-datekey="${dateKey}" style="cursor:pointer"` : '';
+
       if (!log) {
         html += `<div class="history-day history-empty">
           <div class="history-date">${this._formatHistoryDate(dateKey)}</div>
@@ -1429,7 +1435,6 @@ class KalyanMitra {
         continue;
       }
 
-      // Count completed activities
       let done = 0, total = 0;
       const checks = [
         { enabled: s.enableNavkarsi, val: log.navkarsiDone },
@@ -1451,7 +1456,6 @@ class KalyanMitra {
       const isPerfect = log.perfectDay;
       const statusClass = isPerfect ? 'history-perfect' : (pct >= 50 ? 'history-good' : 'history-low');
 
-      // Build mini activity icons
       const icons = [];
       if (s.enableNavkarsi && log.navkarsiDone) icons.push('🌅');
       if (s.enableWakeup && log.wakeUpDone) icons.push('⏰');
@@ -1463,7 +1467,7 @@ class KalyanMitra {
       if (s.enableKandmool && log.kandmoolDone) icons.push('🌱');
       if (s.enableDailyNiyam && log.dailyNiyamDone) icons.push('✨');
 
-      html += `<div class="history-day ${statusClass}">
+      html += `<div class="history-day ${statusClass}" ${clickAttr}>
         <div class="history-date">${this._formatHistoryDate(dateKey)}${isPerfect ? ' ⭐' : ''}</div>
         <div class="history-bar-wrap">
           <div class="history-bar" style="width:${pct}%"></div>
@@ -1477,6 +1481,76 @@ class KalyanMitra {
     }
 
     container.innerHTML = html || '<div style="text-align:center; padding:20px; color:#795548;">No history for this month.</div>';
+
+    // Attach click listeners for admin day detail
+    if (isAdmin) {
+      container.querySelectorAll('.history-day[data-datekey]').forEach(card => {
+        card.addEventListener('click', () => {
+          this.showDayDetail(card.dataset.datekey);
+        });
+      });
+    }
+  }
+
+  showDayDetail(dateKey) {
+    const logs = this._cachedDailyLogs || {};
+    const log = logs[dateKey];
+    if (!log) return;
+
+    const s = this.settings || DEFAULT_SETTINGS;
+    const overlay = document.getElementById('day-detail-overlay');
+    const userEl = document.getElementById('day-detail-user');
+    const dateEl = document.getElementById('day-detail-date');
+    const summaryEl = document.getElementById('day-detail-summary');
+    const gridEl = document.getElementById('day-detail-grid');
+    if (!overlay || !userEl || !dateEl || !summaryEl || !gridEl) return;
+
+    // User name from banner
+    const bannerName = document.getElementById('admin-viewing-name');
+    userEl.textContent = bannerName ? bannerName.textContent.replace('Viewing: ', '') : 'User';
+    dateEl.textContent = this._formatHistoryDate(dateKey);
+
+    // Summary stats
+    const kp = log.kpEarned || 0;
+    const isPerfect = log.perfectDay;
+    summaryEl.innerHTML = `
+      <span class="day-detail-kp">+${kp} KP</span>
+      ${isPerfect ? '<span class="day-detail-badge">⭐ Perfect Day</span>' : ''}
+    `;
+
+    // Activity grid
+    const activities = [
+      { key: 'enableNavkarsi', icon: '🌅', name: 'Navkarsi', done: !!log.navkarsiDone },
+      { key: 'enableWakeup', icon: '⏰', name: 'Wake < 7AM', done: !!log.wakeUpDone },
+      { key: 'enableSleep', icon: '🌙', name: 'Sleep < 12AM', done: !!log.sleepDone },
+      { key: 'enablePranam', icon: '🙇', name: 'Pranam', done: !!log.pranamDone },
+      { key: 'enablePooja', icon: '🪔', name: 'Pooja', done: !!log.poojaDone, extra: log.ashtaPrakariDone ? '+Ashta' : '' },
+      { key: 'enableSamayik', icon: '🧘', name: 'Samayik', done: (log.samayikDone || 0) > 0, val: `${log.samayikDone || 0}` },
+      { key: 'enablePratikraman', icon: '🙏', name: 'Pratikraman', done: (log.pratikramanDone || 0) > 0, val: `${log.pratikramanDone || 0}` },
+      { key: 'enableBookReading', icon: '📖', name: 'Book Reading', done: (log.bookReadingMins || 0) >= 30, val: `${log.bookReadingMins || 0} min` },
+      { key: 'enableRatriBhojan', icon: '🍽️', name: 'Ratri Bhojan Tyag', done: !!log.ratriBhojanDone },
+      { key: 'enableKandmool', icon: '🌱', name: 'Kandmool Tyag', done: !!log.kandmoolDone },
+      { key: 'enableScreenTime', icon: '📱', name: 'Screen Time', done: false, val: `${log.screenTimeHours || 0}h ${log.screenTimeMins || 0}m` },
+      { key: 'enableDailyNiyam', icon: '✨', name: 'Daily Niyam', done: !!log.dailyNiyamDone },
+    ];
+
+    gridEl.innerHTML = activities
+      .filter(a => s[a.key])
+      .map(a => `
+        <div class="day-detail-item ${a.done ? 'done' : 'missed'}">
+          <span class="day-detail-icon">${a.icon}</span>
+          <span class="day-detail-name">${a.name}</span>
+          <span class="day-detail-status">${a.val ? a.val : (a.done ? '✓' : '✗')}${a.extra ? ' ' + a.extra : ''}</span>
+        </div>
+      `).join('');
+
+    overlay.classList.remove('hidden');
+    overlay.classList.add('show');
+  }
+
+  closeDayDetail() {
+    const o = document.getElementById('day-detail-overlay');
+    if (o) { o.classList.remove('show'); o.classList.add('hidden'); }
   }
 
   _formatHistoryDate(dateKey) {

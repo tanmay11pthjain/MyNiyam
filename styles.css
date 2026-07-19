@@ -2924,3 +2924,21 @@ body {
 .history-pct { font-weight: 600; color: var(--text-dark); }
 .history-kp { font-weight: 700; color: var(--primary); }
 .history-icons { font-size: 16px; letter-spacing: 4px; }
+
+/* ===== DAY DETAIL MODAL ===== */
+.day-detail-content { max-width: 400px; width: 90%; background: white; border-radius: 20px; padding: 24px; position: relative; max-height: 80vh; overflow-y: auto; }
+.btn-close-overlay { position: absolute; top: 12px; right: 16px; background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-light); padding: 4px 8px; line-height: 1; }
+.day-detail-user { font-size: 20px; font-weight: 800; color: var(--primary); margin: 0 0 4px 0; }
+.day-detail-date { font-size: 15px; font-weight: 600; color: var(--text-light); margin: 0 0 16px 0; }
+.day-detail-summary { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; }
+.day-detail-kp { background: linear-gradient(135deg, #fff3e0, #ffe0b2); padding: 6px 14px; border-radius: 10px; font-weight: 800; font-size: 16px; color: var(--primary); }
+.day-detail-badge { background: linear-gradient(135deg, #fffde0, #fff9c4); padding: 6px 14px; border-radius: 10px; font-weight: 700; font-size: 14px; color: #F9A825; }
+.day-detail-grid { display: flex; flex-direction: column; gap: 8px; }
+.day-detail-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: #fafafa; border-left: 4px solid #ddd; }
+.day-detail-item.done { background: #f1f8e9; border-left-color: #4CAF50; }
+.day-detail-item.missed { background: #fff3e0; border-left-color: #FF9800; }
+.day-detail-icon { font-size: 20px; flex-shrink: 0; }
+.day-detail-name { flex: 1; font-weight: 600; font-size: 14px; color: var(--text-dark); }
+.day-detail-status { font-weight: 700; font-size: 14px; }
+.day-detail-item.done .day-detail-status { color: #4CAF50; }
+.day-detail-item.missed .day-detail-status { color: #FF9800; }
