@@ -505,6 +505,16 @@ class KalyanMitra {
       }
     });
 
+    // Admin: listen to ALL daily_logs for history (real-time)
+    if (this.currentRole === 'admin') {
+      this.listenToRef(`${userPath}/daily_logs`, val => {
+        this._cachedDailyLogs = val || {};
+        if (!this.initializing) {
+          this.renderAdminHistory();
+        }
+      });
+    }
+
     const p4 = this.listenToRef(`${userPath}/lock_status/${todayKey}`, val => {
       this.currentDayLocked = !!val;
       if (!this.initializing) {
@@ -1387,7 +1397,7 @@ class KalyanMitra {
     }
   }
 
-  async renderAdminHistory() {
+  renderAdminHistory() {
     this._initAdminHistoryState();
     const listEl = document.getElementById('admin-history-list');
     const labelEl = document.getElementById('admin-history-month-label');
@@ -1396,15 +1406,8 @@ class KalyanMitra {
     const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     labelEl.textContent = `${monthNames[this._adminHistoryMonth]} ${this._adminHistoryYear}`;
 
-    listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#795548;">Loading...</div>';
-
-    try {
-      const snap = await db.ref(`users/${this.uid}/daily_logs`).once('value');
-      const allLogs = snap.val() || {};
-      this._renderHistoryDays(listEl, allLogs, this._adminHistoryYear, this._adminHistoryMonth);
-    } catch (e) {
-      listEl.innerHTML = '<div style="text-align:center; color:red;">Failed to load history.</div>';
-    }
+    const allLogs = this._cachedDailyLogs || {};
+    this._renderHistoryDays(listEl, allLogs, this._adminHistoryYear, this._adminHistoryMonth);
   }
 
   _renderHistoryDays(container, allLogs, year, month) {
