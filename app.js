@@ -406,6 +406,8 @@ class KalyanMitra {
     document.getElementById('btn-close-levelup').addEventListener('click', () => this.closeLevelUp());
     document.getElementById('btn-close-badge').addEventListener('click', () => this.closeBadgeUnlock());
     document.getElementById('btn-close-summary').addEventListener('click', () => this.closeEveningSummary());
+    const closeDayEl = document.getElementById('btn-close-day-detail');
+    if (closeDayEl) closeDayEl.addEventListener('click', () => this.closeDayDetail());
   }
 
   setupAdminEventListeners() {
@@ -1397,7 +1399,8 @@ class KalyanMitra {
     try {
       const snap = await db.ref(`users/${this.uid}/daily_logs`).once('value');
       const allLogs = snap.val() || {};
-      this._renderHistoryDays(listEl, allLogs, this._historyYear, this._historyMonth, false);
+      this._cachedDailyLogs = allLogs;
+      this._renderHistoryDays(listEl, allLogs, this._historyYear, this._historyMonth, true);
     } catch (e) {
       listEl.innerHTML = '<div style="text-align:center; color:red;">Failed to load history.</div>';
     }
@@ -1427,7 +1430,7 @@ class KalyanMitra {
       if (dateKey > today) continue;
 
       const log = allLogs[dateKey];
-      const clickAttr = isAdmin && log ? `data-datekey="${dateKey}" style="cursor:pointer"` : '';
+      const clickAttr = log ? `data-datekey="${dateKey}" style="cursor:pointer"` : '';
 
       if (!log) {
         html += `<div class="history-day history-empty">
@@ -1484,14 +1487,12 @@ class KalyanMitra {
 
     container.innerHTML = html || '<div style="text-align:center; padding:20px; color:#795548;">No history for this month.</div>';
 
-    // Attach click listeners for admin day detail
-    if (isAdmin) {
-      container.querySelectorAll('.history-day[data-datekey]').forEach(card => {
-        card.addEventListener('click', () => {
-          this.showDayDetail(card.dataset.datekey);
-        });
+    // Attach click listeners for day detail
+    container.querySelectorAll('.history-day[data-datekey]').forEach(card => {
+      card.addEventListener('click', () => {
+        this.showDayDetail(card.dataset.datekey);
       });
-    }
+    });
   }
 
   showDayDetail(dateKey) {
@@ -1509,7 +1510,7 @@ class KalyanMitra {
 
     // User name from banner
     const bannerName = document.getElementById('admin-viewing-name');
-    userEl.textContent = bannerName ? bannerName.textContent.replace('Viewing: ', '') : 'User';
+    userEl.textContent = (this.currentRole === 'admin' && bannerName) ? bannerName.textContent.replace('Viewing: ', '') : 'My Activity';
     dateEl.textContent = this._formatHistoryDate(dateKey);
 
     // Summary stats
