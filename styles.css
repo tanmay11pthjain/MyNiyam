@@ -2949,3 +2949,8 @@ body {
 .btn-google-signin:active { transform: scale(0.98); }
 .btn-google-signin:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 .google-icon { flex-shrink: 0; }
+
+/* ===== REGISTRATION FORM ===== */
+#register-screen { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 50%, #ffcc80 100%); overflow-y: auto; padding: 20px; }
+.register-card { background: rgba(255,255,255,0.95); backdrop-filter: blur(12px); border-radius: 24px; padding: 28px 24px; width: 100%; max-width: 400px; box-shadow: 0 16px 48px rgba(0,0,0,0.12); animation: loginCardEntry 0.5s ease; }
+.register-error { background: #ffebee; color: #c62828; padding: 10px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; margin-bottom: 12px; }

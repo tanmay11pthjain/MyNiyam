@@ -30,18 +30,27 @@ class KalyanMitra {
   // ===== INITIALIZATION =====
   async init() {
     Auth.init();
-    Auth.onAuthStateChanged(user => {
+    Auth.onAuthStateChanged(async (user) => {
       if (user) {
         this.uid = user.uid;
         this.currentRole = user.role;
-        // Save user identity to Firebase so admin can see names
-        db.ref(`users/${user.uid}/name`).set(user.name || user.uid);
-        db.ref(`users/${user.uid}/role`).set(user.role);
+        this._currentAuthUser = user;
         document.getElementById('login-screen').classList.add('hidden');
+
         if (user.role === 'admin') {
+          // Admin skips registration
+          db.ref(`users/${user.uid}/name`).set(user.name || user.uid);
+          db.ref(`users/${user.uid}/role`).set(user.role);
           this.initAdmin();
         } else {
-          this.initUser();
+          // Check if user has completed registration
+          const regSnap = await db.ref(`users/${user.uid}/registered`).once('value');
+          if (regSnap.val()) {
+            db.ref(`users/${user.uid}/role`).set(user.role);
+            this.initUser();
+          } else {
+            this.showRegistrationForm(user);
+          }
         }
       } else {
         this.showLoginScreen();
@@ -51,6 +60,7 @@ class KalyanMitra {
 
   showLoginScreen() {
     document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('register-screen').classList.add('hidden');
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('app').classList.remove('app-visible');
     document.getElementById('admin-panel').classList.add('hidden');
@@ -96,6 +106,81 @@ class KalyanMitra {
       particle.style.animationDuration = `${2 + Math.random() * 3}s`;
       particle.style.width = particle.style.height = `${3 + Math.random() * 5}px`;
       container.appendChild(particle);
+    }
+  }
+
+  // ===== REGISTRATION =====
+  showRegistrationForm(user) {
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('register-screen').classList.remove('hidden');
+    document.getElementById('app').classList.add('app-hidden');
+    document.getElementById('admin-panel').classList.add('hidden');
+
+    // Pre-fill name from Google account
+    const nameInput = document.getElementById('reg-name');
+    if (nameInput && user.name) nameInput.value = user.name;
+
+    // Wire form submit
+    const form = document.getElementById('register-form');
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      this.handleRegistration();
+    };
+  }
+
+  async handleRegistration() {
+    const name = document.getElementById('reg-name').value.trim();
+    const dob = document.getElementById('reg-dob').value;
+    const phone = document.getElementById('reg-phone').value.trim();
+    const city = document.getElementById('reg-city').value.trim();
+    const area = document.getElementById('reg-area').value.trim();
+    const errorEl = document.getElementById('register-error');
+    const btn = document.getElementById('btn-register');
+
+    if (!name || !dob || !phone || !city || !area) {
+      errorEl.textContent = 'Please fill all fields.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    if (!/^[0-9]{10}$/.test(phone)) {
+      errorEl.textContent = 'Please enter a valid 10-digit phone number.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Saving...';
+    errorEl.classList.add('hidden');
+
+    const regData = { name, dob, phone, city, area };
+    const user = this._currentAuthUser;
+
+    try {
+      // Save to Firebase
+      await db.ref(`users/${this.uid}`).update({
+        name: name,
+        role: 'user',
+        registered: true,
+        registration: regData,
+        registeredAt: new Date().toISOString()
+      });
+
+      // Send to Google Sheets
+      try {
+        await Auth.sendRegistration(this.uid, user.email, regData);
+      } catch (sheetErr) {
+        console.warn('Sheet update failed (non-blocking):', sheetErr);
+      }
+
+      // Hide registration, proceed to user app
+      document.getElementById('register-screen').classList.add('hidden');
+      this.initUser();
+    } catch (err) {
+      errorEl.textContent = 'Failed to save. Please try again.';
+      errorEl.classList.remove('hidden');
+      btn.disabled = false;
+      btn.querySelector('span').textContent = '🙏 Join Kalyan Mitra';
     }
   }
 

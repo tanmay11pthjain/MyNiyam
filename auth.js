@@ -108,11 +108,32 @@ const Auth = (() => {
     return currentUser;
   }
 
+  async function sendRegistration(uid, email, regData) {
+    try {
+      await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "register",
+          uid,
+          email,
+          name: regData.name,
+          dob: regData.dob,
+          phone: regData.phone,
+          city: regData.city,
+          area: regData.area
+        })
+      });
+    } catch (e) {
+      console.error("Registration sheet update failed:", e);
+    }
+  }
+
   return {
     init,
     signInWithGoogle,
     signOut,
     onAuthStateChanged,
-    getCurrentUser
+    getCurrentUser,
+    sendRegistration
   };
 })();
