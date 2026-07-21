@@ -36,16 +36,22 @@ const Auth = (() => {
     try {
       const response = await fetch(APPS_SCRIPT_URL, {
         method: "POST",
-        body: JSON.stringify({ action: "google_login", uid, email, name })
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "google_login", uid, email, name }),
+        redirect: "follow"
       });
-      const result = await response.json();
-      if (result.success) {
-        return result.role || "user";
+      const text = await response.text();
+      console.log("Sheets login response:", text);
+      try {
+        const result = JSON.parse(text);
+        if (result.success) return result.role || "user";
+      } catch (parseErr) {
+        console.error("Failed to parse Sheets response:", text);
       }
     } catch (e) {
       console.error("Sheets role fetch failed:", e);
     }
-    return "user"; // default to user if sheets lookup fails
+    return "user";
   }
 
   // ===== INIT — Start Firebase auth listener =====
@@ -110,8 +116,9 @@ const Auth = (() => {
 
   async function sendRegistration(uid, email, regData) {
     try {
-      await fetch(APPS_SCRIPT_URL, {
+      const response = await fetch(APPS_SCRIPT_URL, {
         method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({
           action: "register",
           uid,
@@ -121,8 +128,11 @@ const Auth = (() => {
           phone: regData.phone,
           city: regData.city,
           area: regData.area
-        })
+        }),
+        redirect: "follow"
       });
+      const text = await response.text();
+      console.log("Sheets registration response:", text);
     } catch (e) {
       console.error("Registration sheet update failed:", e);
     }
