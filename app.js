@@ -29,6 +29,7 @@ class KalyanMitra {
 
   // ===== INITIALIZATION =====
   async init() {
+    Auth.init();
     Auth.onAuthStateChanged(user => {
       if (user) {
         this.uid = user.uid;
@@ -57,17 +58,35 @@ class KalyanMitra {
     // Create particles
     this.createLoginParticles();
 
-    // Setup login form
-    const form = document.getElementById('login-form');
-    form.onsubmit = (e) => {
-      e.preventDefault();
-      this.handleLogin();
-    };
+    // Setup Google sign-in button
+    const btn = document.getElementById('btn-google-signin');
+    if (btn) {
+      btn.onclick = async () => {
+        btn.disabled = true;
+        btn.querySelector('span').textContent = 'Signing in...';
+        const errorEl = document.getElementById('login-error');
+        errorEl.classList.add('hidden');
+
+        const result = await Auth.signInWithGoogle();
+
+        if (!result.success) {
+          errorEl.textContent = result.error;
+          errorEl.classList.remove('hidden');
+          errorEl.classList.add('show');
+          const card = document.querySelector('.login-card');
+          card.classList.add('shake');
+          setTimeout(() => card.classList.remove('shake'), 500);
+        }
+
+        btn.disabled = false;
+        btn.querySelector('span').textContent = 'Sign in with Google';
+      };
+    }
   }
 
   createLoginParticles() {
     const container = document.getElementById('login-particles');
-    if (container.children.length > 0) return; // Already created
+    if (!container || container.children.length > 0) return;
     for (let i = 0; i < 15; i++) {
       const particle = document.createElement('div');
       particle.className = 'particle';
@@ -79,37 +98,6 @@ class KalyanMitra {
       container.appendChild(particle);
     }
   }
-
-  async handleLogin() {
-    const username = document.getElementById('login-username').value.trim().toLowerCase();
-    const password = document.getElementById('login-password').value.trim();
-    const errorEl = document.getElementById('login-error');
-    const btnEl = document.getElementById('btn-login');
-    const loadingEl = document.getElementById('btn-login-loading');
-
-    // Disable button during login
-    btnEl.disabled = true;
-    loadingEl.classList.remove('hidden');
-    errorEl.classList.add('hidden');
-
-    const result = await Auth.signIn(username, password);
-
-    btnEl.disabled = false;
-    loadingEl.classList.add('hidden');
-
-    if (!result.success) {
-      errorEl.textContent = result.error;
-      errorEl.classList.remove('hidden');
-      errorEl.classList.add('show');
-
-      // Shake animation on error
-      const card = document.querySelector('.login-card');
-      card.classList.add('shake');
-      setTimeout(() => card.classList.remove('shake'), 500);
-    }
-  }
-
-
 
   // ===== USER INITIALIZATION =====
   async initUser() {
@@ -1783,10 +1771,9 @@ class KalyanMitra {
     document.getElementById('admin-panel').classList.add('hidden');
     document.getElementById('login-screen').classList.remove('hidden');
 
-    // Clear form
-    document.getElementById('login-username').value = '';
-    document.getElementById('login-password').value = '';
-    document.getElementById('login-error').classList.add('hidden');
+    // Clear error
+    const loginErr = document.getElementById('login-error');
+    if (loginErr) loginErr.classList.add('hidden');
   }
 
   resetProgress() {

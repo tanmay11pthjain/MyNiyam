@@ -2942,3 +2942,10 @@ body {
 .day-detail-status { font-weight: 700; font-size: 14px; }
 .day-detail-item.done .day-detail-status { color: #4CAF50; }
 .day-detail-item.missed .day-detail-status { color: #FF9800; }
+
+/* ===== GOOGLE SIGN-IN BUTTON ===== */
+.btn-google-signin { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 14px 20px; border: 2px solid #e0e0e0; border-radius: 14px; background: white; color: #3c4043; font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin: 16px 0; }
+.btn-google-signin:hover { border-color: #4285F4; box-shadow: 0 4px 16px rgba(66,133,244,0.2); transform: translateY(-1px); }
+.btn-google-signin:active { transform: scale(0.98); }
+.btn-google-signin:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+.google-icon { flex-shrink: 0; }

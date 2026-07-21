@@ -1,68 +1,93 @@
-// ===== MyNiyam V4 — Google Sheets Auth =====
-// Uses a deployed Google Apps Script Web App for authentication
+// ===== MyNiyam V4 — Firebase Google Auth + Sheets Role Lookup =====
 
 const Auth = (() => {
-  // Replace this with the URL generated when deploying the Apps Script
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbysnFVeHYnOj9yqZzXCtBV2KQfStNV8GMe-ABHPxM4a7GA16yWziTkqM3ouyHb2wEMp/exec";
 
   let currentUser = null;
   let authListeners = [];
+  let _unsubFirebase = null;
 
-  // Load session from local storage on boot
-  try {
-    const saved = localStorage.getItem('myniyam_session');
-    if (saved) {
-      currentUser = JSON.parse(saved);
-    }
-  } catch (e) {
-    console.error("Failed to load session:", e);
-  }
-
-  // ===== SIGN IN =====
-  async function signIn(userid, password) {
-    if (APPS_SCRIPT_URL === "YOUR_APPS_SCRIPT_WEB_APP_URL") {
-      // Mock login if URL not set for testing
-      console.warn("Using mock login since Apps Script URL is not set.");
-      if (userid === "admin") {
-        currentUser = { uid: "admin_123", role: "admin", name: "Admin" };
-      } else {
-        currentUser = { uid: userid, role: "user", name: userid };
-      }
-      localStorage.setItem('myniyam_session', JSON.stringify(currentUser));
-      _notifyListeners();
-      return { success: true, user: currentUser };
-    }
-
+  // ===== GOOGLE SIGN IN =====
+  async function signInWithGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
     try {
-      const response = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        body: JSON.stringify({ userid, password })
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        currentUser = {
-          uid: result.uid,
-          role: result.role,
-          name: result.name
-        };
-        localStorage.setItem('myniyam_session', JSON.stringify(currentUser));
-        _notifyListeners();
-        return { success: true, user: currentUser };
-      } else {
-        return { success: false, error: result.error || "Login failed" };
-      }
+      const result = await firebase.auth().signInWithPopup(provider);
+      // The auth state listener will handle the rest
+      return { success: true };
     } catch (error) {
-      return { success: false, error: "Network error: " + error.message };
+      return { success: false, error: error.message };
     }
   }
 
   // ===== SIGN OUT =====
-  function signOut() {
+  async function signOut() {
+    try {
+      await firebase.auth().signOut();
+    } catch (e) {
+      console.error("Sign out error:", e);
+    }
     currentUser = null;
     localStorage.removeItem('myniyam_session');
     _notifyListeners();
+  }
+
+  // ===== FETCH ROLE FROM SHEETS =====
+  async function _fetchRoleFromSheets(uid, email, name) {
+    try {
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "google_login", uid, email, name })
+      });
+      const result = await response.json();
+      if (result.success) {
+        return result.role || "user";
+      }
+    } catch (e) {
+      console.error("Sheets role fetch failed:", e);
+    }
+    return "user"; // default to user if sheets lookup fails
+  }
+
+  // ===== INIT — Start Firebase auth listener =====
+  function init() {
+    // Check for cached session first for instant UI
+    try {
+      const saved = localStorage.getItem('myniyam_session');
+      if (saved) {
+        currentUser = JSON.parse(saved);
+        _notifyListeners();
+      }
+    } catch (e) { /* ignore */ }
+
+    // Firebase auth state listener
+    _unsubFirebase = firebase.auth().onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        // User is signed in — fetch role from Sheets
+        const role = await _fetchRoleFromSheets(
+          firebaseUser.uid,
+          firebaseUser.email,
+          firebaseUser.displayName || firebaseUser.email.split('@')[0]
+        );
+
+        currentUser = {
+          uid: firebaseUser.uid,
+          role: role,
+          name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
+          email: firebaseUser.email,
+          photoURL: firebaseUser.photoURL
+        };
+
+        localStorage.setItem('myniyam_session', JSON.stringify(currentUser));
+        _notifyListeners();
+      } else {
+        // User signed out
+        if (currentUser) {
+          currentUser = null;
+          localStorage.removeItem('myniyam_session');
+          _notifyListeners();
+        }
+      }
+    });
   }
 
   // ===== AUTH STATE LISTENER =====
@@ -70,8 +95,6 @@ const Auth = (() => {
     authListeners.push(callback);
     // Immediately call with current state
     callback(currentUser);
-
-    // Return unsubscribe function
     return () => {
       authListeners = authListeners.filter(cb => cb !== callback);
     };
@@ -86,7 +109,8 @@ const Auth = (() => {
   }
 
   return {
-    signIn,
+    init,
+    signInWithGoogle,
     signOut,
     onAuthStateChanged,
     getCurrentUser
