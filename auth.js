@@ -31,7 +31,6 @@ const Auth = (() => {
     _notifyListeners();
   }
 
-  // ===== FETCH ROLE FROM SHEETS =====
   async function _fetchRoleFromSheets(uid, email, name) {
     try {
       const response = await fetch(APPS_SCRIPT_URL, {
@@ -44,14 +43,16 @@ const Auth = (() => {
       console.log("Sheets login response:", text);
       try {
         const result = JSON.parse(text);
-        if (result.success) return result.role || "user";
+        if (result.success) {
+          return { role: result.role || "user", sanghCodes: result.sanghCodes || [] };
+        }
       } catch (parseErr) {
         console.error("Failed to parse Sheets response:", text);
       }
     } catch (e) {
       console.error("Sheets role fetch failed:", e);
     }
-    return "user";
+    return { role: "user", sanghCodes: [] };
   }
 
   // ===== INIT — Start Firebase auth listener =====
@@ -69,7 +70,7 @@ const Auth = (() => {
     _unsubFirebase = firebase.auth().onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
         // User is signed in — fetch role from Sheets
-        const role = await _fetchRoleFromSheets(
+        const { role, sanghCodes } = await _fetchRoleFromSheets(
           firebaseUser.uid,
           firebaseUser.email,
           firebaseUser.displayName || firebaseUser.email.split('@')[0]
@@ -80,7 +81,8 @@ const Auth = (() => {
           role: role,
           name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
           email: firebaseUser.email,
-          photoURL: firebaseUser.photoURL
+          photoURL: firebaseUser.photoURL,
+          sanghCodes: sanghCodes
         };
 
         localStorage.setItem('myniyam_session', JSON.stringify(currentUser));

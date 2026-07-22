@@ -266,6 +266,11 @@ class KalyanMitra {
         registeredAt: new Date().toISOString()
       });
 
+      // Link user to their sangh for admin discovery
+      if (sanghCode) {
+        await db.ref(`sangh_users/${sanghCode}/${this.uid}`).set(true);
+      }
+
       // Send to Google Sheets
       try {
         await Auth.sendRegistration(this.uid, user.email, regData);
@@ -327,6 +332,10 @@ class KalyanMitra {
     this.initializing = false;
     this.settings = { ...DEFAULT_SETTINGS };
 
+    // Store admin's sangh codes from auth
+    this._adminSanghCodes = this._currentAuthUser.sanghCodes || [];
+    this._adminUserUids = []; // UIDs this admin manages
+
     document.getElementById('admin-panel').classList.remove('hidden');
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('app').classList.remove('app-visible');
@@ -341,8 +350,28 @@ class KalyanMitra {
       this.loadAdminSettingsUI();
     });
 
+    // Fetch user UIDs from all assigned sanghs
+    await this._fetchAdminUserUids();
+
     // Fetch and render Leaderboard
     await this.renderAdminLeaderboard();
+  }
+
+  async _fetchAdminUserUids() {
+    const codes = this._adminSanghCodes;
+    if (!codes || codes.length === 0) {
+      this._adminUserUids = [];
+      return;
+    }
+
+    const uidSet = new Set();
+    for (const code of codes) {
+      const snap = await db.ref(`sangh_users/${code}`).once('value');
+      const users = snap.val() || {};
+      Object.keys(users).forEach(uid => uidSet.add(uid));
+    }
+    this._adminUserUids = Array.from(uidSet);
+    console.log('Admin sangh codes:', codes, '| User UIDs:', this._adminUserUids);
   }
 
   startLeaderboardListener() {
@@ -382,7 +411,9 @@ class KalyanMitra {
     };
 
     Object.entries(allUsers).forEach(([uid, data]) => {
-      if (data.role === 'admin') return; // skip admin accounts
+      if (data.role === 'admin') return;
+      // Only show users in this admin's sanghs
+      if (this._adminUserUids.length > 0 && !this._adminUserUids.includes(uid)) return;
       totalUsers++;
       totalKP += data.profile?.totalKP || 0;
 
@@ -424,6 +455,8 @@ class KalyanMitra {
     const users = [];
     Object.entries(allUsers).forEach(([uid, data]) => {
       if (data.role === 'admin') return;
+      // Only show users in this admin's sanghs
+      if (this._adminUserUids.length > 0 && !this._adminUserUids.includes(uid)) return;
       if (!data.role || data.role === 'user' || data.profile) {
         users.push({
           uid,
