@@ -120,17 +120,22 @@ class KalyanMitra {
     const nameInput = document.getElementById('reg-name');
     if (nameInput && user.name) nameInput.value = user.name;
 
-    // Fetch sanghs list
-    this._sanghsList = await Auth.fetchSanghs();
-    this._selectedSangh = null;
-    this._setupSanghAutocomplete();
-
-    // Wire form submit
+    // Wire form submit FIRST (before any async calls)
     const form = document.getElementById('register-form');
     form.onsubmit = (e) => {
       e.preventDefault();
       this.handleRegistration();
     };
+
+    // Fetch sanghs list (non-blocking for button)
+    this._sanghsList = [];
+    this._selectedSangh = null;
+    try {
+      this._sanghsList = await Auth.fetchSanghs();
+    } catch (e) {
+      console.warn('Failed to fetch sanghs:', e);
+    }
+    this._setupSanghAutocomplete();
   }
 
   _setupSanghAutocomplete() {
