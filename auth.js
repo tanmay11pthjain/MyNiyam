@@ -114,6 +114,26 @@ const Auth = (() => {
     return currentUser;
   }
 
+  async function fetchSanghs() {
+    try {
+      const response = await fetch(APPS_SCRIPT_URL + "?action=get_sanghs", {
+        method: "GET",
+        redirect: "follow"
+      });
+      const text = await response.text();
+      console.log("Sanghs response:", text);
+      try {
+        const result = JSON.parse(text);
+        if (result.success) return result.sanghs || [];
+      } catch (parseErr) {
+        console.error("Failed to parse Sanghs response:", text);
+      }
+    } catch (e) {
+      console.error("Fetch sanghs failed:", e);
+    }
+    return [];
+  }
+
   async function sendRegistration(uid, email, regData) {
     try {
       const response = await fetch(APPS_SCRIPT_URL, {
@@ -127,7 +147,8 @@ const Auth = (() => {
           dob: regData.dob,
           phone: regData.phone,
           city: regData.city,
-          area: regData.area
+          area: regData.area,
+          sanghCode: regData.sanghCode || ""
         }),
         redirect: "follow"
       });
@@ -144,6 +165,7 @@ const Auth = (() => {
     signOut,
     onAuthStateChanged,
     getCurrentUser,
-    sendRegistration
+    sendRegistration,
+    fetchSanghs
   };
 })();

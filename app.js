@@ -110,7 +110,7 @@ class KalyanMitra {
   }
 
   // ===== REGISTRATION =====
-  showRegistrationForm(user) {
+  async showRegistrationForm(user) {
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('register-screen').classList.remove('hidden');
     document.getElementById('app').classList.add('app-hidden');
@@ -120,6 +120,11 @@ class KalyanMitra {
     const nameInput = document.getElementById('reg-name');
     if (nameInput && user.name) nameInput.value = user.name;
 
+    // Fetch sanghs list
+    this._sanghsList = await Auth.fetchSanghs();
+    this._selectedSangh = null;
+    this._setupSanghAutocomplete();
+
     // Wire form submit
     const form = document.getElementById('register-form');
     form.onsubmit = (e) => {
@@ -128,12 +133,101 @@ class KalyanMitra {
     };
   }
 
+  _setupSanghAutocomplete() {
+    const input = document.getElementById('reg-sangh');
+    const dropdown = document.getElementById('sangh-dropdown');
+    const selectedDiv = document.getElementById('sangh-selected');
+    const hiddenInput = document.getElementById('reg-sangh-code');
+    const sanghs = this._sanghsList || [];
+
+    const showDropdown = (items) => {
+      if (items.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+      }
+      dropdown.innerHTML = items.map(s =>
+        `<div class="sangh-option" data-code="${s.code}">
+          <span class="sangh-option-code">${s.code}</span>
+          <span class="sangh-option-name">${s.name}</span>
+          <span class="sangh-option-city">${s.city}</span>
+        </div>`
+      ).join('');
+      dropdown.classList.remove('hidden');
+    };
+
+    const selectSangh = (sangh) => {
+      this._selectedSangh = sangh;
+      hiddenInput.value = sangh.code;
+      input.value = '';
+      input.style.display = 'none';
+      dropdown.classList.add('hidden');
+      selectedDiv.innerHTML = `
+        <span class="sangh-chip">
+          <strong>${sangh.code}</strong> — ${sangh.name}, ${sangh.city}
+          <button type="button" class="sangh-chip-remove" title="Remove">✕</button>
+        </span>`;
+      selectedDiv.classList.remove('hidden');
+
+      selectedDiv.querySelector('.sangh-chip-remove').onclick = () => {
+        this._selectedSangh = null;
+        hiddenInput.value = '';
+        selectedDiv.classList.add('hidden');
+        selectedDiv.innerHTML = '';
+        input.style.display = '';
+        input.focus();
+      };
+    };
+
+    input.oninput = () => {
+      const q = input.value.trim().toLowerCase();
+      if (q.length === 0) {
+        showDropdown(sanghs.slice(0, 10));
+        return;
+      }
+      const filtered = sanghs.filter(s =>
+        s.code.toLowerCase().includes(q) ||
+        s.name.toLowerCase().includes(q) ||
+        s.city.toLowerCase().includes(q)
+      );
+      showDropdown(filtered.slice(0, 10));
+    };
+
+    input.onfocus = () => {
+      if (!this._selectedSangh) {
+        const q = input.value.trim().toLowerCase();
+        const items = q.length === 0 ? sanghs.slice(0, 10) :
+          sanghs.filter(s =>
+            s.code.toLowerCase().includes(q) ||
+            s.name.toLowerCase().includes(q) ||
+            s.city.toLowerCase().includes(q)
+          ).slice(0, 10);
+        showDropdown(items);
+      }
+    };
+
+    dropdown.onclick = (e) => {
+      const option = e.target.closest('.sangh-option');
+      if (!option) return;
+      const code = option.dataset.code;
+      const sangh = sanghs.find(s => s.code === code);
+      if (sangh) selectSangh(sangh);
+    };
+
+    // Close dropdown on outside click
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.sangh-group')) {
+        dropdown.classList.add('hidden');
+      }
+    });
+  }
+
   async handleRegistration() {
     const name = document.getElementById('reg-name').value.trim();
     const dob = document.getElementById('reg-dob').value;
     const phone = document.getElementById('reg-phone').value.trim();
     const city = document.getElementById('reg-city').value.trim();
     const area = document.getElementById('reg-area').value.trim();
+    const sanghCode = document.getElementById('reg-sangh-code').value.trim();
     const errorEl = document.getElementById('register-error');
     const btn = document.getElementById('btn-register');
 
@@ -149,11 +243,17 @@ class KalyanMitra {
       return;
     }
 
+    if (!sanghCode || !this._selectedSangh) {
+      errorEl.textContent = 'Please select a Sangh from the dropdown.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
     btn.disabled = true;
     btn.querySelector('span').textContent = 'Saving...';
     errorEl.classList.add('hidden');
 
-    const regData = { name, dob, phone, city, area };
+    const regData = { name, dob, phone, city, area, sanghCode };
     const user = this._currentAuthUser;
 
     try {
