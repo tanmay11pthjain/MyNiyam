@@ -120,10 +120,9 @@ class KalyanMitra {
     const nameInput = document.getElementById('reg-name');
     if (nameInput && user.name) nameInput.value = user.name;
 
-    // Wire form submit FIRST (before any async calls)
-    const form = document.getElementById('register-form');
-    form.onsubmit = (e) => {
-      e.preventDefault();
+    // Wire button click directly (bypass form submit)
+    const btn = document.getElementById('btn-register');
+    btn.onclick = () => {
       this.handleRegistration();
     };
 
