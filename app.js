@@ -572,16 +572,55 @@ class KalyanMitra {
     bindSimple('kandmool', 'kandmoolDone', POINTS.kandmool);
     bindSimple('niyam', 'dailyNiyamDone', POINTS.dailyNiyam);
 
-    // Custom toggle for Pratikraman sub-buttons
-    const bindToggle = (id, prop, points) => {
-      const btn = document.getElementById(`btn-${id}`);
-      if (btn) btn.addEventListener('click', () => {
-        const isDone = !!this.dailyLog[prop];
-        this.toggleSimpleActivity('pratikraman', prop, !isDone, points); // pass pratikraman as elId so particles burst on the main card
+    // Pratikraman sub-buttons — fully self-contained handlers
+    const btnDevasiya = document.getElementById('btn-devasiya');
+    const btnRaysiya = document.getElementById('btn-raysiya');
+
+    if (btnDevasiya) {
+      btnDevasiya.addEventListener('click', () => {
+        if (this.isDayLocked()) return;
+        const wasDone = !!this.dailyLog.devasiyaDone;
+        this.dailyLog.devasiyaDone = !wasDone;
+        const pts = this.applyStreakMultiplier(POINTS.devasiya);
+        if (!wasDone) {
+          this.addKarmaPoints(pts, 'Devasiya');
+          this.showCompletionBurst(document.getElementById('pratikraman-card'));
+          this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
+          this.profile.totalDevasiya = (this.profile.totalDevasiya || 0) + 1;
+        } else {
+          this.deductKarmaPoints(pts);
+          this.profile.totalDevasiya = Math.max(0, (this.profile.totalDevasiya || 0) - 1);
+          if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
+            this.dailyLog.perfectDay = false;
+            this.deductKarmaPoints(POINTS.perfectDay);
+          }
+        }
+        this.afterActivity();
       });
-    };
-    bindToggle('devasiya', 'devasiyaDone', POINTS.devasiya);
-    bindToggle('raysiya', 'raysiyaDone', POINTS.raysiya);
+    }
+
+    if (btnRaysiya) {
+      btnRaysiya.addEventListener('click', () => {
+        if (this.isDayLocked()) return;
+        const wasDone = !!this.dailyLog.raysiyaDone;
+        this.dailyLog.raysiyaDone = !wasDone;
+        const pts = this.applyStreakMultiplier(POINTS.raysiya);
+        if (!wasDone) {
+          this.addKarmaPoints(pts, 'Raysiya');
+          this.showCompletionBurst(document.getElementById('pratikraman-card'));
+          this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
+          this.profile.totalRaysiya = (this.profile.totalRaysiya || 0) + 1;
+        } else {
+          this.deductKarmaPoints(pts);
+          this.profile.totalRaysiya = Math.max(0, (this.profile.totalRaysiya || 0) - 1);
+          if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
+            this.dailyLog.perfectDay = false;
+            this.deductKarmaPoints(POINTS.perfectDay);
+          }
+        }
+        this.afterActivity();
+      });
+    }
 
     const btnPooja = document.getElementById('btn-pooja');
     const btnPoojaUndo = document.getElementById('btn-pooja-undo');
@@ -1221,13 +1260,9 @@ class KalyanMitra {
       // Track lifetime stats
       this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
       if (prop === 'dailyNiyamDone') this.profile.totalNiyam = (this.profile.totalNiyam || 0) + 1;
-      if (prop === 'devasiyaDone') this.profile.totalDevasiya = (this.profile.totalDevasiya || 0) + 1;
-      if (prop === 'raysiyaDone') this.profile.totalRaysiya = (this.profile.totalRaysiya || 0) + 1;
     } else {
       this.deductKarmaPoints(actualPoints);
       if (prop === 'dailyNiyamDone') this.profile.totalNiyam = Math.max(0, (this.profile.totalNiyam || 0) - 1);
-      if (prop === 'devasiyaDone') this.profile.totalDevasiya = Math.max(0, (this.profile.totalDevasiya || 0) - 1);
-      if (prop === 'raysiyaDone') this.profile.totalRaysiya = Math.max(0, (this.profile.totalRaysiya || 0) - 1);
       if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
         this.dailyLog.perfectDay = false;
         this.deductKarmaPoints(POINTS.perfectDay);
