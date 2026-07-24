@@ -267,19 +267,33 @@
             </div>
           </div>
 
-          <div class="activity-compact" id="pratikraman-card">
-            <div class="lock-indicator hidden" id="pratikraman-lock">🔒</div>
+          <div class="activity-compact" id="devasiya-card">
+            <div class="lock-indicator hidden" id="devasiya-lock">🔒</div>
             <div class="compact-left">
-              <span class="card-icon">🙏</span>
+              <span class="card-icon">🌅</span>
               <div class="compact-info">
-                <span class="card-title">Pratikraman</span>
-                <span class="card-kp">+30/ea</span>
+                <span class="card-title">Devasiya</span>
+                <span class="card-kp">+30 KP</span>
               </div>
             </div>
-            <div class="compact-actions counter-actions">
-              <button class="btn-counter-small btn-minus" id="btn-pratikraman-minus">−</button>
-              <span class="counter-val" id="pratikraman-count">0</span>
-              <button class="btn-counter-small btn-plus" id="btn-pratikraman-plus">+</button>
+            <div class="compact-actions">
+              <button class="btn-done" id="btn-devasiya">✓</button>
+              <button class="btn-undo hidden" id="btn-devasiya-undo">↩</button>
+            </div>
+          </div>
+
+          <div class="activity-compact" id="raysiya-card">
+            <div class="lock-indicator hidden" id="raysiya-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon">🌙</span>
+              <div class="compact-info">
+                <span class="card-title">Raysiya</span>
+                <span class="card-kp">+30 KP</span>
+              </div>
+            </div>
+            <div class="compact-actions">
+              <button class="btn-done" id="btn-raysiya">✓</button>
+              <button class="btn-undo hidden" id="btn-raysiya-undo">↩</button>
             </div>
           </div>
 
@@ -398,7 +412,8 @@
           <div class="stat-item"><span class="stat-value" id="stat-longest-streak">0</span><span class="stat-label">Best Streak</span></div>
           <div class="stat-item"><span class="stat-value" id="stat-total-samayik">0</span><span class="stat-label">Samayiks</span></div>
           <div class="stat-item"><span class="stat-value" id="stat-total-swadhyay">0</span><span class="stat-label">Pages Read</span></div>
-          <div class="stat-item"><span class="stat-value" id="stat-total-pratikraman">0</span><span class="stat-label">Pratikramans</span></div>
+          <div class="stat-item"><span class="stat-value" id="stat-total-devasiya">0</span><span class="stat-label">Devasiya</span></div>
+          <div class="stat-item"><span class="stat-value" id="stat-total-raysiya">0</span><span class="stat-label">Raysiya</span></div>
           <div class="stat-item"><span class="stat-value" id="stat-perfect-days">0</span><span class="stat-label">Perfect Days</span></div>
         </div>
         <h2 class="section-heading">🏆 Trophy Shelf</h2>
@@ -496,8 +511,12 @@
             <input type="checkbox" id="admin-toggle-samayik">
           </div>
           <div class="setting-item">
-            <label for="admin-toggle-pratikraman">Pratikraman</label>
-            <input type="checkbox" id="admin-toggle-pratikraman">
+            <label for="admin-toggle-devasiya">Devasiya Pratikraman</label>
+            <input type="checkbox" id="admin-toggle-devasiya">
+          </div>
+          <div class="setting-item">
+            <label for="admin-toggle-raysiya">Raysiya Pratikraman</label>
+            <input type="checkbox" id="admin-toggle-raysiya">
           </div>
           <div class="setting-item">
             <label for="admin-toggle-book">Book Reading</label>
@@ -597,7 +616,8 @@
             <div class="stat-item"><span class="stat-value" id="admin-stat-streak">0</span><span class="stat-label">Best Streak</span></div>
             <div class="stat-item"><span class="stat-value" id="admin-stat-samayik">0</span><span class="stat-label">Samayiks</span></div>
             <div class="stat-item"><span class="stat-value" id="admin-stat-swadhyay">0</span><span class="stat-label">Pages</span></div>
-            <div class="stat-item"><span class="stat-value" id="admin-stat-pratikraman">0</span><span class="stat-label">Pratikramans</span></div>
+            <div class="stat-item"><span class="stat-value" id="admin-stat-devasiya">0</span><span class="stat-label">Devasiya</span></div>
+            <div class="stat-item"><span class="stat-value" id="admin-stat-raysiya">0</span><span class="stat-label">Raysiya</span></div>
             <div class="stat-item"><span class="stat-value" id="admin-stat-perfect">0</span><span class="stat-label">Perfect Days</span></div>
           </div>
 
@@ -726,8 +746,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=7"></script>
-  <script src="auth.js?v=7"></script>
-  <script src="app.js?v=7"></script>
+  <script src="data.js?v=8"></script>
+  <script src="auth.js?v=8"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

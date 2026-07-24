@@ -164,7 +164,8 @@ const DEFAULT_SETTINGS = {
   enableSamayik: true,
   enableNavkarsi: true,
   enablePranam: true,
-  enablePratikraman: true,
+  enableDevasiya: true,
+  enableRaysiya: true,
   enableBookReading: true,
   enableRatriBhojan: true,
   enableKandmool: true,
@@ -173,8 +174,7 @@ const DEFAULT_SETTINGS = {
   enableScreenTime: true,
   enableDailyNiyam: true,
   currentDailyNiyamId: 0, // Index of PACHCHAKHANS array
-  samayikTarget: 1,        // Maintain for counter max if needed
-  pratikramanTarget: 2,    // Max 2
+  samayikTarget: 1,
   locationLat: 12.9716,
   locationLng: 77.5946,
   locationName: 'Bangalore',
@@ -211,7 +211,8 @@ const DEFAULT_DAILY_LOG = {
   samayikDone: 0,
   navkarsiDone: false,
   pranamDone: false,
-  pratikramanDone: 0,
+  devasiyaDone: false,
+  raysiyaDone: false,
   bookReadingMins: 0,
   ratriBhojanDone: false,
   kandmoolDone: false,
@@ -232,7 +233,8 @@ const POINTS = {
   samayik: 20, // per samayik
   navkarsi: 10,
   pranam: 20,
-  pratikraman: 30, // per pratikraman
+  devasiya: 30,
+  raysiya: 30,
   bookReading: 20, // per 30 mins
   ratriBhojan: 20,
   kandmool: 20,
