@@ -807,7 +807,7 @@ class KalyanMitra {
     const banner = document.getElementById('lock-banner');
     const lockIds = [
       'navkarsi', 'wakeup', 'sleep', 'pranam',
-      'pooja', 'samayik', 'devasiya', 'raysiya', 'book',
+      'pooja', 'samayik', 'pratikraman', 'book',
       'ratribhojan', 'kandmool', 'screentime', 'niyam'
     ];
 
@@ -1166,8 +1166,7 @@ class KalyanMitra {
     if (s.enablePranam) total++;
     if (s.enablePooja) total++;
     if (s.enableSamayik) total++;
-    if (s.enableDevasiya) total++;
-    if (s.enableRaysiya) total++;
+    if (s.enablePratikraman) total += 2;
     if (s.enableBookReading) total++;
     if (s.enableRatriBhojan) total++;
     if (s.enableKandmool) total++;
@@ -1222,9 +1221,13 @@ class KalyanMitra {
       // Track lifetime stats
       this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
       if (prop === 'dailyNiyamDone') this.profile.totalNiyam = (this.profile.totalNiyam || 0) + 1;
+      if (prop === 'devasiyaDone') this.profile.totalDevasiya = (this.profile.totalDevasiya || 0) + 1;
+      if (prop === 'raysiyaDone') this.profile.totalRaysiya = (this.profile.totalRaysiya || 0) + 1;
     } else {
       this.deductKarmaPoints(actualPoints);
       if (prop === 'dailyNiyamDone') this.profile.totalNiyam = Math.max(0, (this.profile.totalNiyam || 0) - 1);
+      if (prop === 'devasiyaDone') this.profile.totalDevasiya = Math.max(0, (this.profile.totalDevasiya || 0) - 1);
+      if (prop === 'raysiyaDone') this.profile.totalRaysiya = Math.max(0, (this.profile.totalRaysiya || 0) - 1);
       if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
         this.dailyLog.perfectDay = false;
         this.deductKarmaPoints(POINTS.perfectDay);
@@ -1287,15 +1290,11 @@ class KalyanMitra {
       // Track lifetime stats for counters
       this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
       if (prop === 'samayikDone') this.profile.totalSamayik = (this.profile.totalSamayik || 0) + 1;
-      if (prop === 'devasiyaDone') this.profile.totalDevasiya = (this.profile.totalDevasiya || 0) + 1;
-      if (prop === 'raysiyaDone') this.profile.totalRaysiya = (this.profile.totalRaysiya || 0) + 1;
       if (prop === 'bookReadingMins') this.profile.totalSwadhyay = (this.profile.totalSwadhyay || 0) + 1;
     } else {
       this.deductKarmaPoints(points);
       // Reverse lifetime stats
       if (prop === 'samayikDone') this.profile.totalSamayik = Math.max(0, (this.profile.totalSamayik || 0) - 1);
-      if (prop === 'devasiyaDone') this.profile.totalDevasiya = Math.max(0, (this.profile.totalDevasiya || 0) - 1);
-      if (prop === 'raysiyaDone') this.profile.totalRaysiya = Math.max(0, (this.profile.totalRaysiya || 0) - 1);
       if (prop === 'bookReadingMins') this.profile.totalSwadhyay = Math.max(0, (this.profile.totalSwadhyay || 0) - 1);
       if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
         this.dailyLog.perfectDay = false;
@@ -1418,8 +1417,8 @@ class KalyanMitra {
     if (s.enablePranam && !d.pranamDone) return false;
     if (s.enablePooja && !d.poojaDone) return false;
     if (s.enableSamayik && (d.samayikDone || 0) < parseInt(s.samayikTarget)) return false;
-    if (s.enableDevasiya && !d.devasiyaDone) return false;
-    if (s.enableRaysiya && !d.raysiyaDone) return false;
+    if (s.enablePratikraman && !d.devasiyaDone) return false;
+    if (s.enablePratikraman && !d.raysiyaDone) return false;
     if (s.enableBookReading && (d.bookReadingMins || 0) < 30) return false;
     if (s.enableRatriBhojan && !d.ratriBhojanDone) return false;
     if (s.enableKandmool && !d.kandmoolDone) return false;
@@ -1436,8 +1435,8 @@ class KalyanMitra {
     if (s.enablePranam && d.pranamDone) c++;
     if (s.enablePooja && d.poojaDone) c++;
     if (s.enableSamayik && (d.samayikDone || 0) >= parseInt(s.samayikTarget)) c++;
-    if (s.enableDevasiya && d.devasiyaDone) c++;
-    if (s.enableRaysiya && d.raysiyaDone) c++;
+    if (s.enablePratikraman && d.devasiyaDone) c++;
+    if (s.enablePratikraman && d.raysiyaDone) c++;
     if (s.enableBookReading && (d.bookReadingMins || 0) >= 30) c++;
     if (s.enableRatriBhojan && d.ratriBhojanDone) c++;
     if (s.enableKandmool && d.kandmoolDone) c++;
@@ -1695,8 +1694,8 @@ class KalyanMitra {
         { enabled: s.enablePranam, val: log.pranamDone },
         { enabled: s.enablePooja, val: log.poojaDone },
         { enabled: s.enableSamayik, val: (log.samayikDone || 0) >= parseInt(s.samayikTarget || 1) },
-        { enabled: s.enableDevasiya, val: !!log.devasiyaDone },
-        { enabled: s.enableRaysiya, val: !!log.raysiyaDone },
+        { enabled: s.enablePratikraman, val: !!log.devasiyaDone },
+        { enabled: s.enablePratikraman, val: !!log.raysiyaDone },
         { enabled: s.enableBookReading, val: (log.bookReadingMins || 0) >= 30 },
         { enabled: s.enableRatriBhojan, val: log.ratriBhojanDone },
         { enabled: s.enableKandmool, val: log.kandmoolDone },
@@ -1714,8 +1713,8 @@ class KalyanMitra {
       if (s.enableWakeup && log.wakeUpDone) icons.push('⏰');
       if (s.enablePooja && log.poojaDone) icons.push('🪔');
       if (s.enableSamayik && (log.samayikDone || 0) > 0) icons.push('🧘');
-      if (s.enableDevasiya && log.devasiyaDone) icons.push('🌅');
-      if (s.enableRaysiya && log.raysiyaDone) icons.push('🌙');
+      if (s.enablePratikraman && log.devasiyaDone) icons.push('🌅');
+      if (s.enablePratikraman && log.raysiyaDone) icons.push('🌙');
       if (s.enableBookReading && (log.bookReadingMins || 0) >= 30) icons.push('📖');
       if (s.enableRatriBhojan && log.ratriBhojanDone) icons.push('🍽️');
       if (s.enableKandmool && log.kandmoolDone) icons.push('🌱');
@@ -1778,8 +1777,8 @@ class KalyanMitra {
       { key: 'enablePranam', icon: '🙇', name: 'Pranam', done: !!log.pranamDone },
       { key: 'enablePooja', icon: '🪔', name: 'Pooja', done: !!log.poojaDone, extra: log.ashtaPrakariDone ? '+Ashta' : '' },
       { key: 'enableSamayik', icon: '🧘', name: 'Samayik', done: (log.samayikDone || 0) > 0, val: `${log.samayikDone || 0}` },
-      { key: 'enableDevasiya', icon: '🌅', name: 'Devasiya', done: !!log.devasiyaDone },
-      { key: 'enableRaysiya', icon: '🌙', name: 'Raysiya', done: !!log.raysiyaDone },
+      { key: 'enablePratikraman', icon: '🌅', name: 'Devasiya', done: !!log.devasiyaDone },
+      { key: 'enablePratikraman', icon: '🌙', name: 'Raysiya', done: !!log.raysiyaDone },
       { key: 'enableBookReading', icon: '📖', name: 'Book Reading', done: (log.bookReadingMins || 0) >= 30, val: `${log.bookReadingMins || 0} min` },
       { key: 'enableRatriBhojan', icon: '🍽️', name: 'Ratri Bhojan Tyag', done: !!log.ratriBhojanDone },
       { key: 'enableKandmool', icon: '🌱', name: 'Kandmool Tyag', done: !!log.kandmoolDone },
@@ -1859,8 +1858,7 @@ class KalyanMitra {
     document.getElementById('admin-toggle-pranam').checked = s.enablePranam;
     document.getElementById('admin-toggle-pooja').checked = s.enablePooja;
     document.getElementById('admin-toggle-samayik').checked = s.enableSamayik;
-    document.getElementById('admin-toggle-devasiya').checked = s.enableDevasiya;
-    document.getElementById('admin-toggle-raysiya').checked = s.enableRaysiya;
+    document.getElementById('admin-toggle-pratikraman').checked = s.enablePratikraman;
     document.getElementById('admin-toggle-book').checked = s.enableBookReading;
     document.getElementById('admin-toggle-ratribhojan').checked = s.enableRatriBhojan;
     document.getElementById('admin-toggle-kandmool').checked = s.enableKandmool;
@@ -1888,8 +1886,7 @@ class KalyanMitra {
     s.enablePranam = document.getElementById('admin-toggle-pranam').checked;
     s.enablePooja = document.getElementById('admin-toggle-pooja').checked;
     s.enableSamayik = document.getElementById('admin-toggle-samayik').checked;
-    s.enableDevasiya = document.getElementById('admin-toggle-devasiya').checked;
-    s.enableRaysiya = document.getElementById('admin-toggle-raysiya').checked;
+    s.enablePratikraman = document.getElementById('admin-toggle-pratikraman').checked;
     s.enableBookReading = document.getElementById('admin-toggle-book').checked;
     s.enableRatriBhojan = document.getElementById('admin-toggle-ratribhojan').checked;
     s.enableKandmool = document.getElementById('admin-toggle-kandmool').checked;
@@ -1931,8 +1928,8 @@ class KalyanMitra {
         { key: 'enablePranam', icon: '🙇', name: 'Pranam', status: d.pranamDone ? '✓' : '✗', done: !!d.pranamDone },
         { key: 'enablePooja', icon: '🪔', name: 'Pooja', status: d.poojaDone ? (d.ashtaPrakariDone ? '✓ +Ashta' : '✓') : '✗', done: !!d.poojaDone },
         { key: 'enableSamayik', icon: '🧘', name: 'Samayik', status: `${d.samayikDone || 0}`, done: (d.samayikDone || 0) > 0 },
-        { key: 'enableDevasiya', icon: '🌅', name: 'Devasiya', status: d.devasiyaDone ? '✓' : '✗', done: !!d.devasiyaDone },
-        { key: 'enableRaysiya', icon: '🌙', name: 'Raysiya', status: d.raysiyaDone ? '✓' : '✗', done: !!d.raysiyaDone },
+        { key: 'enablePratikraman', icon: '🌅', name: 'Devasiya', status: d.devasiyaDone ? '✓' : '✗', done: !!d.devasiyaDone },
+        { key: 'enablePratikraman', icon: '🌙', name: 'Raysiya', status: d.raysiyaDone ? '✓' : '✗', done: !!d.raysiyaDone },
         { key: 'enableBookReading', icon: '📖', name: 'Book Reading', status: `${d.bookReadingMins || 0} min`, done: (d.bookReadingMins || 0) >= 30 },
         { key: 'enableRatriBhojan', icon: '🚫', name: 'Ratri Bhojan Tyag', status: d.ratriBhojanDone ? '✓' : '✗', done: !!d.ratriBhojanDone },
         { key: 'enableKandmool', icon: '🥔', name: 'Kandmool Tyag', status: d.kandmoolDone ? '✓' : '✗', done: !!d.kandmoolDone },
@@ -1995,8 +1992,8 @@ class KalyanMitra {
       s.enablePranam ? `<div class="lock-preview-item"><span>🙇 Pranam:</span> <strong>${d.pranamDone ? '✓' : '✗'}</strong></div>` : '',
       s.enablePooja ? `<div class="lock-preview-item"><span>🪔 Pooja:</span> <strong>${d.poojaDone ? 'Done' : 'Not done'}${d.ashtaPrakariDone ? ' +Ashta' : ''}</strong></div>` : '',
       s.enableSamayik ? `<div class="lock-preview-item"><span>🧘 Samayik:</span> <strong>${d.samayikDone || 0}</strong></div>` : '',
-      s.enableDevasiya ? `<div class="lock-preview-item"><span>🌅 Devasiya:</span> <strong>${d.devasiyaDone ? '✓' : '✗'}</strong></div>` : '',
-      s.enableRaysiya ? `<div class="lock-preview-item"><span>🌙 Raysiya:</span> <strong>${d.raysiyaDone ? '✓' : '✗'}</strong></div>` : '',
+      s.enablePratikraman ? `<div class="lock-preview-item"><span>🌅 Devasiya:</span> <strong>${d.devasiyaDone ? '✓' : '✗'}</strong></div>` : '',
+      s.enablePratikraman ? `<div class="lock-preview-item"><span>🌙 Raysiya:</span> <strong>${d.raysiyaDone ? '✓' : '✗'}</strong></div>` : '',
       s.enableBookReading ? `<div class="lock-preview-item"><span>📖 Reading:</span> <strong>${d.bookReadingMins || 0} min</strong></div>` : '',
       s.enableRatriBhojan ? `<div class="lock-preview-item"><span>🚫 Ratri Bhojan:</span> <strong>${d.ratriBhojanDone ? '✓' : '✗'}</strong></div>` : '',
       s.enableKandmool ? `<div class="lock-preview-item"><span>🥔 Kandmool:</span> <strong>${d.kandmoolDone ? '✓' : '✗'}</strong></div>` : '',
