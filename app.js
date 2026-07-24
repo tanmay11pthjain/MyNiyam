@@ -568,11 +568,20 @@ class KalyanMitra {
     bindSimple('wakeup', 'wakeUpDone', POINTS.wakeUpEarly);
     bindSimple('sleep', 'sleepDone', POINTS.sleepEarly);
     bindSimple('pranam', 'pranamDone', POINTS.pranam);
-    bindSimple('devasiya', 'devasiyaDone', POINTS.devasiya);
-    bindSimple('raysiya', 'raysiyaDone', POINTS.raysiya);
     bindSimple('ratribhojan', 'ratriBhojanDone', POINTS.ratriBhojan);
     bindSimple('kandmool', 'kandmoolDone', POINTS.kandmool);
     bindSimple('niyam', 'dailyNiyamDone', POINTS.dailyNiyam);
+
+    // Custom toggle for Pratikraman sub-buttons
+    const bindToggle = (id, prop, points) => {
+      const btn = document.getElementById(`btn-${id}`);
+      if (btn) btn.addEventListener('click', () => {
+        const isDone = !!this.dailyLog[prop];
+        this.toggleSimpleActivity('pratikraman', prop, !isDone, points); // pass pratikraman as elId so particles burst on the main card
+      });
+    };
+    bindToggle('devasiya', 'devasiyaDone', POINTS.devasiya);
+    bindToggle('raysiya', 'raysiyaDone', POINTS.raysiya);
 
     const btnPooja = document.getElementById('btn-pooja');
     const btnPoojaUndo = document.getElementById('btn-pooja-undo');
@@ -1040,8 +1049,7 @@ class KalyanMitra {
     document.getElementById('pranam-card').style.display = s.enablePranam ? 'flex' : 'none';
     document.getElementById('pooja-card').style.display = s.enablePooja ? 'flex' : 'none';
     document.getElementById('samayik-card').style.display = s.enableSamayik ? 'flex' : 'none';
-    document.getElementById('devasiya-card').style.display = s.enableDevasiya ? 'flex' : 'none';
-    document.getElementById('raysiya-card').style.display = s.enableRaysiya ? 'flex' : 'none';
+    document.getElementById('pratikraman-card').style.display = s.enablePratikraman ? 'block' : 'none';
     document.getElementById('book-card').style.display = s.enableBookReading ? 'flex' : 'none';
     document.getElementById('ratribhojan-card').style.display = s.enableRatriBhojan ? 'flex' : 'none';
     document.getElementById('kandmool-card').style.display = s.enableKandmool ? 'flex' : 'none';
@@ -1052,7 +1060,7 @@ class KalyanMitra {
       document.getElementById(catId).style.display = toggles.some(t => t) ? 'block' : 'none';
     };
     checkCat('cat-morning', [s.enableNavkarsi, s.enableWakeup, s.enableSleep, s.enablePranam]);
-    checkCat('cat-sadhana', [s.enablePooja, s.enableSamayik, s.enableDevasiya, s.enableRaysiya, s.enableBookReading]);
+    checkCat('cat-sadhana', [s.enablePooja, s.enableSamayik, s.enablePratikraman, s.enableBookReading]);
     checkCat('cat-tyag', [s.enableRatriBhojan, s.enableKandmool, s.enableScreenTime, s.enableDailyNiyam]);
 
     const updateSimpleCard = (id, isDone) => {
@@ -1076,8 +1084,32 @@ class KalyanMitra {
     updateSimpleCard('wakeup', d.wakeUpDone);
     updateSimpleCard('sleep', d.sleepDone);
     updateSimpleCard('pranam', d.pranamDone);
-    updateSimpleCard('devasiya', d.devasiyaDone);
-    updateSimpleCard('raysiya', d.raysiyaDone);
+    // Custom Pratikraman UI
+    if (s.enablePratikraman) {
+      const pCard = document.getElementById('pratikraman-card');
+      const btnDevasiya = document.getElementById('btn-devasiya');
+      const btnRaysiya = document.getElementById('btn-raysiya');
+      const pStatus = document.getElementById('pratikraman-status-text');
+
+      if (btnDevasiya) {
+        if (d.devasiyaDone) btnDevasiya.classList.add('done');
+        else btnDevasiya.classList.remove('done');
+        btnDevasiya.disabled = locked;
+      }
+      
+      if (btnRaysiya) {
+        if (d.raysiyaDone) btnRaysiya.classList.add('done');
+        else btnRaysiya.classList.remove('done');
+        btnRaysiya.disabled = locked;
+      }
+
+      let pCount = (d.devasiyaDone ? 1 : 0) + (d.raysiyaDone ? 1 : 0);
+      if (pStatus) pStatus.textContent = `${pCount}/2 completed`;
+      if (pCard) {
+        if (pCount > 0) pCard.classList.add('completed');
+        else pCard.classList.remove('completed');
+      }
+    }
     updateSimpleCard('ratribhojan', d.ratriBhojanDone);
     updateSimpleCard('kandmool', d.kandmoolDone);
 

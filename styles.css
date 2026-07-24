@@ -2774,10 +2774,101 @@ body {
 }
 
 .counter-val {
-  font-weight: bold;
-  font-size: 0.95rem;
+  font-weight: 700;
   min-width: 24px;
   text-align: center;
+}
+
+/* Pratikraman Composite Card */
+.pratikraman-card {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+  border: 1px solid rgba(0,0,0,0.05);
+  border-left: 4px solid var(--accent-orange);
+  position: relative;
+  overflow: hidden;
+}
+.pratikraman-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.pratikraman-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text-dark);
+}
+.pratikraman-kp {
+  background: var(--accent-orange);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+}
+.pratikraman-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.pratikraman-btn {
+  background: #fdfbf7;
+  border: 1px solid #e5e0d8;
+  border-radius: 12px;
+  padding: 16px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.pratikraman-btn:active {
+  transform: scale(0.96);
+}
+.pratikraman-btn.done {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+.pratikraman-btn-icon {
+  font-size: 28px;
+}
+.pratikraman-btn-label {
+  font-size: 14px;
+  color: var(--text-dark);
+  font-weight: 600;
+}
+.pratikraman-btn-status {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  background: white;
+  transition: all 0.2s ease;
+}
+.pratikraman-btn.done .pratikraman-btn-status {
+  background: #22c55e;
+  border-color: #22c55e;
+}
+.pratikraman-footer {
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* History */
+.history-controls {
+  flex-direction: column;
+  gap: 4px;
 }
 
 .screentime-actions {

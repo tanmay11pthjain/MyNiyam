@@ -267,34 +267,28 @@
             </div>
           </div>
 
-          <div class="activity-compact" id="devasiya-card">
-            <div class="lock-indicator hidden" id="devasiya-lock">🔒</div>
-            <div class="compact-left">
-              <span class="card-icon">🌅</span>
-              <div class="compact-info">
-                <span class="card-title">Devasiya</span>
-                <span class="card-kp">+30 KP</span>
+          <div class="pratikraman-card" id="pratikraman-card">
+            <div class="lock-indicator hidden" id="pratikraman-lock">🔒</div>
+            <div class="pratikraman-header">
+              <div class="pratikraman-title-wrap">
+                <span>🙏</span>
+                <span>Pratikraman</span>
               </div>
+              <div class="pratikraman-kp">+30 KP</div>
             </div>
-            <div class="compact-actions">
-              <button class="btn-done" id="btn-devasiya">✓</button>
-              <button class="btn-undo hidden" id="btn-devasiya-undo">↩</button>
+            <div class="pratikraman-buttons">
+              <button type="button" class="pratikraman-btn" id="btn-devasiya">
+                <span class="pratikraman-btn-icon">🌅</span>
+                <span class="pratikraman-btn-label">Morning</span>
+                <span class="pratikraman-btn-status"></span>
+              </button>
+              <button type="button" class="pratikraman-btn" id="btn-raysiya">
+                <span class="pratikraman-btn-icon">🌙</span>
+                <span class="pratikraman-btn-label">Evening</span>
+                <span class="pratikraman-btn-status"></span>
+              </button>
             </div>
-          </div>
-
-          <div class="activity-compact" id="raysiya-card">
-            <div class="lock-indicator hidden" id="raysiya-lock">🔒</div>
-            <div class="compact-left">
-              <span class="card-icon">🌙</span>
-              <div class="compact-info">
-                <span class="card-title">Raysiya</span>
-                <span class="card-kp">+30 KP</span>
-              </div>
-            </div>
-            <div class="compact-actions">
-              <button class="btn-done" id="btn-raysiya">✓</button>
-              <button class="btn-undo hidden" id="btn-raysiya-undo">↩</button>
-            </div>
+            <div class="pratikraman-footer" id="pratikraman-status-text">0/2 completed</div>
           </div>
 
           <div class="activity-compact" id="book-card">
@@ -511,12 +505,8 @@
             <input type="checkbox" id="admin-toggle-samayik">
           </div>
           <div class="setting-item">
-            <label for="admin-toggle-devasiya">Devasiya Pratikraman</label>
-            <input type="checkbox" id="admin-toggle-devasiya">
-          </div>
-          <div class="setting-item">
-            <label for="admin-toggle-raysiya">Raysiya Pratikraman</label>
-            <input type="checkbox" id="admin-toggle-raysiya">
+            <label for="admin-toggle-pratikraman">Pratikraman</label>
+            <input type="checkbox" id="admin-toggle-pratikraman">
           </div>
           <div class="setting-item">
             <label for="admin-toggle-book">Book Reading</label>
@@ -746,8 +736,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=8"></script>
-  <script src="auth.js?v=8"></script>
-  <script src="app.js?v=8"></script>
+  <script src="data.js?v=9"></script>
+  <script src="auth.js?v=9"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>
