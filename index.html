@@ -266,27 +266,32 @@
               <button class="btn-counter-small btn-plus" id="btn-samayik-plus">+</button>
             </div>
           </div>
-
-          <div class="pratikraman-card" id="pratikraman-card">
+          <!-- PRATIKRAMAN -->
+          <div class="activity-card" id="pratikraman-card">
             <div class="lock-indicator hidden" id="pratikraman-lock">🔒</div>
-            <div class="pratikraman-header">
-              <div class="pratikraman-title-wrap">
-                <span>🙏</span>
-                <span>Pratikraman</span>
+            <div class="card-header">
+              <div class="card-title-area">
+                <span class="card-icon">🙏</span>
+                <span class="card-title">Pratikraman</span>
               </div>
-              <div class="pratikraman-kp">+30 KP</div>
+              <span class="card-kp">+30 KP</span>
             </div>
-            <div class="pratikraman-buttons">
-              <button type="button" class="pratikraman-btn" id="btn-devasiya">
-                <span class="pratikraman-btn-icon">🌅</span>
-                <span class="pratikraman-btn-label">Morning</span>
-              </button>
-              <button type="button" class="pratikraman-btn" id="btn-raysiya">
-                <span class="pratikraman-btn-icon">🌙</span>
-                <span class="pratikraman-btn-label">Evening</span>
-              </button>
+            <div class="card-body">
+              <div class="pratikraman-slots">
+                <button class="slot-btn" id="pratikraman-morning" onclick="app.completePratikraman('morning')">
+                  <span class="slot-icon">🌅</span>
+                  <span class="slot-label">Morning</span>
+                  <span class="slot-check" id="pratikraman-morning-check">○</span>
+                </button>
+                <button class="slot-btn" id="pratikraman-evening" onclick="app.completePratikraman('evening')">
+                  <span class="slot-icon">🌙</span>
+                  <span class="slot-label">Evening</span>
+                  <span class="slot-check" id="pratikraman-evening-check">○</span>
+                </button>
+              </div>
+              <div class="card-status" id="pratikraman-status">0/2 completed</div>
             </div>
-            <div class="pratikraman-footer" id="pratikraman-status-text">0/2 completed</div>
+            <div class="card-bonus" id="pratikraman-bonus"></div>
           </div>
 
           <div class="activity-compact" id="book-card">
@@ -734,8 +739,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=11"></script>
-  <script src="auth.js?v=11"></script>
-  <script src="app.js?v=11"></script>
+  <script src="data.js?v=12"></script>
+  <script src="auth.js?v=12"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>

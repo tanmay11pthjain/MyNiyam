@@ -572,55 +572,7 @@ class KalyanMitra {
     bindSimple('kandmool', 'kandmoolDone', POINTS.kandmool);
     bindSimple('niyam', 'dailyNiyamDone', POINTS.dailyNiyam);
 
-    // Pratikraman sub-buttons — fully self-contained handlers
-    const btnDevasiya = document.getElementById('btn-devasiya');
-    const btnRaysiya = document.getElementById('btn-raysiya');
-
-    if (btnDevasiya) {
-      btnDevasiya.addEventListener('click', () => {
-        if (this.isDayLocked()) return;
-        const wasDone = !!this.dailyLog.devasiyaDone;
-        this.dailyLog.devasiyaDone = !wasDone;
-        const pts = this.applyStreakMultiplier(POINTS.devasiya);
-        if (!wasDone) {
-          this.addKarmaPoints(pts, 'Devasiya');
-          this.showCompletionBurst(document.getElementById('pratikraman-card'));
-          this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
-          this.profile.totalDevasiya = (this.profile.totalDevasiya || 0) + 1;
-        } else {
-          this.deductKarmaPoints(pts);
-          this.profile.totalDevasiya = Math.max(0, (this.profile.totalDevasiya || 0) - 1);
-          if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
-            this.dailyLog.perfectDay = false;
-            this.deductKarmaPoints(POINTS.perfectDay);
-          }
-        }
-        this.afterActivity();
-      });
-    }
-
-    if (btnRaysiya) {
-      btnRaysiya.addEventListener('click', () => {
-        if (this.isDayLocked()) return;
-        const wasDone = !!this.dailyLog.raysiyaDone;
-        this.dailyLog.raysiyaDone = !wasDone;
-        const pts = this.applyStreakMultiplier(POINTS.raysiya);
-        if (!wasDone) {
-          this.addKarmaPoints(pts, 'Raysiya');
-          this.showCompletionBurst(document.getElementById('pratikraman-card'));
-          this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
-          this.profile.totalRaysiya = (this.profile.totalRaysiya || 0) + 1;
-        } else {
-          this.deductKarmaPoints(pts);
-          this.profile.totalRaysiya = Math.max(0, (this.profile.totalRaysiya || 0) - 1);
-          if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
-            this.dailyLog.perfectDay = false;
-            this.deductKarmaPoints(POINTS.perfectDay);
-          }
-        }
-        this.afterActivity();
-      });
-    }
+    // Pratikraman uses inline onclick="app.completePratikraman('morning'|'evening')" — no binding needed here
 
     const btnPooja = document.getElementById('btn-pooja');
     const btnPoojaUndo = document.getElementById('btn-pooja-undo');
@@ -1123,26 +1075,30 @@ class KalyanMitra {
     updateSimpleCard('wakeup', d.wakeUpDone);
     updateSimpleCard('sleep', d.sleepDone);
     updateSimpleCard('pranam', d.pranamDone);
-    // Custom Pratikraman UI
+    // Pratikraman UI
     if (s.enablePratikraman) {
       const pCard = document.getElementById('pratikraman-card');
-      const btnDevasiya = document.getElementById('btn-devasiya');
-      const btnRaysiya = document.getElementById('btn-raysiya');
-      const pStatus = document.getElementById('pratikraman-status-text');
+      const btnMorning = document.getElementById('pratikraman-morning');
+      const btnEvening = document.getElementById('pratikraman-evening');
+      const checkMorning = document.getElementById('pratikraman-morning-check');
+      const checkEvening = document.getElementById('pratikraman-evening-check');
+      const pStatus = document.getElementById('pratikraman-status');
 
-      if (btnDevasiya) {
-        if (d.devasiyaDone) btnDevasiya.classList.add('done');
-        else btnDevasiya.classList.remove('done');
-        btnDevasiya.disabled = locked;
+      if (btnMorning) {
+        if (d.devasiyaDone) btnMorning.classList.add('done');
+        else btnMorning.classList.remove('done');
+        btnMorning.disabled = locked;
       }
-      
-      if (btnRaysiya) {
-        if (d.raysiyaDone) btnRaysiya.classList.add('done');
-        else btnRaysiya.classList.remove('done');
-        btnRaysiya.disabled = locked;
-      }
+      if (checkMorning) checkMorning.textContent = d.devasiyaDone ? '●' : '○';
 
-      let pCount = (d.devasiyaDone ? 1 : 0) + (d.raysiyaDone ? 1 : 0);
+      if (btnEvening) {
+        if (d.raysiyaDone) btnEvening.classList.add('done');
+        else btnEvening.classList.remove('done');
+        btnEvening.disabled = locked;
+      }
+      if (checkEvening) checkEvening.textContent = d.raysiyaDone ? '●' : '○';
+
+      const pCount = (d.devasiyaDone ? 1 : 0) + (d.raysiyaDone ? 1 : 0);
       if (pStatus) pStatus.textContent = `${pCount}/2 completed`;
       if (pCard) {
         if (pCount > 0) pCard.classList.add('completed');
@@ -1263,6 +1219,30 @@ class KalyanMitra {
     } else {
       this.deductKarmaPoints(actualPoints);
       if (prop === 'dailyNiyamDone') this.profile.totalNiyam = Math.max(0, (this.profile.totalNiyam || 0) - 1);
+      if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
+        this.dailyLog.perfectDay = false;
+        this.deductKarmaPoints(POINTS.perfectDay);
+      }
+    }
+    this.afterActivity();
+  }
+
+  completePratikraman(slot) {
+    if (this.isDayLocked()) return;
+    const prop = slot === 'morning' ? 'devasiyaDone' : 'raysiyaDone';
+    const statKey = slot === 'morning' ? 'totalDevasiya' : 'totalRaysiya';
+    const wasDone = !!this.dailyLog[prop];
+    this.dailyLog[prop] = !wasDone;
+    const pts = this.applyStreakMultiplier(POINTS.devasiya); // both are 30 KP
+
+    if (!wasDone) {
+      this.addKarmaPoints(pts, 'Pratikraman');
+      this.showCompletionBurst(document.getElementById('pratikraman-card'));
+      this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
+      this.profile[statKey] = (this.profile[statKey] || 0) + 1;
+    } else {
+      this.deductKarmaPoints(pts);
+      this.profile[statKey] = Math.max(0, (this.profile[statKey] || 0) - 1);
       if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
         this.dailyLog.perfectDay = false;
         this.deductKarmaPoints(POINTS.perfectDay);

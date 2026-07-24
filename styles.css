@@ -2779,11 +2779,11 @@ body {
   text-align: center;
 }
 
-/* Pratikraman Composite Card */
-.pratikraman-card {
+/* Pratikraman Card */
+.activity-card {
   background: var(--card-bg);
   border-radius: 16px;
-  padding: 16px;
+  padding: 0;
   margin-bottom: 12px;
   box-shadow: 0 4px 15px rgba(0,0,0,0.03);
   border: 1px solid rgba(0,0,0,0.05);
@@ -2791,78 +2791,78 @@ body {
   position: relative;
   overflow: hidden;
 }
-.pratikraman-header {
+.activity-card .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  padding: 14px 16px 8px 16px;
 }
-.pratikraman-title-wrap {
+.activity-card .card-title-area {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 700;
-  font-size: 16px;
-  color: var(--text-dark);
 }
-.pratikraman-kp {
-  background: var(--accent-orange);
-  color: white;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: bold;
+.activity-card .card-body {
+  padding: 0 16px 14px 16px;
 }
-.pratikraman-buttons {
+.pratikraman-slots {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 8px;
 }
-.pratikraman-btn {
-  background: #fdfbf7;
-  border: 1px solid #e5e0d8;
+.slot-btn {
+  background: #faf8f5;
+  border: 1.5px solid #e8e2d9;
   border-radius: 12px;
-  padding: 16px 10px;
+  padding: 14px 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.25s ease;
+  -webkit-tap-highlight-color: transparent;
 }
-.pratikraman-btn:active {
-  transform: scale(0.96);
+.slot-btn:active {
+  transform: scale(0.95);
 }
-.pratikraman-btn.done {
+.slot-btn.done {
   background: #f0fdf4;
-  border-color: #bbf7d0;
+  border-color: #86efac;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.15);
 }
-.pratikraman-btn-icon {
-  font-size: 28px;
+.slot-icon {
+  font-size: 26px;
+  line-height: 1;
 }
-.pratikraman-btn-label {
-  font-size: 14px;
+.slot-label {
+  font-size: 13px;
   color: var(--text-dark);
   font-weight: 600;
 }
-.pratikraman-btn-status {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid #cbd5e1;
-  background: white;
-  transition: all 0.2s ease;
+.slot-check {
+  font-size: 16px;
+  color: #cbd5e1;
+  transition: color 0.2s ease;
 }
-.pratikraman-btn.done .pratikraman-btn-status {
-  background: #22c55e;
-  border-color: #22c55e;
+.slot-btn.done .slot-check {
+  color: #22c55e;
 }
-.pratikraman-footer {
+.card-status {
   text-align: center;
   font-size: 13px;
   color: #64748b;
   font-weight: 500;
+}
+.card-bonus {
+  font-size: 12px;
+  text-align: center;
+  color: var(--accent-orange);
+  padding: 0 16px 10px;
+}
+.card-bonus:empty {
+  display: none;
 }
 
 /* History */
