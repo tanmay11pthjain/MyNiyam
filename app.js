@@ -487,15 +487,78 @@ class KalyanMitra {
           <span class="lb-name">${u.name}</span>
           <span class="lb-stats">${u.kp} KP • 🔥 ${u.streak}</span>
         </div>
-        <div class="lb-action">👁️ View</div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <div class="lb-action">👁️ View</div>
+          <button class="btn-delete-card-user" data-uid="${u.uid}" data-name="${u.name}" title="Delete User" style="background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; border-radius: 8px; padding: 4px 8px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center;">🗑️</button>
+        </div>
       </div>
     `).join('');
 
     listEl.querySelectorAll('.leaderboard-card').forEach(card => {
-      card.addEventListener('click', () => {
+      card.addEventListener('click', (e) => {
+        const delBtn = e.target.closest('.btn-delete-card-user');
+        if (delBtn) {
+          e.stopPropagation();
+          const uid = delBtn.dataset.uid;
+          const name = delBtn.dataset.name;
+          this.deleteAdminUser(uid, name);
+          return;
+        }
         this.selectAdminUser(card.dataset.uid);
       });
     });
+  }
+
+  async deleteAdminUser(targetUid, targetName) {
+    const uidToDelete = targetUid || this.uid;
+    if (!uidToDelete) return;
+
+    let userName = targetName;
+    if (!userName) {
+      if (uidToDelete === this.uid) {
+        const nameEl = document.getElementById('admin-viewing-name');
+        userName = nameEl ? nameEl.textContent.replace('Viewing:', '').trim() : uidToDelete;
+      } else {
+        const snap = await db.ref(`users/${uidToDelete}/name`).once('value');
+        userName = snap.val() || uidToDelete;
+      }
+    }
+
+    if (!confirm(`Are you sure you want to delete user "${userName}"?\n\nThis will permanently delete their account profile, logs, and association with your Sangh.`)) {
+      return;
+    }
+
+    try {
+      // 1. Remove user from sangh_users mapping for all admin sangh codes
+      const codes = this._adminSanghCodes || [];
+      for (const code of codes) {
+        await db.ref(`sangh_users/${code}/${uidToDelete}`).remove();
+      }
+
+      // 2. Remove user main node
+      await db.ref(`users/${uidToDelete}`).remove();
+
+      // 3. Remove lock status node
+      await db.ref(`lock_status/${uidToDelete}`).remove();
+
+      // 4. If currently viewing this user, return to leaderboard
+      if (this.uid === uidToDelete) {
+        this._detachAllListeners();
+        this.uid = null;
+        document.getElementById('admin-individual').classList.add('hidden');
+        document.getElementById('admin-overview').classList.remove('hidden');
+        this.switchAdminTab('admin-leaderboard');
+      }
+
+      // 5. Refresh admin state and re-render
+      await this._fetchAdminUserUids();
+      await this.renderAdminLeaderboard();
+
+      alert(`User "${userName}" was successfully deleted.`);
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      alert('Failed to delete user. Please try again.');
+    }
   }
 
   async renderAdminLeaderboard() {
