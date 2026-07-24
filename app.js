@@ -362,20 +362,53 @@ class KalyanMitra {
   }
 
   async _fetchAdminUserUids() {
-    const codes = this._adminSanghCodes;
-    if (!codes || codes.length === 0) {
-      this._adminUserUids = [];
-      return;
+    let codes = this._adminSanghCodes || [];
+    // If auth user sanghCodes is empty, check single sanghCode or DB record
+    if (codes.length === 0 && this._currentAuthUser?.sanghCode) {
+      codes = [this._currentAuthUser.sanghCode];
     }
+    
+    // Also check if admin has sanghCodes/sanghCode stored in DB
+    try {
+      if (this._currentAuthUser?.uid) {
+        const adminSnap = await db.ref(`users/${this._currentAuthUser.uid}`).once('value');
+        const adminData = adminSnap.val() || {};
+        if (adminData.sanghCodes && Array.isArray(adminData.sanghCodes)) {
+          codes = Array.from(new Set([...codes, ...adminData.sanghCodes]));
+        }
+        if (adminData.sanghCode) {
+          codes = Array.from(new Set([...codes, adminData.sanghCode]));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed reading admin DB record:', e);
+    }
+    
+    this._adminSanghCodes = codes;
 
     const uidSet = new Set();
+    // 1. Query sangh_users mapping nodes
     for (const code of codes) {
       const snap = await db.ref(`sangh_users/${code}`).once('value');
-      const users = snap.val() || {};
-      Object.keys(users).forEach(uid => uidSet.add(uid));
+      const usersMap = snap.val() || {};
+      Object.keys(usersMap).forEach(uid => uidSet.add(uid));
     }
+
+    // 2. Query users tree for matching sanghCode
+    if (codes.length > 0) {
+      const usersSnap = await db.ref('users').once('value');
+      const allUsers = usersSnap.val() || {};
+      Object.entries(allUsers).forEach(([uid, data]) => {
+        if (data.role === 'admin') return;
+        const userCode = data.registration?.sanghCode || data.sanghCode;
+        if (userCode && codes.includes(userCode)) {
+          uidSet.add(uid);
+        }
+      });
+    }
+
     this._adminUserUids = Array.from(uidSet);
-    console.log('Admin sangh codes:', codes, '| User UIDs:', this._adminUserUids);
+    console.log('Admin sangh codes:', codes, '| Scoped User UIDs:', this._adminUserUids);
   }
 
   startLeaderboardListener() {
@@ -417,8 +450,8 @@ class KalyanMitra {
 
     Object.entries(allUsers).forEach(([uid, data]) => {
       if (data.role === 'admin') return;
-      // Only show users in this admin's sanghs
-      if (this._adminUserUids.length > 0 && !this._adminUserUids.includes(uid)) return;
+      // Strictly ONLY include users in this admin's sangh
+      if (!this._adminUserUids.includes(uid)) return;
       totalUsers++;
       totalKP += data.profile?.totalKP || 0;
 
@@ -461,8 +494,8 @@ class KalyanMitra {
     const users = [];
     Object.entries(allUsers).forEach(([uid, data]) => {
       if (data.role === 'admin') return;
-      // Only show users in this admin's sanghs
-      if (this._adminUserUids.length > 0 && !this._adminUserUids.includes(uid)) return;
+      // Strictly ONLY include users in this admin's sangh
+      if (!this._adminUserUids.includes(uid)) return;
       if (!data.role || data.role === 'user' || data.profile) {
         users.push({
           uid,
@@ -529,13 +562,16 @@ class KalyanMitra {
     }
 
     try {
-      // 1. Remove user from sangh_users mapping for all admin sangh codes
-      const codes = this._adminSanghCodes || [];
-      for (const code of codes) {
-        await db.ref(`sangh_users/${code}/${uidToDelete}`).remove();
+      // 1. Remove user from all sangh_users mapping nodes across DB
+      const sanghsSnap = await db.ref('sangh_users').once('value');
+      const sanghsData = sanghsSnap.val() || {};
+      for (const [code, sanghUserMap] of Object.entries(sanghsData)) {
+        if (sanghUserMap && sanghUserMap[uidToDelete]) {
+          await db.ref(`sangh_users/${code}/${uidToDelete}`).remove();
+        }
       }
 
-      // 2. Remove user main node
+      // 2. Remove user main node completely (clears sanghCode, profile, logs)
       await db.ref(`users/${uidToDelete}`).remove();
 
       // 3. Remove lock status node
