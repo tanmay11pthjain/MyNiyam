@@ -375,53 +375,22 @@ class KalyanMitra {
   }
 
   async _fetchAdminUserUids() {
-    let codes = this._adminSanghCodes || [];
-    // If auth user sanghCodes is empty, check single sanghCode or DB record
-    if (codes.length === 0 && this._currentAuthUser?.sanghCode) {
-      codes = [this._currentAuthUser.sanghCode];
+    const codes = this._adminSanghCodes || [];
+    if (codes.length === 0) {
+      this._adminUserUids = [];
+      console.log('Admin has no sangh codes — no users to manage.');
+      return;
     }
-    
-    // Also check if admin has sanghCodes/sanghCode stored in DB
+
+    // Sheet is the master — fetch users by sangh code from Google Sheets
     try {
-      if (this._currentAuthUser?.uid) {
-        const adminSnap = await db.ref(`users/${this._currentAuthUser.uid}`).once('value');
-        const adminData = adminSnap.val() || {};
-        if (adminData.sanghCodes && Array.isArray(adminData.sanghCodes)) {
-          codes = Array.from(new Set([...codes, ...adminData.sanghCodes]));
-        }
-        if (adminData.sanghCode) {
-          codes = Array.from(new Set([...codes, adminData.sanghCode]));
-        }
-      }
+      const sheetUsers = await Auth.fetchSanghUsers(codes);
+      this._adminUserUids = sheetUsers.map(u => u.uid).filter(uid => uid);
+      console.log('Admin sangh codes:', codes, '| Sheet users:', this._adminUserUids);
     } catch (e) {
-      console.warn('Failed reading admin DB record:', e);
+      console.error('Failed to fetch sangh users from Sheet:', e);
+      this._adminUserUids = [];
     }
-    
-    this._adminSanghCodes = codes;
-
-    const uidSet = new Set();
-    // 1. Query sangh_users mapping nodes
-    for (const code of codes) {
-      const snap = await db.ref(`sangh_users/${code}`).once('value');
-      const usersMap = snap.val() || {};
-      Object.keys(usersMap).forEach(uid => uidSet.add(uid));
-    }
-
-    // 2. Query users tree for matching sanghCode
-    if (codes.length > 0) {
-      const usersSnap = await db.ref('users').once('value');
-      const allUsers = usersSnap.val() || {};
-      Object.entries(allUsers).forEach(([uid, data]) => {
-        if (data.role === 'admin') return;
-        const userCode = data.registration?.sanghCode || data.sanghCode;
-        if (userCode && codes.includes(userCode)) {
-          uidSet.add(uid);
-        }
-      });
-    }
-
-    this._adminUserUids = Array.from(uidSet);
-    console.log('Admin sangh codes:', codes, '| Scoped User UIDs:', this._adminUserUids);
   }
 
   startLeaderboardListener() {

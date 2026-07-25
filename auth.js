@@ -165,6 +165,29 @@ const Auth = (() => {
     }
   }
 
+  // Fetch users belonging to specific sangh codes from the Sheet (master)
+  async function fetchSanghUsers(sanghCodes) {
+    try {
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "get_sangh_users", sanghCodes: sanghCodes }),
+        redirect: "follow"
+      });
+      const text = await response.text();
+      console.log("Sangh users response:", text);
+      try {
+        const result = JSON.parse(text);
+        if (result.success) return result.users || [];
+      } catch (parseErr) {
+        console.error("Failed to parse sangh users response:", text);
+      }
+    } catch (e) {
+      console.error("Fetch sangh users failed:", e);
+    }
+    return [];
+  }
+
   return {
     init,
     signInWithGoogle,
@@ -172,6 +195,7 @@ const Auth = (() => {
     onAuthStateChanged,
     getCurrentUser,
     sendRegistration,
-    fetchSanghs
+    fetchSanghs,
+    fetchSanghUsers
   };
 })();
