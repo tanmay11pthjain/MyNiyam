@@ -39,20 +39,33 @@ class KalyanMitra {
 
         if (user.role === 'admin') {
           // Admin skips registration
-          db.ref(`users/${user.uid}/name`).set(user.name || user.uid);
-          db.ref(`users/${user.uid}/role`).set(user.role);
-          this.initAdmin();
-        } else {
-          // Check if user has completed registration
-          const regSnap = await db.ref(`users/${user.uid}/registered`).once('value');
-          if (regSnap.val()) {
+          if (!this._adminInitDone) {
+            this._adminInitDone = true;
+            db.ref(`users/${user.uid}/name`).set(user.name || user.uid);
             db.ref(`users/${user.uid}/role`).set(user.role);
-            this.initUser();
+            this.initAdmin();
+          }
+        } else {
+          // Sheet is the master for registration status.
+          // user.registered is: true (registered), false (not registered),
+          // or undefined (cached session — wait for fresh Sheet response)
+          if (user.registered === undefined) {
+            // Cached session — don't decide yet, wait for fresh Sheet response
+            return;
+          }
+          if (user.registered) {
+            if (!this._userInitDone) {
+              this._userInitDone = true;
+              db.ref(`users/${user.uid}/role`).set(user.role);
+              this.initUser();
+            }
           } else {
             this.showRegistrationForm(user);
           }
         }
       } else {
+        this._userInitDone = false;
+        this._adminInitDone = false;
         this.showLoginScreen();
       }
     });

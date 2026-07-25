@@ -44,7 +44,7 @@ const Auth = (() => {
       try {
         const result = JSON.parse(text);
         if (result.success) {
-          return { role: result.role || "user", sanghCodes: result.sanghCodes || [] };
+          return { role: result.role || "user", sanghCodes: result.sanghCodes || [], registered: !!result.registered };
         }
       } catch (parseErr) {
         console.error("Failed to parse Sheets response:", text);
@@ -52,16 +52,19 @@ const Auth = (() => {
     } catch (e) {
       console.error("Sheets role fetch failed:", e);
     }
-    return { role: "user", sanghCodes: [] };
+    return { role: "user", sanghCodes: [], registered: false };
   }
 
   // ===== INIT — Start Firebase auth listener =====
   function init() {
     // Check for cached session first for instant UI
+    // Strip 'registered' so stale cache doesn't bypass fresh Sheet check
     try {
       const saved = localStorage.getItem('myniyam_session');
       if (saved) {
-        currentUser = JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        delete parsed.registered; // force re-check from Sheet
+        currentUser = parsed;
         _notifyListeners();
       }
     } catch (e) { /* ignore */ }
@@ -69,8 +72,8 @@ const Auth = (() => {
     // Firebase auth state listener
     _unsubFirebase = firebase.auth().onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
-        // User is signed in — fetch role from Sheets
-        const { role, sanghCodes } = await _fetchRoleFromSheets(
+        // User is signed in — fetch role and registration status from Sheets (master)
+        const { role, sanghCodes, registered } = await _fetchRoleFromSheets(
           firebaseUser.uid,
           firebaseUser.email,
           firebaseUser.displayName || firebaseUser.email.split('@')[0]
@@ -82,7 +85,8 @@ const Auth = (() => {
           name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
           email: firebaseUser.email,
           photoURL: firebaseUser.photoURL,
-          sanghCodes: sanghCodes
+          sanghCodes: sanghCodes,
+          registered: registered
         };
 
         localStorage.setItem('myniyam_session', JSON.stringify(currentUser));
