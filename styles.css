@@ -19,7 +19,7 @@
   --xp-start: #FFD700;
   --xp-end: #FF8C00;
   --streak-fire: #FF6B35;
-  --level-purple: #7B2D8E;
+  --epic-purple: #7B2D8E;
   --glow: #FF9933;
   --shadow: rgba(62, 39, 35, 0.08);
   --radius-sm: 8px;
@@ -109,11 +109,6 @@ body {
   15%  { transform: translateX(-50%) translateY(0); opacity: 1; }
   85%  { transform: translateX(-50%) translateY(0); opacity: 1; }
   100% { transform: translateX(-50%) translateY(-60px); opacity: 0; }
-}
-
-@keyframes shimmer {
-  0%   { background-position: -200% center; }
-  100% { background-position: 200% center; }
 }
 
 @keyframes completionPulse {
@@ -582,41 +577,56 @@ body {
   box-shadow: 0 4px 16px rgba(232, 114, 42, 0.25);
 }
 
-.header-top {
+/* Brand row */
+.header-brand {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-/* Level section */
-.level-section {
-  display: flex;
-  align-items: center;
   gap: 10px;
+  margin-bottom: 8px;
 }
 
-.level-icon {
-  font-size: 2rem;
-  line-height: 1;
-}
-
-.level-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.level-title {
+.brand-name {
   font-family: 'Outfit', sans-serif;
   font-weight: 700;
   font-size: 1.1rem;
   line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.brand-sangh {
+  font-size: 0.72rem;
+  opacity: 0.8;
+  font-weight: 500;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* KP section */
+.kp-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kp-icon {
+  font-size: 1.6rem;
+  line-height: 1;
 }
 
 .karma-points {
-  font-size: 0.78rem;
-  opacity: 0.85;
-  font-weight: 500;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  line-height: 1.2;
 }
 
 /* Header Right — streak + logout side by side */
@@ -682,39 +692,6 @@ body {
 .btn-header-logout:active {
   background: rgba(255, 255, 255, 0.3);
 }
-
-/* XP Bar */
-.xp-bar-container {
-  margin-top: 2px;
-}
-
-.xp-bar-track {
-  width: 100%;
-  height: 8px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-}
-
-.xp-bar-fill {
-  height: 100%;
-  border-radius: var(--radius-pill);
-  background: linear-gradient(90deg, var(--xp-start), var(--xp-end));
-  background-size: 200% 100%;
-  transition: width 0.5s ease;
-  animation: shimmer 3s linear infinite;
-  min-width: 4px;
-}
-
-.xp-bar-text {
-  display: block;
-  text-align: center;
-  font-size: 0.68rem;
-  margin-top: 4px;
-  opacity: 0.8;
-  font-weight: 500;
-}
-
 
 /* ============================================================
    LOCK BANNER
@@ -1498,7 +1475,7 @@ body {
   opacity: 0;
 }
 
-/* Level-up confetti pieces */
+/* Confetti pieces */
 .confetti-piece {
   position: absolute;
   top: -10px;
@@ -1678,66 +1655,8 @@ body {
 /* Rarity borders */
 .badge-item[data-rarity="common"]    { border-bottom: 3px solid #A0A0A0; }
 .badge-item[data-rarity="rare"]      { border-bottom: 3px solid #4A90D9; }
-.badge-item[data-rarity="epic"]      { border-bottom: 3px solid var(--level-purple); }
+.badge-item[data-rarity="epic"]      { border-bottom: 3px solid var(--epic-purple); }
 .badge-item[data-rarity="legendary"] { border-bottom: 3px solid var(--accent); }
-
-/* Level Journey */
-.level-journey {
-  position: relative;
-  padding-left: 28px;
-  margin-bottom: 16px;
-}
-
-.level-journey::before {
-  content: '';
-  position: absolute;
-  left: 10px;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: #E0D6CE;
-  border-radius: 2px;
-}
-
-.level-journey .journey-node {
-  position: relative;
-  padding: 10px 0 10px 16px;
-}
-
-.level-journey .journey-node::before {
-  content: '';
-  position: absolute;
-  left: -24px;
-  top: 14px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #D0CCC8;
-  border: 2px solid #fff;
-  z-index: 2;
-}
-
-.level-journey .journey-node.reached::before {
-  background: var(--primary);
-  box-shadow: 0 0 6px rgba(232, 114, 42, 0.4);
-}
-
-.level-journey .journey-node.current::before {
-  background: var(--accent);
-  box-shadow: 0 0 10px rgba(212, 168, 67, 0.5);
-}
-
-.journey-node .journey-title {
-  font-family: 'Outfit', sans-serif;
-  font-weight: 600;
-  font-size: 0.88rem;
-  color: var(--text-primary);
-}
-
-.journey-node .journey-desc {
-  font-size: 0.72rem;
-  color: var(--text-secondary);
-}
 
 /* ============================================================
    SETTINGS TAB (Shared V1 + V2 admin)
@@ -1893,7 +1812,7 @@ body {
 
 
 /* ============================================================
-   OVERLAYS (Level Up / Badge / Evening Summary)
+   OVERLAYS (Badge / Evening Summary)
    ============================================================ */
 
 .overlay {
@@ -1930,51 +1849,6 @@ body {
 
 .overlay.show .overlay-content {
   transform: scale(1);
-}
-
-/* Level Up Overlay */
-.level-up-content {
-  overflow: hidden;
-}
-
-.level-up-glow {
-  position: absolute;
-  top: -30px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 215, 0, 0.4), transparent 70%);
-  animation: glowRadial 2s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.level-up-icon {
-  font-size: 3rem;
-  margin-bottom: 8px;
-  animation: pulseIcon 1.2s ease-in-out infinite;
-}
-
-.level-up-title {
-  font-family: 'Outfit', sans-serif;
-  font-weight: 800;
-  font-size: 1.6rem;
-  color: var(--accent);
-  margin-bottom: 4px;
-}
-
-.level-up-name {
-  font-size: 0.92rem;
-  color: var(--text-primary);
-  font-weight: 500;
-  margin-bottom: 4px;
-}
-
-.level-up-unlock {
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  margin-bottom: 16px;
 }
 
 .btn-continue {
@@ -2023,7 +1897,7 @@ body {
   font-family: 'Outfit', sans-serif;
   font-weight: 800;
   font-size: 1.4rem;
-  color: var(--level-purple);
+  color: var(--epic-purple);
   margin-bottom: 4px;
 }
 
@@ -2050,7 +1924,7 @@ body {
   padding: 3px 14px;
   border-radius: var(--radius-pill);
   background: rgba(123, 45, 142, 0.1);
-  color: var(--level-purple);
+  color: var(--epic-purple);
   margin-bottom: 16px;
 }
 

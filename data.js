@@ -26,16 +26,6 @@ const JAIN_MONTHS = [
   'Ashadh', 'Shravan', 'Bhadrapad', 'Ashwin'
 ];
 
-// ===== LEVEL SYSTEM =====
-const LEVELS = [
-  { level: 1, title: 'Balak', subtitle: 'Beginner', icon: '💒', kpRequired: 0, unlock: 'Welcome to your spiritual journey!' },
-  { level: 2, title: 'Shravak', subtitle: 'Listener', icon: '👂', kpRequired: 300, unlock: 'Streak counter unlocked!' },
-  { level: 3, title: 'Sadhak', subtitle: 'Practitioner', icon: '🧘', kpRequired: 1000, unlock: 'Custom pachchakhan option!' },
-  { level: 4, title: 'Tapasvi', subtitle: 'Ascetic', icon: '🔥', kpRequired: 3000, unlock: 'Golden theme unlocked!' },
-  { level: 5, title: 'Gyani', subtitle: 'Wise One', icon: '📖', kpRequired: 7000, unlock: 'Weekly insights unlocked!' },
-  { level: 6, title: 'Vairagi', subtitle: 'Detached', icon: '🕊️', kpRequired: 15000, unlock: 'Legendary glow achieved!' }
-];
-
 // ===== ACHIEVEMENT BADGES =====
 const BADGES = [
   { id: 'early_riser', name: 'Early Riser', icon: '🌅', desc: 'Complete Pooja before 7 AM, 5 times', rarity: 'Common', condition: 'earlyPooja', threshold: 5 },
@@ -45,7 +35,7 @@ const BADGES = [
   { id: 'perfect_week', name: 'Perfect Week', icon: '💎', desc: 'All tasks every day for 7 days', rarity: 'Rare', condition: 'perfectDays', threshold: 7 },
   { id: 'monthly_champion', name: 'Monthly Champion', icon: '👑', desc: '30-day streak', rarity: 'Epic', condition: 'streak', threshold: 30 },
   { id: 'karma_king', name: 'Karma King', icon: '⭐', desc: 'Earn 10,000 KP total', rarity: 'Legendary', condition: 'totalKP', threshold: 10000 },
-  { id: 'spiritual_warrior', name: 'Spiritual Warrior', icon: '🕉️', desc: 'Reach Level 5 (Gyani)', rarity: 'Epic', condition: 'level', threshold: 5 },
+  { id: 'spiritual_warrior', name: 'Spiritual Warrior', icon: '🕉️', desc: 'Earn 7,000 KP total', rarity: 'Epic', condition: 'totalKP', threshold: 7000 },
   { id: 'pratikraman_pro', name: 'Pratikraman Pro', icon: '🙏', desc: 'Complete both daily pratikraman 20 times', rarity: 'Uncommon', condition: 'totalFullPratikraman', threshold: 20 },
   { id: 'niyam_follower', name: 'Niyam Follower', icon: '✨', desc: 'Follow daily pachchakhan 15 times', rarity: 'Common', condition: 'totalNiyam', threshold: 15 },
   { id: 'first_step', name: 'First Step', icon: '👣', desc: 'Complete your first activity', rarity: 'Common', condition: 'totalActivities', threshold: 1 },

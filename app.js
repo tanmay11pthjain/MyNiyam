@@ -270,7 +270,11 @@ class KalyanMitra {
     btn.querySelector('span').textContent = 'Saving...';
     errorEl.classList.add('hidden');
 
-    const regData = { name, dob, phone, city, area, sanghCode };
+    const regData = {
+      name, dob, phone, city, area, sanghCode,
+      sanghName: this._selectedSangh.name,
+      sanghCity: this._selectedSangh.city
+    };
     const user = this._currentAuthUser;
 
     try {
@@ -324,6 +328,28 @@ class KalyanMitra {
     this.setupUserEventListeners();
     this.startAutoLockCheck();
     this.checkStreakWarning();
+    this.renderHeaderBrand();
+  }
+
+  async renderHeaderBrand() {
+    const el = document.getElementById('brand-sangh');
+    if (!el) return;
+    try {
+      const snap = await db.ref(`users/${this.uid}/registration`).once('value');
+      const reg = snap.val() || {};
+      let name = reg.sanghName;
+      const code = reg.sanghCode;
+      if (!name && code) {
+        const sanghs = await Auth.fetchSanghs();
+        const match = sanghs.find(s => s.code === code);
+        if (match) name = match.name;
+      }
+      if (name && code) el.textContent = `${name} (${code})`;
+      else if (code) el.textContent = code;
+      else el.textContent = '';
+    } catch (e) {
+      console.warn('Failed to load sangh info for header:', e);
+    }
   }
 
   async fetchGeolocationAndPanchang() {
@@ -697,7 +723,6 @@ class KalyanMitra {
     document.getElementById('btn-user-logout').addEventListener('click', () => this.logout());
 
     // Overlays
-    document.getElementById('btn-close-levelup').addEventListener('click', () => this.closeLevelUp());
     document.getElementById('btn-close-badge').addEventListener('click', () => this.closeBadgeUnlock());
     document.getElementById('btn-close-summary').addEventListener('click', () => this.closeEveningSummary());
     const closeDayEl = document.getElementById('btn-close-day-detail');
@@ -1086,9 +1111,6 @@ class KalyanMitra {
   }
 
   renderHeader() {
-    const level = this.getCurrentLevel();
-    document.getElementById('level-icon').textContent = level.icon;
-    document.getElementById('level-title').textContent = level.title;
     document.getElementById('karma-points').textContent = `${this.profile.totalKP} KP`;
 
     document.getElementById('streak-count').textContent = this.profile.currentStreak;
@@ -1099,15 +1121,6 @@ class KalyanMitra {
     else if (s >= 7) flame.textContent = '🔥🔥';
     else if (s >= 3) flame.textContent = '🔥';
     else flame.textContent = '🕯️';
-
-    const nextLevel = this.getNextLevel();
-    const prevKP = level.kpRequired;
-    const nextKP = nextLevel ? nextLevel.kpRequired : level.kpRequired;
-    const progress = nextLevel ? ((this.profile.totalKP - prevKP) / (nextKP - prevKP)) * 100 : 100;
-    document.getElementById('xp-bar-fill').style.width = `${Math.min(100, Math.max(3, progress))}%`;
-    document.getElementById('xp-bar-text').textContent = nextLevel
-      ? `Lvl ${level.level} • ${this.profile.totalKP}/${nextKP} KP`
-      : `Lvl ${level.level} • MAX ✨`;
   }
 
   renderActivities() {
@@ -1439,26 +1452,10 @@ class KalyanMitra {
   }
 
   // ===== GAMIFICATION ENGINE =====
-  getCurrentLevel() {
-    let current = LEVELS[0];
-    for (const level of LEVELS) {
-      if (this.profile.totalKP >= level.kpRequired) current = level;
-    }
-    return current;
-  }
-
-  getNextLevel() {
-    return LEVELS.find(l => l.kpRequired > this.profile.totalKP) || null;
-  }
-
   addKarmaPoints(points, reason) {
-    const prevLevel = this.getCurrentLevel();
     this.profile.totalKP += points;
     this.dailyLog.kpEarned = (this.dailyLog.kpEarned || 0) + points;
     this.showKPPopup(points);
-
-    const newLevel = this.getCurrentLevel();
-    if (newLevel.level > prevLevel.level) this.showLevelUp(newLevel);
   }
 
   deductKarmaPoints(points) {
@@ -1552,7 +1549,6 @@ class KalyanMitra {
         case 'totalSamayik': earned = (p.totalSamayik || 0) >= badge.threshold; break;
         case 'perfectDays': earned = (p.totalPerfectDays || 0) >= badge.threshold; break;
         case 'totalKP': earned = p.totalKP >= badge.threshold; break;
-        case 'level': earned = this.getCurrentLevel().level >= badge.threshold; break;
         case 'totalFullPratikraman': earned = ((p.totalDevasiya || 0) + (p.totalRaysiya || 0)) >= badge.threshold; break;
         case 'totalNiyam': earned = (p.totalNiyam || 0) >= badge.threshold; break;
         case 'totalActivities': earned = (p.totalActivities || 0) >= badge.threshold; break;
@@ -1620,23 +1616,6 @@ class KalyanMitra {
     setTimeout(() => el.classList.remove('show'), 2000);
   }
 
-  showLevelUp(level) {
-    document.getElementById('level-up-icon').textContent = level.icon;
-    document.getElementById('level-up-name').textContent = `You are now a ${level.title}!`;
-    document.getElementById('level-up-unlock').textContent = level.unlock;
-    const overlay = document.getElementById('level-up-overlay');
-    overlay.classList.remove('hidden');
-    overlay.classList.add('show');
-    this.createConfetti(overlay);
-    this.renderAchievements();
-  }
-
-  closeLevelUp() {
-    const o = document.getElementById('level-up-overlay');
-    o.classList.remove('show'); o.classList.add('hidden');
-    this.renderHeader();
-  }
-
   showBadgeUnlock(badge) {
     document.getElementById('badge-unlock-icon').textContent = badge.icon;
     document.getElementById('badge-unlock-name').textContent = badge.name;
@@ -1696,17 +1675,6 @@ class KalyanMitra {
         <span class="badge-name">${earned ? badge.name : '???'}</span>
         <span class="badge-rarity" style="color: ${RARITY_COLORS[badge.rarity]}">${badge.rarity}</span>`;
       grid.appendChild(item);
-    }
-
-    const journey = document.getElementById('level-journey');
-    journey.innerHTML = '';
-    const curLevel = this.getCurrentLevel();
-    for (const level of LEVELS) {
-      const reached = this.profile.totalKP >= level.kpRequired;
-      const node = document.createElement('div');
-      node.className = `journey-node ${reached ? 'reached' : ''} ${level.level === curLevel.level ? 'current' : ''}`;
-      node.innerHTML = `<div class="journey-dot">${level.icon}</div><div class="journey-info"><span class="journey-title">${level.title}</span><span class="journey-subtitle">${level.subtitle} • ${level.kpRequired} KP</span></div>`;
-      journey.appendChild(node);
     }
   }
 
@@ -2000,10 +1968,10 @@ class KalyanMitra {
   renderAdminProgress() {
     const p = this.profile, d = this.dailyLog, s = this.settings;
 
-    // Level
-    const level = this.getCurrentLevel();
-    document.getElementById('admin-user-level-icon').textContent = level.icon;
-    document.getElementById('admin-user-level').textContent = `${level.title} (Lvl ${level.level})`;
+    // Badges earned
+    const badgeCount = (p.badges || []).length;
+    document.getElementById('admin-user-level-icon').textContent = '🏅';
+    document.getElementById('admin-user-level').textContent = `${badgeCount} Badge${badgeCount === 1 ? '' : 's'} Earned`;
     document.getElementById('admin-user-kp').textContent = `${p.totalKP} KP`;
     document.getElementById('admin-user-streak').textContent = `${p.currentStreak} day streak`;
     const flame = document.getElementById('admin-user-streak-flame');

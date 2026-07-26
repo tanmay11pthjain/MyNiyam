@@ -86,15 +86,16 @@
   <!-- ===== USER DASHBOARD ===== -->
   <div id="app" class="app-hidden">
 
-    <!-- Header: Level + XP + Streak + Logout -->
+    <!-- Header: Brand + Sangh + Points + Streak + Logout -->
     <header id="app-header">
+      <div class="header-brand">
+        <span class="brand-name">🙏 MyNiyam</span>
+        <span class="brand-sangh" id="brand-sangh"></span>
+      </div>
       <div class="header-top">
-        <div class="level-section">
-          <span class="level-icon" id="level-icon">💒</span>
-          <div class="level-info">
-            <span class="level-title" id="level-title">Balak</span>
-            <span class="karma-points" id="karma-points">10 KP</span>
-          </div>
+        <div class="kp-section">
+          <span class="kp-icon">⭐</span>
+          <span class="karma-points" id="karma-points">10 KP</span>
         </div>
         <div class="header-right">
           <div class="streak-section" id="streak-section">
@@ -103,12 +104,6 @@
           </div>
           <button class="btn-header-logout" id="btn-user-logout" title="Logout">↩</button>
         </div>
-      </div>
-      <div class="xp-bar-container">
-        <div class="xp-bar-track">
-          <div class="xp-bar-fill" id="xp-bar-fill" style="width: 3%"></div>
-        </div>
-        <span class="xp-bar-text" id="xp-bar-text">Lvl 1 • 10/300 KP</span>
       </div>
     </header>
 
@@ -415,8 +410,6 @@
         </div>
         <h2 class="section-heading">🏆 Trophy Shelf</h2>
         <div class="badges-grid" id="badges-grid"></div>
-        <h2 class="section-heading">🏔️ Spiritual Journey</h2>
-        <div class="level-journey" id="level-journey"></div>
       </div>
       <div class="bottom-spacer"></div>
     </div>
@@ -589,9 +582,9 @@
 
           <div class="admin-profile-card">
             <div class="admin-profile-header">
-              <span class="admin-profile-icon" id="admin-user-level-icon">💒</span>
+              <span class="admin-profile-icon" id="admin-user-level-icon">🏅</span>
               <div class="admin-profile-info">
-                <span class="admin-profile-title" id="admin-user-level">Balak</span>
+                <span class="admin-profile-title" id="admin-user-level">0 Badges Earned</span>
                 <span class="admin-profile-kp" id="admin-user-kp">10 KP</span>
               </div>
               <div class="admin-profile-streak">
@@ -688,18 +681,6 @@
       <h3 class="day-detail-date" id="day-detail-date">Mon, 19 Jul</h3>
       <div class="day-detail-summary" id="day-detail-summary"></div>
       <div class="day-detail-grid" id="day-detail-grid"></div>
-    </div>
-  </div>
-
-  <!-- Level Up -->
-  <div id="level-up-overlay" class="overlay hidden">
-    <div class="overlay-content level-up-content">
-      <div class="level-up-glow"></div>
-      <div class="level-up-icon" id="level-up-icon">🧘</div>
-      <h2 class="level-up-title">Level Up!</h2>
-      <p class="level-up-name" id="level-up-name">You are now a Sadhak!</p>
-      <p class="level-up-unlock" id="level-up-unlock">Unlocked!</p>
-      <button class="btn-continue" id="btn-close-levelup">Jai Jinendra 🙏</button>
     </div>
   </div>
 
