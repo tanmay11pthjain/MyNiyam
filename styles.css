@@ -580,9 +580,7 @@ body {
 /* Brand row */
 .header-brand {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
+  flex-direction: column;
   margin-bottom: 8px;
 }
 
@@ -591,14 +589,12 @@ body {
   font-weight: 700;
   font-size: 1.1rem;
   line-height: 1.2;
-  flex-shrink: 0;
 }
 
 .brand-sangh {
   font-size: 0.72rem;
   opacity: 0.8;
   font-weight: 500;
-  text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
