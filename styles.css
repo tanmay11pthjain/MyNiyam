@@ -987,6 +987,13 @@ body {
   color: var(--text-primary);
 }
 
+.card-title-hindi {
+  display: block;        /* forces it onto its own line below the title */
+  font-size: 0.75em;      /* smaller than the title */
+  color: #888;            /* dimmer grey — tweak to taste */
+  font-weight: normal;
+}
+
 .card-kp {
   font-size: 0.72rem;
   font-weight: 600;
