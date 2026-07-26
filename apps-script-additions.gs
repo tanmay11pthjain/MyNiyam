@@ -7,7 +7,14 @@
 //
 // After pasting: use "Manage deployments" -> edit the EXISTING deployment
 // (do not create a new one, or the /exec URL will change and auth.js:4 will
-// need to be updated to match).
+// need to be updated to match). Also check "Who has access" is set to
+// "Anyone" — anything stricter makes Apps Script omit CORS headers entirely,
+// which is what was breaking EVERY action, not just get_sanghs: fetch()
+// calls for google_login/register/get_sangh_users were failing the exact
+// same way (visible in the browser console as a CORS error on /exec). The
+// doGet(e) added below gives the client's JSONP fallback a way around that
+// regardless of this setting, but fixing "Who has access" is still the real,
+// permanent fix.
 // ============================================================
 
 // ---- CONFIG: adjust these two blocks to match your actual Sheet ----
@@ -105,28 +112,37 @@ function handleUpdateProfile(params) {
 }
 
 // ============================================================
-// Sangh List (SECOND sheet of the workbook)
+// Sangh List (sheet named "Sanghs", columns: Code, Name, City)
 //
 // Fixes the registration-form dropdown, which was showing empty because the
-// client's get_sanghs request had no matching doGet(e)/doPost(e) branch.
+// client's get_sanghs request had no matching backend branch — and,
+// separately, because of the CORS issue described at the top of this file.
 // ============================================================
 
+// Looked up by NAME first (confirmed sheet name: "Sanghs"), falling back to
+// position (second sheet, 0-indexed) if that name isn't found — so this
+// still works even if the tab gets renamed later.
+const SANGH_SHEET_NAME = 'Sanghs';
+
 // Maps each logical field to the EXACT column header text in row 1 of the
-// SECOND sheet/tab (the sangh list) — matched case-insensitively, whitespace-
-// trimmed. Edit the right-hand strings to match your real headers.
+// sangh list — matched case-insensitively, whitespace-trimmed.
 const SANGH_COLUMNS = {
   code: 'Code',
   name: 'Name',
   city: 'City',
 };
 
+function _getSanghSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  return ss.getSheetByName(SANGH_SHEET_NAME) || ss.getSheets()[1] || null;
+}
+
 // ---- action: get_sanghs ----
 // Request:  { action: 'get_sanghs' }  (no uid needed)
 // Response: { success: true, sanghs: [{ code, name, city }, ...] }
 //        or { success: false, error: 'sheet_not_found' | 'code_column_not_found' }
 function handleGetSanghs() {
-  const sheets = SpreadsheetApp.getActive().getSheets();
-  const sheet = sheets[1]; // the SECOND sheet, 0-indexed
+  const sheet = _getSanghSheet_();
   if (!sheet) return { success: false, error: 'sheet_not_found' };
 
   const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -159,19 +175,64 @@ function handleGetSanghs() {
   return { success: true, sanghs: sanghs };
 }
 
+// Run this manually from the Apps Script editor (select testGetSanghs in the
+// function dropdown, then Run) to confirm the sheet reads correctly BEFORE
+// testing through the browser at all. Check View -> Logs for the result.
+function testGetSanghs() {
+  const result = handleGetSanghs();
+  Logger.log(JSON.stringify(result));
+  return result;
+}
+
 // ============================================================
-// WIRING — add these lines to your existing action dispatcher(s). Match
-// whatever response-wrapping helper your doPost/doGet already use for the
-// other actions (e.g. ContentService.createTextOutput with JSON.stringify +
-// .setMimeType(ContentService.MimeType.JSON)):
+// JSONP-aware response wrapper + a doGet(e) that works for EVERY action
+// ============================================================
+
+// Wraps a plain result object as JSONP (callback(...)) when the request
+// carried a `callback` query param, or as plain JSON otherwise. Use this for
+// get_profile/update_profile/get_sanghs — see WIRING below for how the 3
+// pre-existing actions get the same treatment without touching their logic.
+function respond_(result, e) {
+  const text = JSON.stringify(result);
+  const callback = e && e.parameter && e.parameter.callback;
+  if (callback) {
+    return ContentService.createTextOutput(callback + '(' + text + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);
+}
+
+// The client's JSONP fallback (auth.js: _fetchViaJsonp) sends EVERY action —
+// including the pre-existing google_login/register/get_sangh_users — as a GET
+// with ?callback=...&payload=<JSON>. Rather than re-implementing those three
+// actions' logic here (which would risk diverging from your real
+// implementation and is safer not to guess at), this doGet reconstructs a
+// POST-shaped event and calls your EXISTING doPost(e) directly, then
+// re-wraps whatever it returns as JSONP.
 //
-// In doPost(e) — alongside 'google_login' / 'register' / 'get_sangh_users':
-//   if (action === 'get_profile')    return respond(handleGetProfile(params));
-//   if (action === 'update_profile') return respond(handleUpdateProfile(params));
-//   if (action === 'get_sanghs')     return respond(handleGetSanghs());
+// IMPORTANT: if your project ALREADY defines a doGet(e) function anywhere,
+// delete that one (or merge its logic in here) — you cannot have two.
+function doGet(e) {
+  const fakeEvent = { parameter: e.parameter, postData: { contents: (e.parameter && e.parameter.payload) || '{}' } };
+  const output = doPost(fakeEvent); // your existing doPost — must return a ContentService TextOutput
+  const text = output.getContent();
+  const callback = e.parameter && e.parameter.callback;
+  if (callback) {
+    return ContentService.createTextOutput(callback + '(' + text + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);
+}
+
+// ============================================================
+// WIRING — the only edits needed in your EXISTING doPost(e):
 //
-// In doGet(e) — the client no longer sends get_sanghs as a GET, but wiring it
-// here too costs nothing and makes the action work regardless of method:
-//   if (action === 'get_sanghs')     return respond(handleGetSanghs());
+//   if (action === 'get_profile')    return respond_(handleGetProfile(params), e);
+//   if (action === 'update_profile') return respond_(handleUpdateProfile(params), e);
+//   if (action === 'get_sanghs')     return respond_(handleGetSanghs(), e);
 //
+// Add these alongside your current branches for 'google_login' / 'register' /
+// 'get_sangh_users' — leave those three completely untouched. The doGet(e)
+// above then makes ALL SIX actions work over JSONP automatically, since it
+// simply forwards to your doPost.
 // ============================================================

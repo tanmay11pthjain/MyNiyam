@@ -151,9 +151,14 @@ class KalyanMitra {
     if (this._sanghsList.length === 0) {
       const errorEl = document.getElementById('register-error');
       if (errorEl) {
-        errorEl.textContent = 'Could not load the sangh list. Please check your connection and reload.';
+        errorEl.textContent = 'Could not load the sangh list right now. Please try again in a moment, or contact your admin if this keeps happening.';
         errorEl.classList.remove('hidden');
       }
+      // Not a connectivity issue if you're seeing this with a healthy network —
+      // check the browser console for the actual Apps Script response/error
+      // (a CORS error here means the deployment's "Who has access" needs to be
+      // "Anyone", or the get_sanghs action isn't wired into doPost/doGet yet).
+      console.error('Sangh list came back empty — see the Apps Script response/error logged above for the real cause.');
     }
     this._setupSanghAutocomplete();
   }

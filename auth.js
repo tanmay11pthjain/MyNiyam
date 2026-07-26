@@ -7,6 +7,71 @@ const Auth = (() => {
   let authListeners = [];
   let _unsubFirebase = null;
 
+  // ===== SHEETS TRANSPORT (fetch, with a JSONP fallback for CORS failures) =====
+  // Apps Script only sends Access-Control-Allow-Origin when the deployment's
+  // "Who has access" is set to Anyone; any stricter setting makes every fetch()
+  // reject with a CORS TypeError. JSONP sidesteps CORS entirely (a <script> tag
+  // is not subject to the same-origin policy), so it's the fallback here rather
+  // than a second fetch variant. Returns the raw response text either way —
+  // callers keep their existing JSON.parse + fallback handling unchanged.
+  async function _sheetsRequest(payload) {
+    try {
+      return await _fetchViaPost(payload);
+    } catch (e) {
+      console.warn("Direct fetch to Apps Script failed (likely CORS) — retrying via JSONP:", e);
+      return _fetchViaJsonp(payload);
+    }
+  }
+
+  async function _fetchViaPost(payload) {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload),
+      redirect: "follow"
+    });
+    return response.text();
+  }
+
+  let _jsonpCounter = 0;
+  function _fetchViaJsonp(payload) {
+    return new Promise((resolve, reject) => {
+      const cbName = `__myniyam_cb_${Date.now()}_${_jsonpCounter++}`;
+      const script = document.createElement('script');
+      let settled = false;
+
+      const cleanup = () => {
+        clearTimeout(timer);
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+      };
+
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('JSONP request to Apps Script timed out'));
+      }, 15000);
+
+      window[cbName] = (data) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(JSON.stringify(data));
+      };
+
+      script.onerror = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('JSONP script load failed'));
+      };
+
+      script.src = `${APPS_SCRIPT_URL}?callback=${cbName}&payload=${encodeURIComponent(JSON.stringify(payload))}`;
+      document.body.appendChild(script);
+    });
+  }
+
   // ===== GOOGLE SIGN IN =====
   async function signInWithGoogle() {
     const provider = new firebase.auth.GoogleAuthProvider();
@@ -33,13 +98,7 @@ const Auth = (() => {
 
   async function _fetchRoleFromSheets(uid, email, name) {
     try {
-      const response = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "google_login", uid, email, name }),
-        redirect: "follow"
-      });
-      const text = await response.text();
+      const text = await _sheetsRequest({ action: "google_login", uid, email, name });
       console.log("Sheets login response:", text);
       try {
         const result = JSON.parse(text);
@@ -131,16 +190,7 @@ const Auth = (() => {
 
     _sanghsFetchPromise = (async () => {
       try {
-        // POST, matching every other working action (google_login/register/
-        // get_sangh_users) — the previous GET request depended on a doGet(e)
-        // handler that may not exist on the deployed Apps Script.
-        const response = await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ action: "get_sanghs" }),
-          redirect: "follow"
-        });
-        const text = await response.text();
+        const text = await _sheetsRequest({ action: "get_sanghs" });
         console.log("Sanghs response:", text);
         try {
           const result = JSON.parse(text);
@@ -177,23 +227,17 @@ const Auth = (() => {
 
   async function sendRegistration(uid, email, regData) {
     try {
-      const response = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "register",
-          uid,
-          email,
-          name: regData.name,
-          dob: regData.dob,
-          phone: regData.phone,
-          city: regData.city,
-          area: regData.area,
-          sanghCode: regData.sanghCode || ""
-        }),
-        redirect: "follow"
+      const text = await _sheetsRequest({
+        action: "register",
+        uid,
+        email,
+        name: regData.name,
+        dob: regData.dob,
+        phone: regData.phone,
+        city: regData.city,
+        area: regData.area,
+        sanghCode: regData.sanghCode || ""
       });
-      const text = await response.text();
       console.log("Sheets registration response:", text);
     } catch (e) {
       console.error("Registration sheet update failed:", e);
@@ -205,13 +249,7 @@ const Auth = (() => {
   // Returns the profile object on success, or null (caller falls back to Firebase).
   async function fetchProfile(uid) {
     try {
-      const response = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "get_profile", uid }),
-        redirect: "follow"
-      });
-      const text = await response.text();
+      const text = await _sheetsRequest({ action: "get_profile", uid });
       console.log("Get profile response:", text);
       try {
         const result = JSON.parse(text);
@@ -230,19 +268,13 @@ const Auth = (() => {
   // must not mirror to Firebase unless this resolves { success: true }.
   async function updateProfile(uid, fields) {
     try {
-      const response = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "update_profile",
-          uid,
-          phone: fields.phone,
-          city: fields.city,
-          area: fields.area
-        }),
-        redirect: "follow"
+      const text = await _sheetsRequest({
+        action: "update_profile",
+        uid,
+        phone: fields.phone,
+        city: fields.city,
+        area: fields.area
       });
-      const text = await response.text();
       console.log("Update profile response:", text);
       try {
         const result = JSON.parse(text);
@@ -261,13 +293,7 @@ const Auth = (() => {
   // Fetch users belonging to specific sangh codes from the Sheet (master)
   async function fetchSanghUsers(sanghCodes) {
     try {
-      const response = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "get_sangh_users", sanghCodes: sanghCodes }),
-        redirect: "follow"
-      });
-      const text = await response.text();
+      const text = await _sheetsRequest({ action: "get_sangh_users", sanghCodes: sanghCodes });
       console.log("Sangh users response:", text);
       try {
         const result = JSON.parse(text);
