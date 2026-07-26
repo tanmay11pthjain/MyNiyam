@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
 
@@ -443,7 +443,56 @@
       <div class="bottom-spacer"></div>
     </div>
 
-    <!-- BOTTOM NAV (User: 3 tabs) -->
+    <!-- TAB: PROFILE -->
+    <div id="tab-profile" class="tab-content">
+      <h2 class="section-heading">👤 My Profile</h2>
+
+      <div class="profile-header">
+        <img class="profile-avatar hidden" id="profile-avatar" src="" alt="">
+        <div class="profile-header-info">
+          <span class="profile-header-name" id="profile-header-name"></span>
+          <span class="profile-header-email" id="profile-header-email"></span>
+        </div>
+      </div>
+
+      <p class="profile-sync-status hidden" id="profile-sync-status">🔄 Syncing with sangh records...</p>
+
+      <div class="profile-readonly-row">
+        <span class="profile-readonly-label">Full Name</span>
+        <span class="profile-readonly-value" id="profile-view-name"></span>
+      </div>
+      <div class="profile-readonly-row">
+        <span class="profile-readonly-label">Date of Birth</span>
+        <span class="profile-readonly-value" id="profile-view-dob"></span>
+      </div>
+      <div class="profile-readonly-row">
+        <span class="profile-readonly-label">Sangh</span>
+        <span class="profile-readonly-value" id="profile-view-sangh"></span>
+      </div>
+
+      <div class="input-group">
+        <label for="profile-phone">Phone Number</label>
+        <input type="tel" id="profile-phone" autocomplete="tel" placeholder="10-digit phone number" maxlength="10">
+      </div>
+      <div class="input-group">
+        <label for="profile-city">City / Town / Village</label>
+        <input type="text" id="profile-city" placeholder="e.g. Ahmedabad">
+      </div>
+      <div class="input-group">
+        <label for="profile-area">Area / Locality</label>
+        <input type="text" id="profile-area" placeholder="e.g. Paldi">
+      </div>
+
+      <div class="register-error hidden" id="profile-error"></div>
+      <button type="button" class="btn-login" id="btn-profile-save">
+        <span>💾 Save Changes</span>
+      </button>
+      <div class="save-confirmation hidden" id="profile-save-confirmation">✅ Profile updated!</div>
+
+      <div class="bottom-spacer"></div>
+    </div>
+
+    <!-- BOTTOM NAV (User: 4 tabs) -->
     <nav id="bottom-nav">
       <button class="nav-item active" data-tab="home">
         <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
@@ -453,6 +502,9 @@
       </button>
       <button class="nav-item" data-tab="achievements">
         <span class="nav-icon">🏆</span><span class="nav-label">Badges</span>
+      </button>
+      <button class="nav-item" data-tab="profile">
+        <span class="nav-icon">👤</span><span class="nav-label">Profile</span>
       </button>
     </nav>
   </div>
@@ -755,8 +807,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=18"></script>
-  <script src="auth.js?v=18"></script>
-  <script src="app.js?v=18"></script>
+  <script src="data.js?v=19"></script>
+  <script src="auth.js?v=19"></script>
+  <script src="app.js?v=19"></script>
 </body>
 </html>

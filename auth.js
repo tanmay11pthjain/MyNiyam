@@ -182,6 +182,64 @@ const Auth = (() => {
     }
   }
 
+  // Fetch a single user's full profile row from the Sheet (master). Deliberately
+  // uncached — the Profile tab calls this on every open so Sheet-side edits show up.
+  // Returns the profile object on success, or null (caller falls back to Firebase).
+  async function fetchProfile(uid) {
+    try {
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "get_profile", uid }),
+        redirect: "follow"
+      });
+      const text = await response.text();
+      console.log("Get profile response:", text);
+      try {
+        const result = JSON.parse(text);
+        if (result.success) return result.profile || null;
+      } catch (parseErr) {
+        console.error("Failed to parse get_profile response:", text);
+      }
+    } catch (e) {
+      console.error("Fetch profile failed:", e);
+    }
+    return null;
+  }
+
+  // Updates the editable profile fields (phone/city/area) on the Sheet. Unlike
+  // sendRegistration(), this checks and returns the actual success flag — callers
+  // must not mirror to Firebase unless this resolves { success: true }.
+  async function updateProfile(uid, fields) {
+    try {
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "update_profile",
+          uid,
+          phone: fields.phone,
+          city: fields.city,
+          area: fields.area
+        }),
+        redirect: "follow"
+      });
+      const text = await response.text();
+      console.log("Update profile response:", text);
+      try {
+        const result = JSON.parse(text);
+        if (result.success) return { success: true };
+        return { success: false, error: (result && result.error) || 'unknown' };
+      } catch (parseErr) {
+        console.error("Failed to parse update_profile response:", text);
+        return { success: false, error: 'parse_error' };
+      }
+    } catch (e) {
+      console.error("Update profile failed:", e);
+      return { success: false, error: 'network_error' };
+    }
+  }
+
   // Fetch users belonging to specific sangh codes from the Sheet (master)
   async function fetchSanghUsers(sanghCodes) {
     try {
@@ -213,6 +271,8 @@ const Auth = (() => {
     getCurrentUser,
     sendRegistration,
     fetchSanghs,
-    fetchSanghUsers
+    fetchSanghUsers,
+    fetchProfile,
+    updateProfile
   };
 })();

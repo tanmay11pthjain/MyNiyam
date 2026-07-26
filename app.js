@@ -768,6 +768,10 @@ class KalyanMitra {
     if (btnConfirmSubmit) btnConfirmSubmit.addEventListener('click', () => this.confirmSubmitDay());
     const btnCancelSubmit = document.getElementById('btn-cancel-submit');
     if (btnCancelSubmit) btnCancelSubmit.addEventListener('click', () => this.closeSubmitConfirm());
+
+    // Profile
+    const btnProfileSave = document.getElementById('btn-profile-save');
+    if (btnProfileSave) btnProfileSave.addEventListener('click', () => this.saveProfileEdits());
   }
 
   setupAdminEventListeners() {
@@ -1957,6 +1961,175 @@ class KalyanMitra {
     }
   }
 
+  // ===== PROFILE TAB =====
+  async renderProfile() {
+    // Header (avatar/name/email) — from the already-loaded auth user, no network needed.
+    const user = this._currentAuthUser || {};
+    const avatarEl = document.getElementById('profile-avatar');
+    if (avatarEl) {
+      if (user.photoURL) {
+        avatarEl.src = user.photoURL;
+        avatarEl.classList.remove('hidden');
+      } else {
+        avatarEl.classList.add('hidden');
+      }
+    }
+    const nameHeaderEl = document.getElementById('profile-header-name');
+    if (nameHeaderEl) nameHeaderEl.textContent = user.name || '';
+    const emailEl = document.getElementById('profile-header-email');
+    if (emailEl) emailEl.textContent = user.email || '';
+
+    // Paint immediately from the Firebase copy — instant, always available, and what
+    // keeps this tab usable even before the Sheet-side get_profile/update_profile
+    // actions have been deployed.
+    try {
+      const snap = await db.ref(`users/${this.uid}/registration`).once('value');
+      this._paintProfile(snap.val() || {});
+    } catch (e) {
+      console.warn('Failed to load registration from Firebase:', e);
+    }
+
+    // Then refresh from the Sheet (the master) so external Sheet edits show up.
+    this.refreshProfileFromSheet();
+  }
+
+  async refreshProfileFromSheet() {
+    const statusEl = document.getElementById('profile-sync-status');
+    if (statusEl) statusEl.classList.remove('hidden');
+    try {
+      const profile = await Auth.fetchProfile(this.uid);
+      if (profile) {
+        this._paintProfile(profile);
+        await this._mirrorProfileToFirebase(profile);
+      } else {
+        console.warn('No profile returned from Sheet — keeping Firebase values on screen.');
+      }
+    } catch (e) {
+      console.warn('Failed to refresh profile from Sheet:', e);
+    } finally {
+      if (statusEl) statusEl.classList.add('hidden');
+    }
+  }
+
+  // Paints the read-only fields, sangh chip, and editable inputs from either the
+  // Firebase registration object or the Sheet's get_profile response — both use the
+  // same logical field names (name, dob, phone, city, area, sanghCode), so one
+  // painter handles both sources. Skips an input the user is actively typing in so
+  // an async Sheet refresh can't clobber an in-progress edit.
+  _paintProfile(data) {
+    const nameEl = document.getElementById('profile-view-name');
+    if (nameEl) nameEl.textContent = data.name || this._currentAuthUser.name || '—';
+
+    const dobEl = document.getElementById('profile-view-dob');
+    if (dobEl) dobEl.textContent = data.dob ? this._formatDob(data.dob) : '—';
+
+    const phoneEl = document.getElementById('profile-phone');
+    if (phoneEl && document.activeElement !== phoneEl) phoneEl.value = data.phone || '';
+    const cityEl = document.getElementById('profile-city');
+    if (cityEl && document.activeElement !== cityEl) cityEl.value = data.city || '';
+    const areaEl = document.getElementById('profile-area');
+    if (areaEl && document.activeElement !== areaEl) areaEl.value = data.area || '';
+
+    this._paintSanghChip(data);
+  }
+
+  _formatDob(dobStr) {
+    const d = new Date(`${dobStr}T00:00:00`);
+    if (isNaN(d.getTime())) return dobStr;
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  // Renders the sangh as a read-only chip (no remove button) — this, plus never
+  // calling _setupSanghAutocomplete() here, is the entire client-side sangh lock.
+  // The real enforcement is server-side, in the update_profile Apps Script action.
+  async _paintSanghChip(data) {
+    const el = document.getElementById('profile-view-sangh');
+    if (!el) return;
+    const code = data.sanghCode || (this._currentAuthUser.sanghCodes || [])[0];
+    if (!code) { el.textContent = 'Not set'; return; }
+
+    let name = data.sanghName;
+    let city = data.sanghCity;
+    if (!name) {
+      try {
+        const sanghs = await Auth.fetchSanghs();
+        const match = sanghs.find(s => s.code === code);
+        if (match) { name = match.name; city = match.city; }
+      } catch (e) { /* fall back to code-only display below */ }
+    }
+    el.innerHTML = name
+      ? `<span class="sangh-chip"><strong>${code}</strong> — ${name}${city ? ', ' + city : ''}</span>`
+      : `<span class="sangh-chip"><strong>${code}</strong></span>`;
+  }
+
+  // Mirrors Sheet data into Firebase with update() (not set()) so untouched keys like
+  // sanghName/sanghCity/dob survive. Also mirrors name to the denormalized
+  // users/{uid}/name path that the admin leaderboard reads, so a name edited only in
+  // the Sheet doesn't leave the admin view stale.
+  async _mirrorProfileToFirebase(profile) {
+    try {
+      const updates = {};
+      ['name', 'dob', 'phone', 'city', 'area', 'sanghCode'].forEach(k => {
+        if (profile[k] !== undefined) updates[k] = profile[k];
+      });
+      if (Object.keys(updates).length === 0) return;
+      await db.ref(`users/${this.uid}/registration`).update(updates);
+      if (updates.name) {
+        await db.ref(`users/${this.uid}/name`).set(updates.name);
+      }
+    } catch (e) {
+      console.warn('Failed to mirror profile to Firebase:', e);
+    }
+  }
+
+  // Bound to #btn-profile-save. Only mirrors to Firebase on a confirmed Sheet
+  // success — unlike sendRegistration()'s fire-and-forget pattern, a failure here
+  // must not let the two stores silently diverge.
+  async saveProfileEdits() {
+    const phone = document.getElementById('profile-phone').value.trim();
+    const city = document.getElementById('profile-city').value.trim();
+    const area = document.getElementById('profile-area').value.trim();
+    const errorEl = document.getElementById('profile-error');
+    const btn = document.getElementById('btn-profile-save');
+    const confEl = document.getElementById('profile-save-confirmation');
+
+    if (!phone || !city || !area) {
+      errorEl.textContent = 'Please fill all fields.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    if (!/^[0-9]{10}$/.test(phone)) {
+      errorEl.textContent = 'Please enter a valid 10-digit phone number.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    errorEl.classList.add('hidden');
+    btn.disabled = true;
+    const btnSpan = btn.querySelector('span');
+    const originalLabel = btnSpan.textContent;
+    btnSpan.textContent = 'Saving...';
+
+    try {
+      const result = await Auth.updateProfile(this.uid, { phone, city, area });
+      if (result.success) {
+        await this._mirrorProfileToFirebase({ phone, city, area });
+        confEl.classList.remove('hidden');
+        setTimeout(() => confEl.classList.add('hidden'), 2500);
+      } else {
+        errorEl.textContent = 'Failed to save. Please try again.';
+        errorEl.classList.remove('hidden');
+      }
+    } catch (e) {
+      console.error('Profile save failed:', e);
+      errorEl.textContent = 'Failed to save. Please try again.';
+      errorEl.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btnSpan.textContent = originalLabel;
+    }
+  }
+
   renderAdminHistory() {
     this._initAdminHistoryState();
     const listEl = document.getElementById('admin-history-list');
@@ -2142,6 +2315,7 @@ class KalyanMitra {
     document.querySelector(`#bottom-nav .nav-item[data-tab="${tabName}"]`).classList.add('active');
     if (tabName === 'achievements') this.renderAchievements();
     if (tabName === 'history') this.renderHistory();
+    if (tabName === 'profile') this.renderProfile();
   }
 
   switchAdminTab(tabName) {
