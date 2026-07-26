@@ -124,13 +124,20 @@ const Auth = (() => {
   let _sanghsFetchPromise = null;
 
   async function fetchSanghs() {
-    if (_sanghsCache) return _sanghsCache;
+    // Only a non-empty result is treated as cached — an empty list (e.g. from a
+    // backend that isn't deployed yet) must not permanently stick for the session.
+    if (_sanghsCache && _sanghsCache.length) return _sanghsCache;
     if (_sanghsFetchPromise) return _sanghsFetchPromise;
 
     _sanghsFetchPromise = (async () => {
       try {
-        const response = await fetch(APPS_SCRIPT_URL + "?action=get_sanghs", {
-          method: "GET",
+        // POST, matching every other working action (google_login/register/
+        // get_sangh_users) — the previous GET request depended on a doGet(e)
+        // handler that may not exist on the deployed Apps Script.
+        const response = await fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action: "get_sanghs" }),
           redirect: "follow"
         });
         const text = await response.text();
@@ -138,8 +145,19 @@ const Auth = (() => {
         try {
           const result = JSON.parse(text);
           if (result.success) {
-            _sanghsCache = result.sanghs || [];
-            return _sanghsCache;
+            // Normalize every row to trimmed strings — Sheets can return a
+            // numeric-looking code as a number, which would throw inside
+            // s.code.toLowerCase() in the autocomplete filter — and drop any row
+            // with no code.
+            const sanghs = (result.sanghs || [])
+              .map(s => ({
+                code: String(s.code || '').trim(),
+                name: String(s.name || '').trim(),
+                city: String(s.city || '').trim()
+              }))
+              .filter(s => s.code);
+            if (sanghs.length) _sanghsCache = sanghs;
+            return sanghs;
           }
         } catch (parseErr) {
           console.error("Failed to parse Sanghs response:", text);

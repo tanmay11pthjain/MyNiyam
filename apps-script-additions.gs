@@ -1,5 +1,5 @@
 // ============================================================
-// MyNiyam — Profile Get/Update additions for Apps Script
+// MyNiyam — Profile Get/Update + Sangh List additions for Apps Script
 //
 // This file is NOT loaded by the web app. It is source-of-record for backend
 // code that must be pasted into your existing Apps Script project (the one
@@ -105,13 +105,73 @@ function handleUpdateProfile(params) {
 }
 
 // ============================================================
-// WIRING — add these two lines to your existing doPost(e) action dispatcher,
-// alongside the branches you already have for 'google_login' / 'register' /
-// 'get_sanghs' / 'get_sangh_users'. Match whatever response-wrapping helper
-// your doPost already uses for those (e.g. ContentService.createTextOutput
-// with JSON.stringify + .setMimeType(ContentService.MimeType.JSON)):
+// Sangh List (SECOND sheet of the workbook)
 //
+// Fixes the registration-form dropdown, which was showing empty because the
+// client's get_sanghs request had no matching doGet(e)/doPost(e) branch.
+// ============================================================
+
+// Maps each logical field to the EXACT column header text in row 1 of the
+// SECOND sheet/tab (the sangh list) — matched case-insensitively, whitespace-
+// trimmed. Edit the right-hand strings to match your real headers.
+const SANGH_COLUMNS = {
+  code: 'Code',
+  name: 'Name',
+  city: 'City',
+};
+
+// ---- action: get_sanghs ----
+// Request:  { action: 'get_sanghs' }  (no uid needed)
+// Response: { success: true, sanghs: [{ code, name, city }, ...] }
+//        or { success: false, error: 'sheet_not_found' | 'code_column_not_found' }
+function handleGetSanghs() {
+  const sheets = SpreadsheetApp.getActive().getSheets();
+  const sheet = sheets[1]; // the SECOND sheet, 0-indexed
+  if (!sheet) return { success: false, error: 'sheet_not_found' };
+
+  const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const byHeaderText = {};
+  headerRow.forEach(function (h, i) {
+    byHeaderText[String(h).trim().toLowerCase()] = i; // 0-based column index
+  });
+  const colMap = {};
+  for (const key in SANGH_COLUMNS) {
+    const headerText = String(SANGH_COLUMNS[key]).trim().toLowerCase();
+    if (headerText in byHeaderText) colMap[key] = byHeaderText[headerText];
+  }
+  if (colMap.code === undefined) return { success: false, error: 'code_column_not_found' };
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { success: true, sanghs: [] }; // header only, no data rows yet
+
+  const dataRows = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const sanghs = [];
+  dataRows.forEach(function (row) {
+    const code = String(row[colMap.code] || '').trim();
+    if (!code) return; // skip blank rows
+    sanghs.push({
+      code: code,
+      name: colMap.name !== undefined ? String(row[colMap.name] || '').trim() : '',
+      city: colMap.city !== undefined ? String(row[colMap.city] || '').trim() : '',
+    });
+  });
+
+  return { success: true, sanghs: sanghs };
+}
+
+// ============================================================
+// WIRING — add these lines to your existing action dispatcher(s). Match
+// whatever response-wrapping helper your doPost/doGet already use for the
+// other actions (e.g. ContentService.createTextOutput with JSON.stringify +
+// .setMimeType(ContentService.MimeType.JSON)):
+//
+// In doPost(e) — alongside 'google_login' / 'register' / 'get_sangh_users':
 //   if (action === 'get_profile')    return respond(handleGetProfile(params));
 //   if (action === 'update_profile') return respond(handleUpdateProfile(params));
+//   if (action === 'get_sanghs')     return respond(handleGetSanghs());
+//
+// In doGet(e) — the client no longer sends get_sanghs as a GET, but wiring it
+// here too costs nothing and makes the action work regardless of method:
+//   if (action === 'get_sanghs')     return respond(handleGetSanghs());
 //
 // ============================================================

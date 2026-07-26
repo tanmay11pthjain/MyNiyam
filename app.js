@@ -148,6 +148,13 @@ class KalyanMitra {
     } catch (e) {
       console.warn('Failed to fetch sanghs:', e);
     }
+    if (this._sanghsList.length === 0) {
+      const errorEl = document.getElementById('register-error');
+      if (errorEl) {
+        errorEl.textContent = 'Could not load the sangh list. Please check your connection and reload.';
+        errorEl.classList.remove('hidden');
+      }
+    }
     this._setupSanghAutocomplete();
   }
 
@@ -160,7 +167,10 @@ class KalyanMitra {
 
     const showDropdown = (items) => {
       if (items.length === 0) {
-        dropdown.classList.add('hidden');
+        // No data-code attribute here, so dropdown.onclick's lookup below finds no
+        // match and this row is inert — non-clickable without any extra wiring.
+        dropdown.innerHTML = '<div class="sangh-option sangh-option-empty">No matching sangh</div>';
+        dropdown.classList.remove('hidden');
         return;
       }
       dropdown.innerHTML = items.map(s =>
