@@ -24,6 +24,7 @@ class KalyanMitra {
     this.pendingBadges = [];
     this.autoLockInterval = null;
     this.currentDayLocked = false;
+    this.currentDayLockValue = null;
     this.init();
   }
 
@@ -663,7 +664,8 @@ class KalyanMitra {
     this.dailyLog = { ...DEFAULT_DAILY_LOG, date: this.getTodayKey() };
     this.settings = { ...DEFAULT_SETTINGS };
     this.currentDayLocked = false;
-    
+    this.currentDayLockValue = null;
+
     // Show the individual view, hide the overview
     document.getElementById('admin-overview').classList.add('hidden');
     document.getElementById('admin-individual').classList.remove('hidden');
@@ -758,6 +760,14 @@ class KalyanMitra {
     document.getElementById('btn-close-summary').addEventListener('click', () => this.closeEveningSummary());
     const closeDayEl = document.getElementById('btn-close-day-detail');
     if (closeDayEl) closeDayEl.addEventListener('click', () => this.closeDayDetail());
+
+    // Submit day
+    const btnSubmit = document.getElementById('btn-submit-day');
+    if (btnSubmit) btnSubmit.addEventListener('click', () => this.submitDay());
+    const btnConfirmSubmit = document.getElementById('btn-confirm-submit');
+    if (btnConfirmSubmit) btnConfirmSubmit.addEventListener('click', () => this.confirmSubmitDay());
+    const btnCancelSubmit = document.getElementById('btn-cancel-submit');
+    if (btnCancelSubmit) btnCancelSubmit.addEventListener('click', () => this.closeSubmitConfirm());
   }
 
   setupAdminEventListeners() {
@@ -771,6 +781,8 @@ class KalyanMitra {
 
     // Lock day
     document.getElementById('btn-lock-day').addEventListener('click', () => this.adminLockDay());
+    const btnUnlockDay = document.getElementById('btn-unlock-day');
+    if (btnUnlockDay) btnUnlockDay.addEventListener('click', () => this.adminUnlockDay());
 
     // Reset
     document.getElementById('btn-admin-reset').addEventListener('click', () => this.resetProgress());
@@ -875,6 +887,7 @@ class KalyanMitra {
 
     const p4 = this.listenToRef(`${userPath}/lock_status/${todayKey}`, val => {
       this.currentDayLocked = !!val;
+      this.currentDayLockValue = val;
       if (!this.initializing) {
         if (this.currentRole === 'user') this.updateLockUI();
         else if (this.currentRole === 'admin') this.renderAdminLock();
@@ -886,8 +899,11 @@ class KalyanMitra {
 
   saveSettings() { db.ref('settings').set(this.settings); }
   saveProfile() { db.ref(`users/${this.uid}/profile`).set(this.profile); }
+  saveDailyLogFor(dateKey, log) {
+    db.ref(`users/${this.uid}/daily_logs/${dateKey}`).set(log);
+  }
   saveDailyLog() {
-    db.ref(`users/${this.uid}/daily_logs/${this.getTodayKey()}`).set(this.dailyLog);
+    this.saveDailyLogFor(this.getTodayKey(), this.dailyLog);
   }
   saveAll() { this.saveSettings(); this.saveProfile(); this.saveDailyLog(); }
 
@@ -902,9 +918,22 @@ class KalyanMitra {
     return this.currentDayLocked;
   }
 
+  // Builds the lock_status value. `by` is 'user' | 'admin' | 'auto'.
+  _lockValue(by) {
+    return { locked: true, by, at: new Date().toISOString() };
+  }
+
+  // Who/what locked the current day, or null if unlocked. 'unknown' covers legacy
+  // lock_status nodes that were written as a bare boolean before this field existed.
+  _lockedBy() {
+    const v = this.currentDayLockValue;
+    if (!v) return null;
+    return (typeof v === 'object' && v.by) ? v.by : 'unknown';
+  }
+
   async lockDay() {
     const lockKey = `users/${this.uid}/lock_status/${this.getTodayKey()}`;
-    await db.ref(lockKey).set(true);
+    await db.ref(lockKey).set(this._lockValue('admin'));
     // Process end-of-day when locked
     this.processEndOfDay();
   }
@@ -914,15 +943,9 @@ class KalyanMitra {
     this.autoLockInterval = setInterval(async () => {
       const now = new Date();
       if (now.getHours() === 0 && now.getMinutes() === 0) {
-        // Midnight — lock previous day
-        const yKey = this.getTodayKey(-1);
-        const yLockKey = `users/${this.uid}/lock_status/${yKey}`;
-        const snap = await db.ref(yLockKey).once('value');
-        if (!snap.val()) {
-          db.ref(yLockKey).set(true);
-        }
-        // Reset for new day
-        this.checkDailyReset();
+        // Midnight — checkDailyReset() finalizes + locks the previous day and rolls
+        // over to today; it is the single owner of back-locking.
+        await this.checkDailyReset();
         this.renderDashboard();
       }
       // Update lock UI
@@ -959,7 +982,14 @@ class KalyanMitra {
         if (card) card.classList.remove('locked');
         if (lockEl) lockEl.classList.add('hidden');
       });
-      // Re-enable — renderActivities will handle per-button disabled states
+      // Re-enable everything the lock branch disabled. renderActivities() (called
+      // right after this in renderDashboard()) still has final authority over each
+      // button's disabled state, but updateLockUI() can also run standalone (the
+      // 30s interval, or right after an admin unlock) so it must not leave buttons
+      // stuck disabled on its own.
+      document.querySelectorAll('.btn-complete, .btn-complete-small, .btn-undo, .btn-undo-small, .btn-counter-small, .btn-niyam, .ashta-toggle input').forEach(el => {
+        el.disabled = false;
+      });
     }
   }
 
@@ -967,31 +997,45 @@ class KalyanMitra {
   async checkDailyReset() {
     const todayKey = this.getTodayKey();
     if (this.dailyLog.date && this.dailyLog.date !== todayKey) {
-      // Lock yesterday if not already locked
-      const yLockKey = `users/${this.uid}/lock_status/${this.dailyLog.date}`;
+      const staleDate = this.dailyLog.date;
+
+      // Finalize the stale day. processEndOfDay() no-ops if it was already
+      // finalized (e.g. the user submitted it), so this is safe to call
+      // unconditionally rather than racing a separate lock_status read.
+      this.processEndOfDay(staleDate);
+
+      // Lock it if not already locked
+      const yLockKey = `users/${this.uid}/lock_status/${staleDate}`;
       const snap = await db.ref(yLockKey).once('value');
       if (!snap.val()) {
-        db.ref(yLockKey).set(true);
-        this.processEndOfDay();
+        await db.ref(yLockKey).set(this._lockValue('auto'));
       }
+
       // New day
       this.dailyLog = { ...DEFAULT_DAILY_LOG, date: todayKey };
       this.saveDailyLog();
     }
   }
 
-  processEndOfDay() {
+  // Finalizes `this.dailyLog` (defaulting to today) — updates the streak, awards the
+  // perfect-day counter, and persists to `dateKey`'s own node. Idempotent per date via
+  // the `finalized` flag, so it is safe to call from both the submit flow and the
+  // daily-reset/midnight path without double-counting the streak.
+  processEndOfDay(dateKey = this.getTodayKey()) {
+    if (this.dailyLog.finalized) return;
     const allDone = this.isAllTasksComplete();
     this.updateStreak(allDone);
+    this.dailyLog.finalized = true;
     if (allDone && !this.dailyLog.perfectDay) {
       this.dailyLog.perfectDay = true;
       this.profile.totalPerfectDays = (this.profile.totalPerfectDays || 0) + 1;
     }
     this.saveProfile();
-    this.saveDailyLog();
+    this.saveDailyLogFor(dateKey, this.dailyLog);
   }
 
   grantDailyLogin() {
+    if (this.isDayLocked()) return;
     const todayKey = this.getTodayKey();
     const lastLogin = localStorage.getItem(`km_lastLogin_${this.uid}`);
     if (lastLogin !== todayKey) {
@@ -1133,12 +1177,16 @@ class KalyanMitra {
   }
 
   renderDashboard() {
-    this.renderActivities();
+    // updateLockUI() runs first so it establishes the locked/unlocked baseline;
+    // renderActivities() runs last so it has final authority over each button's
+    // per-activity disabled state (counter min/max bounds, etc).
+    this.updateLockUI();
     this.renderDailyProgress();
     this.renderNiyam();
     this.renderMotivation();
     this.renderHeader();
-    this.updateLockUI();
+    this.renderSubmitButton();
+    this.renderActivities();
   }
 
   renderHeader() {
@@ -1482,6 +1530,111 @@ class KalyanMitra {
     this.renderDashboard();
   }
 
+  // ===== SUBMIT / FINALIZE DAY (USER) =====
+  async submitDay() {
+    if (this.isDayLocked()) return;
+    const todayKey = this.getTodayKey();
+    if (this.dailyLog.date !== todayKey) {
+      // The tab was left open across midnight — roll over to today instead of
+      // submitting data that no longer belongs to today.
+      await this.checkDailyReset();
+      this.renderDashboard();
+      return;
+    }
+    const total = this.getTotalTasksCount();
+    const completed = this.getCompletedCount();
+    this.showSubmitConfirm(completed, total);
+  }
+
+  showSubmitConfirm(completed, total) {
+    const textEl = document.getElementById('submit-confirm-text');
+    if (textEl) {
+      if (completed >= total) {
+        textEl.textContent = `You've completed all ${total} tasks today. Once submitted, today's entry is locked and cannot be edited — only your sangh admin can unlock it. Submit now?`;
+      } else {
+        const remaining = total - completed;
+        textEl.textContent = `You've completed ${completed} of ${total} tasks — ${remaining} task${remaining === 1 ? '' : 's'} still pending. Submitting now locks today's entry as-is, and it cannot be edited — only your sangh admin can unlock it. Submit anyway?`;
+      }
+    }
+    const o = document.getElementById('submit-confirm-overlay');
+    if (o) { o.classList.remove('hidden'); o.classList.add('show'); }
+  }
+
+  closeSubmitConfirm() {
+    const o = document.getElementById('submit-confirm-overlay');
+    if (o) { o.classList.remove('show'); o.classList.add('hidden'); }
+  }
+
+  async confirmSubmitDay() {
+    this.closeSubmitConfirm();
+    // Re-check right before acting: the confirm dialog leaves an await gap during
+    // which an admin lock or the midnight auto-lock could already have landed.
+    if (this.isDayLocked()) return;
+
+    // Set the lock flag synchronously (before any await) so a rapid double-tap on
+    // Submit/Confirm can't slip through and finalize the day twice.
+    this.currentDayLocked = true;
+    const todayKey = this.getTodayKey();
+    const lockValue = this._lockValue('user');
+    this.currentDayLockValue = lockValue;
+    this.renderDashboard();
+
+    const btn = document.getElementById('btn-submit-day');
+    await db.ref(`users/${this.uid}/lock_status/${todayKey}`).set(lockValue);
+    this.processEndOfDay(todayKey);
+    this.renderDashboard();
+    this.playSubmitCelebration(btn);
+    setTimeout(() => this.showEveningSummary(), 400);
+  }
+
+  showEveningSummary() {
+    const total = this.getTotalTasksCount();
+    const completed = this.getCompletedCount();
+    const statsEl = document.getElementById('summary-stats');
+    if (statsEl) {
+      statsEl.innerHTML = `
+        <div class="summary-row"><span>✅ Tasks Completed</span><span>${completed}/${total}</span></div>
+        <div class="summary-row"><span>🔥 Current Streak</span><span>${this.profile.currentStreak} day${this.profile.currentStreak === 1 ? '' : 's'}</span></div>
+        <div class="summary-row"><span>${this.dailyLog.perfectDay ? '🎊' : '📆'} Perfect Day</span><span>${this.dailyLog.perfectDay ? 'Yes!' : 'Not today'}</span></div>`;
+    }
+    const kpEl = document.getElementById('summary-kp');
+    if (kpEl) kpEl.textContent = `+${this.dailyLog.kpEarned || 0} KP earned today`;
+    const streakEl = document.getElementById('summary-streak');
+    if (streakEl) streakEl.textContent = this.profile.currentStreak > 0 ? `🔥 ${this.profile.currentStreak}-day streak!` : '';
+    const pool = (total > 0 && completed >= total) ? MOTIVATIONAL_MESSAGES.complete : MOTIVATIONAL_MESSAGES.progress;
+    const msgEl = document.getElementById('summary-message');
+    if (msgEl) msgEl.textContent = pool[Math.floor(Math.random() * pool.length)];
+    const noteEl = document.getElementById('summary-note');
+    if (noteEl) noteEl.textContent = '🔓 Want to unlock? Contact your sangh admin.';
+
+    const o = document.getElementById('evening-summary-overlay');
+    if (!o) return;
+    o.classList.remove('hidden'); o.classList.add('show');
+    if (this.dailyLog.perfectDay) this.createConfetti(o);
+  }
+
+  renderSubmitButton() {
+    const btn = document.getElementById('btn-submit-day');
+    const note = document.getElementById('submit-day-note');
+    if (!btn) return;
+    const locked = this.isDayLocked();
+    btn.classList.toggle('submitted', locked);
+    btn.disabled = locked;
+    btn.textContent = locked ? '✅ Entry Submitted' : "✅ Submit Today's Entry";
+    if (!note) return;
+    if (!locked) {
+      note.textContent = "Once submitted, today's entry is locked and cannot be edited.";
+    } else {
+      const reasons = {
+        admin: 'Locked by your sangh admin.',
+        auto: 'Auto-finalized at midnight.',
+        user: "You submitted today's entry.",
+      };
+      const reason = reasons[this._lockedBy()] || "Today's entry is locked.";
+      note.textContent = `${reason} 🔓 Want to unlock? Contact your sangh admin.`;
+    }
+  }
+
   // ===== GAMIFICATION ENGINE =====
   addKarmaPoints(points, reason) {
     this.profile.totalKP += points;
@@ -1678,9 +1831,66 @@ class KalyanMitra {
       c.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
       c.style.animationDelay = `${Math.random()}s`;
       c.style.animationDuration = `${1.5 + Math.random() * 2}s`;
+      // Randomize the drift per piece so the fall fans out instead of every
+      // piece following the same default --confetti-x/--confetti-y direction.
+      c.style.setProperty('--confetti-x', `${(Math.random() - 0.5) * 240}px`);
+      c.style.setProperty('--confetti-y', `${120 + Math.random() * 260}px`);
       container.appendChild(c);
       setTimeout(() => c.remove(), 4000);
     }
+  }
+
+  // Reward burst played when the user submits their day: a shockwave + particle
+  // burst anchored on the Submit button, composed from the same DOM/cleanup
+  // pattern as showCompletionBurst()/createConfetti() above. Skips entirely under
+  // prefers-reduced-motion.
+  playSubmitCelebration(buttonEl) {
+    if (!buttonEl) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const container = document.getElementById('burst-container');
+    if (!container) return;
+
+    const rect = buttonEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
+    // Shockwave rings
+    for (let i = 0; i < 2; i++) {
+      const ring = document.createElement('div');
+      ring.className = 'submit-burst-ring';
+      ring.style.left = `${cx}px`;
+      ring.style.top = `${cy}px`;
+      ring.style.animationDelay = `${i * 0.15}s`;
+      container.appendChild(ring);
+      setTimeout(() => ring.remove(), 1000);
+    }
+
+    // Particle burst — richer/longer than the per-activity showCompletionBurst(),
+    // using its own .reward-particle class so that effect is left untouched.
+    const colors = ['#FFD700', '#FF9933', '#E8722A', '#6B9E6B', '#F1C40F'];
+    const count = 32;
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement('div');
+      p.className = 'reward-particle';
+      const angle = (i / count) * 360 + (Math.random() * 12 - 6);
+      const dist = 70 + Math.random() * 90;
+      p.style.left = `${cx}px`;
+      p.style.top = `${cy}px`;
+      p.style.setProperty('--dx', `${Math.cos(angle * Math.PI / 180) * dist}px`);
+      p.style.setProperty('--dy', `${Math.sin(angle * Math.PI / 180) * dist - 30}px`);
+      p.style.backgroundColor = colors[i % colors.length];
+      container.appendChild(p);
+      setTimeout(() => p.remove(), 1100);
+    }
+
+    // Rising label
+    const label = document.createElement('div');
+    label.className = 'submit-rise-label';
+    label.textContent = '🙏 Submitted!';
+    label.style.left = `${cx}px`;
+    label.style.top = `${cy}px`;
+    container.appendChild(label);
+    setTimeout(() => label.remove(), 1300);
   }
 
   // ===== ACHIEVEMENTS TAB =====
@@ -2062,19 +2272,23 @@ class KalyanMitra {
     const text = document.getElementById('lock-status-text');
     const card = document.getElementById('lock-status-card');
     const btn = document.getElementById('btn-lock-day');
+    const unlockBtn = document.getElementById('btn-unlock-day');
 
     if (locked) {
+      const byLabel = { user: 'the user', admin: 'you (admin)', auto: 'auto-lock at midnight' }[this._lockedBy()] || 'unknown';
       icon.textContent = '🔒';
-      text.innerHTML = 'Today is <strong>locked</strong>. User cannot modify activities.';
-      card.classList.add('locked-state');
+      text.innerHTML = `Today is <strong>locked</strong> (by ${byLabel}). User cannot modify activities.`;
+      card.classList.add('locked');
       btn.disabled = true;
       btn.textContent = '🔒 Already Locked';
+      if (unlockBtn) unlockBtn.disabled = false;
     } else {
       icon.textContent = '🔓';
       text.innerHTML = 'Today is <strong>unlocked</strong>. User can still modify activities.';
-      card.classList.remove('locked-state');
+      card.classList.remove('locked');
       btn.disabled = false;
       btn.textContent = '🔒 Lock Today\'s Submissions';
+      if (unlockBtn) unlockBtn.disabled = true;
     }
 
     // Lock preview
@@ -2100,8 +2314,17 @@ class KalyanMitra {
 
   adminLockDay() {
     if (this.isDayLocked()) return;
-    if (confirm('🔒 Lock today\'s submissions? The user will no longer be able to modify today\'s activities. This cannot be undone.')) {
+    if (confirm('🔒 Lock today\'s submissions? The user will no longer be able to modify today\'s activities unless you unlock it.')) {
       this.lockDay();
+      this.renderAdminLock();
+      this.renderAdminProgress();
+    }
+  }
+
+  adminUnlockDay() {
+    if (!this.isDayLocked()) return;
+    if (confirm('🔓 Unlock today\'s submissions? The user will be able to modify today\'s activities again.')) {
+      db.ref(`users/${this.uid}/lock_status/${this.getTodayKey()}`).remove();
       this.renderAdminLock();
       this.renderAdminProgress();
     }

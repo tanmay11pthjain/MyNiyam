@@ -213,6 +213,7 @@ const DEFAULT_DAILY_LOG = {
   kpEarned: 0,
   perfectDay: false,
   bonuses: [],
+  finalized: false,   // true once end-of-day has been processed for this date
 };
 
 // ===== POINT VALUES =====

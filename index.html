@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
 
@@ -110,7 +110,7 @@
     <!-- Lock Banner -->
     <div id="lock-banner" class="lock-banner hidden">
       <span class="lock-banner-icon">🔒</span>
-      <span class="lock-banner-text">Today's activities are locked. Status finalized.</span>
+      <span class="lock-banner-text">Today's entry is locked. Want to unlock? Contact your sangh admin.</span>
     </div>
 
     <!-- TAB: HOME -->
@@ -396,6 +396,12 @@
 
       </section>
 
+      <!-- Submit / Finalize Day -->
+      <section id="submit-section">
+        <button class="btn-submit-day" id="btn-submit-day">✅ Submit Today's Entry</button>
+        <p class="submit-day-note" id="submit-day-note"></p>
+      </section>
+
       <!-- Motivation -->
       <section id="motivation-section">
         <div class="motivation-card">
@@ -643,7 +649,7 @@
     <div id="admin-tab-lock" class="admin-tab-content">
       <div class="admin-section">
         <h2 class="section-heading">🔒 Lock Day</h2>
-        <p class="admin-desc">Lock today's submissions to finalize the user's activity status. This action cannot be undone.</p>
+        <p class="admin-desc">Lock today's submissions to finalize the user's activity status. You can unlock it again if needed.</p>
 
         <div class="lock-status-card" id="lock-status-card">
           <div class="lock-status-icon" id="lock-status-icon">🔓</div>
@@ -656,7 +662,8 @@
         </div>
 
         <button class="btn-lock-day" id="btn-lock-day">🔒 Lock Today's Submissions</button>
-        <p class="lock-note">⏰ Auto-lock also happens at midnight.</p>
+        <button class="btn-unlock-day" id="btn-unlock-day" disabled>🔓 Unlock Today's Submissions</button>
+        <p class="lock-note">⏰ Auto-lock also happens at midnight. Users can also submit and lock their own entry.</p>
 
         <div class="settings-group danger-zone" style="margin-top:24px">
           <h3 class="settings-group-title">⚠️ Danger Zone</h3>
@@ -711,6 +718,18 @@
     </div>
   </div>
 
+  <!-- Submit Confirm -->
+  <div id="submit-confirm-overlay" class="overlay hidden">
+    <div class="overlay-content submit-confirm-content">
+      <h2 class="summary-title">✅ Submit Today's Entry?</h2>
+      <p class="submit-confirm-text" id="submit-confirm-text"></p>
+      <div class="overlay-actions">
+        <button class="btn-cancel" id="btn-cancel-submit">Cancel</button>
+        <button class="btn-continue" id="btn-confirm-submit">Submit</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Evening Summary -->
   <div id="evening-summary-overlay" class="overlay hidden">
     <div class="overlay-content evening-summary-content">
@@ -719,6 +738,7 @@
       <div class="summary-kp" id="summary-kp">+0 KP earned</div>
       <div class="summary-streak" id="summary-streak"></div>
       <div class="summary-message" id="summary-message"></div>
+      <p class="summary-note" id="summary-note"></p>
       <button class="btn-continue" id="btn-close-summary">Jai Jinendra 🙏</button>
     </div>
   </div>
@@ -735,8 +755,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=17"></script>
-  <script src="auth.js?v=17"></script>
-  <script src="app.js?v=17"></script>
+  <script src="data.js?v=18"></script>
+  <script src="auth.js?v=18"></script>
+  <script src="app.js?v=18"></script>
 </body>
 </html>
