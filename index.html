@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
 
@@ -444,11 +444,14 @@
   <div id="admin-panel" class="hidden">
     <header id="admin-header">
       <div class="admin-header-content">
-        <div class="admin-title-area">
-          <span class="admin-crown">👑</span>
-          <h1 class="admin-title">Admin Panel</h1>
+        <div class="admin-brand-top">
+          <span class="brand-name">🙏 MyNiyam</span>
+          <div class="admin-brand-right">
+            <span class="admin-role-tag">👑 Admin</span>
+            <button class="btn-header-logout" id="btn-admin-logout" title="Logout">↩ Logout</button>
+          </div>
         </div>
-        <button class="btn-header-logout" id="btn-admin-logout" title="Logout">↩ Logout</button>
+        <span class="brand-sangh" id="admin-brand-sangh"></span>
       </div>
     </header>
 
@@ -721,8 +724,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=16"></script>
-  <script src="auth.js?v=16"></script>
-  <script src="app.js?v=16"></script>
+  <script src="data.js?v=17"></script>
+  <script src="auth.js?v=17"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

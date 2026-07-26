@@ -120,24 +120,41 @@ const Auth = (() => {
     return currentUser;
   }
 
+  let _sanghsCache = null;
+  let _sanghsFetchPromise = null;
+
   async function fetchSanghs() {
-    try {
-      const response = await fetch(APPS_SCRIPT_URL + "?action=get_sanghs", {
-        method: "GET",
-        redirect: "follow"
-      });
-      const text = await response.text();
-      console.log("Sanghs response:", text);
+    if (_sanghsCache) return _sanghsCache;
+    if (_sanghsFetchPromise) return _sanghsFetchPromise;
+
+    _sanghsFetchPromise = (async () => {
       try {
-        const result = JSON.parse(text);
-        if (result.success) return result.sanghs || [];
-      } catch (parseErr) {
-        console.error("Failed to parse Sanghs response:", text);
+        const response = await fetch(APPS_SCRIPT_URL + "?action=get_sanghs", {
+          method: "GET",
+          redirect: "follow"
+        });
+        const text = await response.text();
+        console.log("Sanghs response:", text);
+        try {
+          const result = JSON.parse(text);
+          if (result.success) {
+            _sanghsCache = result.sanghs || [];
+            return _sanghsCache;
+          }
+        } catch (parseErr) {
+          console.error("Failed to parse Sanghs response:", text);
+        }
+      } catch (e) {
+        console.error("Fetch sanghs failed:", e);
       }
-    } catch (e) {
-      console.error("Fetch sanghs failed:", e);
+      return [];
+    })();
+
+    try {
+      return await _sanghsFetchPromise;
+    } finally {
+      _sanghsFetchPromise = null;
     }
-    return [];
   }
 
   async function sendRegistration(uid, email, regData) {

@@ -2011,28 +2011,34 @@ body {
 
 .admin-header-content {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
   padding: 16px;
 }
 
-.admin-title-area {
+.admin-brand-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.admin-brand-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
-.admin-crown {
-  font-size: 1.4rem;
-  line-height: 1;
+.admin-role-tag {
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0.9;
+  white-space: nowrap;
 }
 
-.admin-title {
-  font-family: 'Outfit', sans-serif;
-  font-weight: 700;
-  font-size: 1.2rem;
-  color: #fff;
-  margin: 0;
+#admin-brand-sangh {
+  min-width: 0;
 }
 
 /* Admin header logout — wider version with text */
@@ -2434,10 +2440,6 @@ body {
 
   .admin-header-content {
     padding: 12px;
-  }
-
-  .admin-title {
-    font-size: 1.05rem;
   }
 
   .admin-stats-grid {

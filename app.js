@@ -328,27 +328,57 @@ class KalyanMitra {
     this.setupUserEventListeners();
     this.startAutoLockCheck();
     this.checkStreakWarning();
-    this.renderHeaderBrand();
+    this.renderUserHeaderBrand();
   }
 
-  async renderHeaderBrand() {
+  // Resolves each sangh code to "Name (CODE)", using knownNames where available
+  // and falling back to Auth.fetchSanghs() (memoized) only for the codes it can't
+  // already resolve.
+  async _resolveSanghLabels(codes, knownNames = {}) {
+    if (!codes || codes.length === 0) return [];
+
+    const needsLookup = codes.some(code => !knownNames[code]);
+    let sanghsList = [];
+    if (needsLookup) {
+      try {
+        sanghsList = await Auth.fetchSanghs();
+      } catch (e) {
+        console.warn('Failed to fetch sanghs list:', e);
+      }
+    }
+
+    return codes.map(code => {
+      const name = knownNames[code] || (sanghsList.find(s => s.code === code) || {}).name;
+      return name ? `${name} (${code})` : code;
+    });
+  }
+
+  async renderUserHeaderBrand() {
     const el = document.getElementById('brand-sangh');
     if (!el) return;
     try {
       const snap = await db.ref(`users/${this.uid}/registration`).once('value');
       const reg = snap.val() || {};
-      let name = reg.sanghName;
-      const code = reg.sanghCode;
-      if (!name && code) {
-        const sanghs = await Auth.fetchSanghs();
-        const match = sanghs.find(s => s.code === code);
-        if (match) name = match.name;
-      }
-      if (name && code) el.textContent = `${name} (${code})`;
-      else if (code) el.textContent = code;
-      else el.textContent = '';
+      const code = reg.sanghCode || (this._currentAuthUser.sanghCodes || [])[0];
+      if (!code) { el.textContent = ''; return; }
+      const knownNames = reg.sanghName ? { [code]: reg.sanghName } : {};
+      const [label] = await this._resolveSanghLabels([code], knownNames);
+      el.textContent = label || '';
     } catch (e) {
       console.warn('Failed to load sangh info for header:', e);
+    }
+  }
+
+  async renderAdminHeaderBrand() {
+    const el = document.getElementById('admin-brand-sangh');
+    if (!el) return;
+    try {
+      const codes = this._adminSanghCodes || [];
+      if (codes.length === 0) { el.textContent = 'No sangh assigned'; return; }
+      const labels = await this._resolveSanghLabels(codes);
+      el.textContent = labels.join(', ');
+    } catch (e) {
+      console.warn('Failed to load sangh info for admin header:', e);
     }
   }
 
@@ -378,6 +408,7 @@ class KalyanMitra {
     // Store admin's sangh codes from auth
     this._adminSanghCodes = this._currentAuthUser.sanghCodes || [];
     this._adminUserUids = []; // UIDs this admin manages
+    this.renderAdminHeaderBrand();
 
     document.getElementById('admin-panel').classList.remove('hidden');
     document.getElementById('app').classList.add('app-hidden');
