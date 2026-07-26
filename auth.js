@@ -124,21 +124,31 @@ const Auth = (() => {
   let _sanghsFetchPromise = null;
 
   async function fetchSanghs() {
-    if (_sanghsCache) return _sanghsCache;
+    // Only return cache if it is non-empty; an empty result may be a transient failure
+    if (_sanghsCache && _sanghsCache.length > 0) return _sanghsCache;
     if (_sanghsFetchPromise) return _sanghsFetchPromise;
 
     _sanghsFetchPromise = (async () => {
       try {
-        const response = await fetch(APPS_SCRIPT_URL + "?action=get_sanghs", {
-          method: "GET",
+        // POST — same shape as every other working call; avoids doGet dependency
+        const response = await fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action: "get_sanghs" }),
           redirect: "follow"
         });
         const text = await response.text();
         console.log("Sanghs response:", text);
         try {
           const result = JSON.parse(text);
-          if (result.success) {
-            _sanghsCache = result.sanghs || [];
+          if (result.success && Array.isArray(result.sanghs) && result.sanghs.length > 0) {
+            // Normalize every field to string so s.code.toLowerCase() never throws
+            // (Google Sheets returns numeric cells as JS numbers)
+            _sanghsCache = result.sanghs.map(s => ({
+              code: String(s.code || "").trim(),
+              name: String(s.name || "").trim(),
+              city: String(s.city || "").trim()
+            })).filter(s => s.code.length > 0);
             return _sanghsCache;
           }
         } catch (parseErr) {
@@ -147,6 +157,7 @@ const Auth = (() => {
       } catch (e) {
         console.error("Fetch sanghs failed:", e);
       }
+      // Return empty but do NOT cache it — next call will retry
       return [];
     })();
 

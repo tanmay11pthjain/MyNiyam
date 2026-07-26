@@ -140,13 +140,20 @@ class KalyanMitra {
       this.handleRegistration();
     };
 
-    // Fetch sanghs list (non-blocking for button)
+    // Fetch sanghs list
     this._sanghsList = [];
     this._selectedSangh = null;
+    const errorEl = document.getElementById('register-error');
     try {
       this._sanghsList = await Auth.fetchSanghs();
     } catch (e) {
       console.warn('Failed to fetch sanghs:', e);
+    }
+    if (this._sanghsList.length === 0 && errorEl) {
+      errorEl.textContent = 'Could not load the Sangh list. Please check your connection and reload the page.';
+      errorEl.classList.remove('hidden');
+    } else if (errorEl) {
+      errorEl.classList.add('hidden');
     }
     this._setupSanghAutocomplete();
   }
@@ -158,9 +165,15 @@ class KalyanMitra {
     const hiddenInput = document.getElementById('reg-sangh-code');
     const sanghs = this._sanghsList || [];
 
-    const showDropdown = (items) => {
+    const showDropdown = (items, isFiltered) => {
       if (items.length === 0) {
-        dropdown.classList.add('hidden');
+        if (isFiltered) {
+          // Show a non-clickable hint row instead of hiding silently
+          dropdown.innerHTML = '<div class="sangh-option sangh-no-match" style="color:#94a3b8;cursor:default;">No matching sangh found</div>';
+          dropdown.classList.remove('hidden');
+        } else {
+          dropdown.classList.add('hidden');
+        }
         return;
       }
       dropdown.innerHTML = items.map(s =>
@@ -199,7 +212,7 @@ class KalyanMitra {
     input.oninput = () => {
       const q = input.value.trim().toLowerCase();
       if (q.length === 0) {
-        showDropdown(sanghs.slice(0, 10));
+        showDropdown(sanghs.slice(0, 10), false);
         return;
       }
       const filtered = sanghs.filter(s =>
@@ -207,7 +220,7 @@ class KalyanMitra {
         s.name.toLowerCase().includes(q) ||
         s.city.toLowerCase().includes(q)
       );
-      showDropdown(filtered.slice(0, 10));
+      showDropdown(filtered.slice(0, 10), true);
     };
 
     input.onfocus = () => {
@@ -219,7 +232,7 @@ class KalyanMitra {
             s.name.toLowerCase().includes(q) ||
             s.city.toLowerCase().includes(q)
           ).slice(0, 10);
-        showDropdown(items);
+        showDropdown(items, q.length > 0);
       }
     };
 
