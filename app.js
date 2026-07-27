@@ -1025,7 +1025,6 @@ class KalyanMitra {
       if (btnPlus) btnPlus.addEventListener('click', () => this.adjustScreenTime(prop, delta));
     };
     bindScreenTime('screen-h', 'screenTimeHours', 1);
-    bindScreenTime('screen-m', 'screenTimeMins', 15);
 
     // Navigation
     document.querySelectorAll('#bottom-nav .nav-item').forEach(btn => {
@@ -1636,14 +1635,11 @@ class KalyanMitra {
     const stCard = document.getElementById('screentime-card');
     if (stCard) {
       document.getElementById('screen-h-count').textContent = `${stH}h`;
-      document.getElementById('screen-m-count').textContent = `${stM}m`;
       if (stH > 0 || stM > 0) stCard.classList.add('completed');
       else stCard.classList.remove('completed');
-      
+
       document.getElementById('btn-screen-h-minus').disabled = locked || stH <= 0;
       document.getElementById('btn-screen-h-plus').disabled = locked;
-      document.getElementById('btn-screen-m-minus').disabled = locked || stM <= 0;
-      document.getElementById('btn-screen-m-plus').disabled = locked;
     }
 
     // Niyam
