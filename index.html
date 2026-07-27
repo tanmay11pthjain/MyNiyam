@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
 
@@ -48,6 +48,15 @@
       <h1 class="login-title">📝 Complete Your Profile</h1>
       <p class="login-subtitle">Just a few details to get started</p>
       <form id="register-form" autocomplete="on">
+        <div class="input-group photo-picker-group">
+          <label>Profile Photo</label>
+          <div class="photo-picker">
+            <img class="photo-picker-preview hidden" id="reg-photo-preview" alt="">
+            <div class="photo-picker-placeholder" id="reg-photo-placeholder">📷</div>
+            <label class="photo-picker-btn" for="reg-photo-input">Choose Photo</label>
+            <input type="file" id="reg-photo-input" accept="image/*" class="hidden">
+          </div>
+        </div>
         <div class="input-group">
           <label for="reg-name">Full Name</label>
           <input type="text" id="reg-name" name="name" autocomplete="name" placeholder="Your full name">
@@ -444,7 +453,12 @@
       <h2 class="section-heading">👤 My Profile</h2>
 
       <div class="profile-header">
-        <img class="profile-avatar hidden" id="profile-avatar" src="" alt="">
+        <div class="profile-avatar-wrap">
+          <img class="profile-avatar hidden" id="profile-avatar" src="" alt="">
+          <div class="profile-avatar-placeholder" id="profile-avatar-placeholder">👤</div>
+          <label class="profile-photo-change-btn" for="profile-photo-input" title="Change photo">📷</label>
+          <input type="file" id="profile-photo-input" accept="image/*" class="hidden">
+        </div>
         <div class="profile-header-info">
           <span class="profile-header-name" id="profile-header-name"></span>
           <span class="profile-header-email" id="profile-header-email"></span>
@@ -790,6 +804,18 @@
     </div>
   </div>
 
+  <!-- One-time: add a profile photo -->
+  <div id="photo-prompt-overlay" class="overlay hidden">
+    <div class="overlay-content">
+      <h2 class="summary-title">📷 Add a Profile Photo</h2>
+      <p class="submit-confirm-text">Please add a profile photo so your sangh can recognize you.</p>
+      <div class="overlay-actions">
+        <button class="btn-cancel" id="btn-close-photo-prompt">Later</button>
+        <button class="btn-continue" id="btn-goto-profile-photo">Add Photo</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Export Leaderboard to Excel -->
   <div id="export-overlay" class="overlay hidden">
     <div class="overlay-content">
@@ -841,8 +867,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=24"></script>
-  <script src="auth.js?v=24"></script>
-  <script src="app.js?v=24"></script>
+  <script src="data.js?v=25"></script>
+  <script src="auth.js?v=25"></script>
+  <script src="app.js?v=25"></script>
 </body>
 </html>

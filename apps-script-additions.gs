@@ -34,14 +34,15 @@ const SANGH_SHEET_NAME  = 'Sanghs';
 // Created automatically if the Users sheet is missing or empty.
 const USER_HEADERS = [
   'UID', 'Name', 'Email', 'DOB', 'Phone', 'City', 'Area',
-  'Sangh Code', 'Role', 'Sangh Codes', 'Registered At'
+  'Sangh Code', 'Role', 'Sangh Codes', 'Registered At', 'Photo'
 ];
 
 // Logical field -> column header text (matched case-insensitively, trimmed).
 const USER_COLUMNS = {
   uid: 'UID', name: 'Name', email: 'Email', dob: 'DOB', phone: 'Phone',
   city: 'City', area: 'Area', sanghCode: 'Sangh Code',
-  role: 'Role', sanghCodes: 'Sangh Codes', registeredAt: 'Registered At'
+  role: 'Role', sanghCodes: 'Sangh Codes', registeredAt: 'Registered At',
+  photo: 'Photo'
 };
 
 const SANGH_COLUMNS = { code: 'Code', name: 'Name', city: 'City' };
@@ -51,6 +52,18 @@ const SANGH_COLUMNS = { code: 'Code', name: 'Name', city: 'City' };
 // ignored here. This whitelist — not the client UI — is what actually enforces
 // "the user cannot change their sangh".
 const PROFILE_EDITABLE_FIELDS = ['phone', 'city', 'area'];
+
+// A Sheets cell caps out around 50,000 characters; base64 inflates binary by
+// ~33%, so this leaves headroom for the 256x256 JPEG thumbnail the client
+// resizes/compresses down to before ever sending one. Anything over this is
+// rejected server-side rather than silently truncated into a corrupt cell.
+const MAX_PHOTO_CHARS = 45000;
+
+function _isValidPhotoDataUrl_(photo) {
+  return typeof photo === 'string' &&
+    /^data:image\/(jpeg|jpg|png|webp);base64,/.test(photo) &&
+    photo.length > 0 && photo.length <= MAX_PHOTO_CHARS;
+}
 
 // ---- SHEET HELPERS ----
 
@@ -242,6 +255,12 @@ function handleRegister(params) {
   _setField_(sheet, colMap, row, 'sanghCode', params.sanghCode || '');
   _setField_(sheet, colMap, row, 'registeredAt', new Date().toISOString());
 
+  // Only written when it validates — an invalid/oversized value from a client
+  // bug is skipped rather than corrupting the cell or blocking registration.
+  if (params.photo && _isValidPhotoDataUrl_(params.photo)) {
+    _setField_(sheet, colMap, row, 'photo', params.photo);
+  }
+
   // Don't clobber an existing Role (an admin re-registering must stay an admin).
   if (colMap.role !== undefined && !String(sheet.getRange(row, colMap.role + 1).getValue() || '').trim()) {
     _setField_(sheet, colMap, row, 'role', 'user');
@@ -312,6 +331,49 @@ function handleUpdateProfile(params) {
   return { success: true };
 }
 
+// ---- ACTION: get_photo ----
+// Deliberately its OWN action, never folded into _profileFromRow_/get_profile
+// — google_login and get_sangh_users both call _profileFromRow_ (or similar
+// row reads) on every login and every admin roster load, and neither should
+// ever drag a ~20KB base64 image along for the ride.
+// Request:  { action: 'get_photo', uid }
+// Response: { success: true, photo: '' | 'data:image/...' }
+function handleGetPhoto(params) {
+  params = params || {};
+  const sheet = _usersSheet_();
+  if (!sheet) return { success: false, error: 'users_sheet_not_found' };
+
+  const colMap = _headerMap_(sheet, USER_COLUMNS);
+  const row = _findUserRow_(sheet, colMap, params.uid, params.email);
+  if (row === -1) return { success: false, error: 'not_found' };
+  if (colMap.photo === undefined) return { success: true, photo: '' };
+
+  const photo = String(sheet.getRange(row, colMap.photo + 1).getValue() || '');
+  return { success: true, photo: photo };
+}
+
+// ---- ACTION: update_photo ----
+// Request:  { action: 'update_photo', uid, photo: 'data:image/jpeg;base64,...' }
+// Response: { success: true } or { success: false, error: '...' }
+function handleUpdatePhoto(params) {
+  params = params || {};
+  if (!_isValidPhotoDataUrl_(params.photo)) {
+    return { success: false, error: 'invalid_photo' };
+  }
+
+  const sheet = _usersSheet_();
+  if (!sheet) return { success: false, error: 'users_sheet_not_found' };
+
+  const colMap = _headerMap_(sheet, USER_COLUMNS);
+  if (colMap.photo === undefined) return { success: false, error: 'photo_column_not_found' };
+
+  const row = _findUserRow_(sheet, colMap, params.uid, params.email);
+  if (row === -1) return { success: false, error: 'not_found' };
+
+  _setField_(sheet, colMap, row, 'photo', params.photo);
+  return { success: true };
+}
+
 // ---- ROUTER ----
 function routeAction(params) {
   const action = params && params.action;
@@ -322,6 +384,8 @@ function routeAction(params) {
     case 'get_sangh_users': return handleGetSanghUsers(params);
     case 'get_profile':     return handleGetProfile(params);
     case 'update_profile':  return handleUpdateProfile(params);
+    case 'get_photo':       return handleGetPhoto(params);
+    case 'update_photo':    return handleUpdatePhoto(params);
     default:                return { success: false, error: 'unknown_action: ' + action };
   }
 }

@@ -254,6 +254,43 @@ class KalyanMitra {
     const nameInput = document.getElementById('reg-name');
     if (nameInput && user.name) nameInput.value = user.name;
 
+    // Photo picker — required before registration can be submitted (see the
+    // check in handleRegistration()). Reset on every visit to this screen so
+    // a previously aborted registration attempt doesn't leave a stale photo.
+    this._registrationPhotoDataUrl = null;
+    const photoInput = document.getElementById('reg-photo-input');
+    const photoPreview = document.getElementById('reg-photo-preview');
+    const photoPlaceholder = document.getElementById('reg-photo-placeholder');
+    if (photoInput) {
+      photoInput.value = '';
+      if (photoPreview) photoPreview.classList.add('hidden');
+      if (photoPlaceholder) photoPlaceholder.classList.remove('hidden');
+      photoInput.onchange = async () => {
+        const file = photoInput.files && photoInput.files[0];
+        if (!file) return;
+        const errorEl = document.getElementById('register-error');
+        try {
+          const dataUrl = await this._resizeImageToDataUrl(file);
+          this._registrationPhotoDataUrl = dataUrl;
+          if (photoPreview) {
+            photoPreview.src = dataUrl;
+            photoPreview.classList.remove('hidden');
+          }
+          if (photoPlaceholder) photoPlaceholder.classList.add('hidden');
+          if (errorEl) errorEl.classList.add('hidden');
+        } catch (e) {
+          console.error('Failed to process registration photo:', e);
+          this._registrationPhotoDataUrl = null;
+          if (photoPreview) photoPreview.classList.add('hidden');
+          if (photoPlaceholder) photoPlaceholder.classList.remove('hidden');
+          if (errorEl) {
+            errorEl.textContent = (e && e.message) || 'Could not process that photo. Please try a different image.';
+            errorEl.classList.remove('hidden');
+          }
+        }
+      };
+    }
+
     // Wire button click directly (bypass form submit)
     const btn = document.getElementById('btn-register');
     btn.onclick = () => {
@@ -390,6 +427,12 @@ class KalyanMitra {
       return;
     }
 
+    if (!this._registrationPhotoDataUrl) {
+      errorEl.textContent = 'Please add a profile photo.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
     if (!/^[0-9]{10}$/.test(phone)) {
       errorEl.textContent = 'Please enter a valid 10-digit phone number.';
       errorEl.classList.remove('hidden');
@@ -409,17 +452,22 @@ class KalyanMitra {
     const regData = {
       name, dob, phone, city, area, sanghCode,
       sanghName: this._selectedSangh.name,
-      sanghCity: this._selectedSangh.city
+      sanghCity: this._selectedSangh.city,
+      photo: this._registrationPhotoDataUrl
     };
     const user = this._currentAuthUser;
 
     try {
-      // Save to Firebase
+      // Save to Firebase — WITHOUT the photo. The photo lives only in the
+      // Sheet (see apps-script-additions.gs); keeping it out of Firebase's
+      // registration node matters because that node is read on every login
+      // (renderUserHeaderBrand, _syncFromSheetProfile) and must stay small.
+      const { photo, ...regDataForFirebase } = regData;
       await db.ref(`users/${this.uid}`).update({
         name: name,
         role: 'user',
         registered: true,
-        registration: regData,
+        registration: regDataForFirebase,
         registeredAt: new Date().toISOString()
       });
 
@@ -434,6 +482,14 @@ class KalyanMitra {
       } catch (sheetErr) {
         console.warn('Sheet update failed (non-blocking):', sheetErr);
       }
+
+      // Cache the just-uploaded photo locally so the Profile tab shows it
+      // instantly, and mark the one-time photo prompt as already satisfied —
+      // a freshly registered user must never see "please add a photo" again.
+      try {
+        localStorage.setItem(`myniyam_photo_${this.uid}`, regData.photo);
+        localStorage.setItem(`myniyam_photo_prompted_${this.uid}`, '1');
+      } catch (e) { /* localStorage unavailable — non-fatal */ }
 
       // Hide registration, proceed to user app
       document.getElementById('register-screen').classList.add('hidden');
@@ -474,6 +530,9 @@ class KalyanMitra {
     this.startAutoLockCheck();
     this.checkStreakWarning();
     this.renderUserHeaderBrand();
+    // Not awaited: a one-time check (guarded by localStorage) for
+    // already-registered users with no profile photo yet.
+    this._maybePromptForPhoto();
   }
 
   // Resolves each sangh code to "Name (CODE)", using knownNames where available
@@ -1123,9 +1182,25 @@ class KalyanMitra {
     const btnProfileSave = document.getElementById('btn-profile-save');
     if (btnProfileSave) btnProfileSave.addEventListener('click', () => this.saveProfileEdits());
 
+    // Profile photo change
+    const photoChangeInput = document.getElementById('profile-photo-input');
+    if (photoChangeInput) {
+      photoChangeInput.addEventListener('change', () => {
+        const file = photoChangeInput.files && photoChangeInput.files[0];
+        if (file) this._handleProfilePhotoChange(file);
+        photoChangeInput.value = ''; // allow re-selecting the same file later
+      });
+    }
+
     // Sangh transfer notice
     const btnCloseTransfer = document.getElementById('btn-close-sangh-transfer');
     if (btnCloseTransfer) btnCloseTransfer.addEventListener('click', () => this.closeSanghTransferNotice());
+
+    // One-time "add a profile photo" prompt
+    const btnClosePhotoPrompt = document.getElementById('btn-close-photo-prompt');
+    if (btnClosePhotoPrompt) btnClosePhotoPrompt.addEventListener('click', () => this.closePhotoPromptOverlay());
+    const btnGoToProfilePhoto = document.getElementById('btn-goto-profile-photo');
+    if (btnGoToProfilePhoto) btnGoToProfilePhoto.addEventListener('click', () => this.goToProfileFromPhotoPrompt());
   }
 
   setupAdminEventListeners() {
@@ -2349,21 +2424,17 @@ class KalyanMitra {
 
   // ===== PROFILE TAB =====
   async renderProfile() {
-    // Header (avatar/name/email) — from the already-loaded auth user, no network needed.
+    // Header (name/email) — from the already-loaded auth user, no network needed.
     const user = this._currentAuthUser || {};
-    const avatarEl = document.getElementById('profile-avatar');
-    if (avatarEl) {
-      if (user.photoURL) {
-        avatarEl.src = user.photoURL;
-        avatarEl.classList.remove('hidden');
-      } else {
-        avatarEl.classList.add('hidden');
-      }
-    }
     const nameHeaderEl = document.getElementById('profile-header-name');
     if (nameHeaderEl) nameHeaderEl.textContent = user.name || '';
     const emailEl = document.getElementById('profile-header-email');
     if (emailEl) emailEl.textContent = user.email || '';
+
+    // Photo: instant paint from cache/Google account, then refresh from the
+    // Sheet (the master) in the background — not awaited, same pattern as
+    // the rest of this tab.
+    this._loadProfilePhoto();
 
     // Paint immediately from the Firebase copy — instant, always available, and what
     // keeps this tab usable even before the Sheet-side get_profile/update_profile
@@ -2377,6 +2448,154 @@ class KalyanMitra {
 
     // Then refresh from the Sheet (the master) so external Sheet edits show up.
     this.refreshProfileFromSheet();
+  }
+
+  // Shared image pipeline for both the registration photo picker and the
+  // Profile tab's "Change photo" control. Resizes/centre-crops to a 256x256
+  // JPEG and compresses under a Sheets cell's character budget (a cell caps
+  // out around 50,000 chars; base64 inflates binary by ~33%). Uses
+  // createImageBitmap with imageOrientation:'from-image' so a portrait phone
+  // photo isn't stored sideways — <canvas> silently drops EXIF orientation
+  // otherwise, which is the classic bug with this kind of pipeline.
+  async _resizeImageToDataUrl(file) {
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+      throw new Error('Please choose an image file.');
+    }
+
+    const SIZE = 256;
+    const MAX_CHARS = 45000; // keep in sync with MAX_PHOTO_CHARS in apps-script-additions.gs
+
+    let bitmap;
+    try {
+      bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch (e) {
+      throw new Error('Could not read that image. Please try a different file.');
+    }
+
+    try {
+      const side = Math.min(bitmap.width, bitmap.height);
+      const sx = (bitmap.width - side) / 2;
+      const sy = (bitmap.height - side) / 2;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = SIZE;
+      canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, SIZE, SIZE);
+
+      let quality = 0.8;
+      let dataUrl = canvas.toDataURL('image/jpeg', quality);
+      while (dataUrl.length > MAX_CHARS && quality > 0.35) {
+        quality -= 0.15;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+      }
+
+      if (dataUrl.length > MAX_CHARS) {
+        throw new Error('This photo is too large even after compression. Please try a different image.');
+      }
+      return dataUrl;
+    } finally {
+      bitmap.close();
+    }
+  }
+
+  // Instant paint from cache/Google account photo, then a background refresh
+  // from the Sheet (the master) — mirrors the pattern already used for the
+  // rest of the Profile tab's data.
+  async _loadProfilePhoto() {
+    const avatarEl = document.getElementById('profile-avatar');
+    const placeholderEl = document.getElementById('profile-avatar-placeholder');
+    if (!avatarEl) return;
+
+    const cacheKey = `myniyam_photo_${this.uid}`;
+    let cached = null;
+    try { cached = localStorage.getItem(cacheKey); } catch (e) { /* unavailable — ignore */ }
+
+    const applyPhoto = (src) => {
+      if (src) {
+        avatarEl.src = src;
+        avatarEl.classList.remove('hidden');
+        if (placeholderEl) placeholderEl.classList.add('hidden');
+      } else {
+        avatarEl.classList.add('hidden');
+        if (placeholderEl) placeholderEl.classList.remove('hidden');
+      }
+    };
+
+    applyPhoto(cached || (this._currentAuthUser && this._currentAuthUser.photoURL) || null);
+
+    const photo = await Auth.fetchPhoto(this.uid); // never throws; null on any failure or "no photo"
+    if (photo) {
+      applyPhoto(photo);
+      try { localStorage.setItem(cacheKey, photo); } catch (e) { /* storage full — non-fatal */ }
+    }
+  }
+
+  // Bound to the Profile tab's "Change photo" file input.
+  async _handleProfilePhotoChange(file) {
+    const errorEl = document.getElementById('profile-error');
+    if (errorEl) errorEl.classList.add('hidden');
+    try {
+      const dataUrl = await this._resizeImageToDataUrl(file);
+      const result = await Auth.updatePhoto(this.uid, dataUrl);
+      if (result.success) {
+        const avatarEl = document.getElementById('profile-avatar');
+        const placeholderEl = document.getElementById('profile-avatar-placeholder');
+        if (avatarEl) {
+          avatarEl.src = dataUrl;
+          avatarEl.classList.remove('hidden');
+        }
+        if (placeholderEl) placeholderEl.classList.add('hidden');
+        try {
+          localStorage.setItem(`myniyam_photo_${this.uid}`, dataUrl);
+          localStorage.setItem(`myniyam_photo_prompted_${this.uid}`, '1');
+        } catch (e) { /* non-fatal */ }
+      } else if (errorEl) {
+        errorEl.textContent = 'Failed to upload photo. Please try again.';
+        errorEl.classList.remove('hidden');
+      }
+    } catch (e) {
+      console.error('Photo upload failed:', e);
+      if (errorEl) {
+        errorEl.textContent = (e && e.message) || 'Could not process that photo. Please try a different image.';
+        errorEl.classList.remove('hidden');
+      }
+    }
+  }
+
+  // One-time "please add a profile photo" prompt for already-registered
+  // users. Guarded by localStorage so it fires at most once per user, and
+  // skipped entirely if a Sheet photo already exists (in which case it's
+  // cached here too, saving _loadProfilePhoto() a redundant fetch later).
+  async _maybePromptForPhoto() {
+    const promptedKey = `myniyam_photo_prompted_${this.uid}`;
+    try {
+      if (localStorage.getItem(promptedKey)) return;
+    } catch (e) { /* localStorage unavailable — proceed as if not yet prompted */ }
+
+    const photo = await Auth.fetchPhoto(this.uid); // never throws; null on any failure or "no photo"
+    try { localStorage.setItem(promptedKey, '1'); } catch (e) { /* non-fatal */ }
+
+    if (photo) {
+      try { localStorage.setItem(`myniyam_photo_${this.uid}`, photo); } catch (e) { /* non-fatal */ }
+      return; // already has a photo — never show the popup
+    }
+    this._showPhotoPromptOverlay();
+  }
+
+  _showPhotoPromptOverlay() {
+    const overlay = document.getElementById('photo-prompt-overlay');
+    if (overlay) { overlay.classList.remove('hidden'); overlay.classList.add('show'); }
+  }
+
+  closePhotoPromptOverlay() {
+    const overlay = document.getElementById('photo-prompt-overlay');
+    if (overlay) { overlay.classList.remove('show'); overlay.classList.add('hidden'); }
+  }
+
+  goToProfileFromPhotoPrompt() {
+    this.closePhotoPromptOverlay();
+    this.switchTab('profile');
   }
 
   async refreshProfileFromSheet() {

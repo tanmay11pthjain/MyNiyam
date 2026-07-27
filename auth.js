@@ -14,10 +14,17 @@ const Auth = (() => {
   // is not subject to the same-origin policy), so it's the fallback here rather
   // than a second fetch variant. Returns the raw response text either way —
   // callers keep their existing JSON.parse + fallback handling unchanged.
-  async function _sheetsRequest(payload) {
+  // `opts.allowJsonp` (default true) lets a caller opt OUT of the JSONP
+  // fallback. _fetchViaJsonp encodes the whole payload into a URL query
+  // string, which cannot carry a ~20KB base64 photo — so photo requests pass
+  // false and a transport failure surfaces as a real, visible error instead
+  // of silently attempting a request that could never have worked.
+  async function _sheetsRequest(payload, opts) {
+    const allowJsonp = !opts || opts.allowJsonp !== false;
     try {
       return await _fetchViaPost(payload);
     } catch (e) {
+      if (!allowJsonp) throw e;
       console.warn("Direct fetch to Apps Script failed (likely CORS) — retrying via JSONP:", e);
       return _fetchViaJsonp(payload);
     }
@@ -246,11 +253,52 @@ const Auth = (() => {
         phone: regData.phone,
         city: regData.city,
         area: regData.area,
-        sanghCode: regData.sanghCode || ""
-      });
+        sanghCode: regData.sanghCode || "",
+        photo: regData.photo || ""
+      }, { allowJsonp: false }); // the photo can be ~20KB — never viable over JSONP's query string
       console.log("Sheets registration response:", text);
     } catch (e) {
       console.error("Registration sheet update failed:", e);
+    }
+  }
+
+  // Fetch a single user's profile photo (data URL) from the Sheet. Its own
+  // action — deliberately separate from fetchProfile()/get_profile — so the
+  // image never rides along with lighter, more frequent requests.
+  async function fetchPhoto(uid) {
+    try {
+      const text = await _sheetsRequest({ action: "get_photo", uid }, { allowJsonp: false });
+      console.log("Get photo response length:", text ? text.length : 0);
+      try {
+        const result = JSON.parse(text);
+        if (result.success) return result.photo || null;
+      } catch (parseErr) {
+        console.error("Failed to parse get_photo response:", text);
+      }
+    } catch (e) {
+      console.error("Fetch photo failed:", e);
+    }
+    return null;
+  }
+
+  // Uploads a resized/compressed data URL as the user's profile photo.
+  // Response-checked like updateProfile() — callers must not treat this as
+  // successful unless it resolves { success: true }.
+  async function updatePhoto(uid, dataUrl) {
+    try {
+      const text = await _sheetsRequest({ action: "update_photo", uid, photo: dataUrl }, { allowJsonp: false });
+      console.log("Update photo response:", text);
+      try {
+        const result = JSON.parse(text);
+        if (result.success) return { success: true };
+        return { success: false, error: (result && result.error) || 'unknown' };
+      } catch (parseErr) {
+        console.error("Failed to parse update_photo response:", text);
+        return { success: false, error: 'parse_error' };
+      }
+    } catch (e) {
+      console.error("Update photo failed:", e);
+      return { success: false, error: 'network_error' };
     }
   }
 
@@ -327,6 +375,8 @@ const Auth = (() => {
     fetchSanghs,
     fetchSanghUsers,
     fetchProfile,
-    updateProfile
+    updateProfile,
+    fetchPhoto,
+    updatePhoto
   };
 })();
