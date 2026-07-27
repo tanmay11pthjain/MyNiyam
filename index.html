@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 
@@ -529,6 +529,9 @@
       <div class="admin-section">
         <h2 class="section-heading">🏆 Leaderboard</h2>
         <p class="admin-desc">Click a user to view their detailed progress.</p>
+        <div class="export-bar">
+          <button class="btn-export" id="btn-open-export">📊 Export to Excel</button>
+        </div>
         <div id="admin-leaderboard-list" class="leaderboard-list">
           <!-- Populated by JS -->
           <div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>
@@ -782,6 +785,29 @@
     </div>
   </div>
 
+  <!-- Export Leaderboard to Excel -->
+  <div id="export-overlay" class="overlay hidden">
+    <div class="overlay-content">
+      <h2 class="summary-title">📊 Export to Excel</h2>
+      <p class="submit-confirm-text">Pick a date range to export each user's niyam points.</p>
+      <div class="input-group">
+        <label for="export-from">From</label>
+        <input type="date" id="export-from">
+      </div>
+      <div class="input-group">
+        <label for="export-to">To</label>
+        <input type="date" id="export-to">
+      </div>
+      <div class="register-error hidden" id="export-error"></div>
+      <div class="overlay-actions">
+        <button class="btn-cancel" id="btn-cancel-export">Cancel</button>
+        <button class="btn-continue" id="btn-run-export">
+          <span>Export</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Evening Summary -->
   <div id="evening-summary-overlay" class="overlay hidden">
     <div class="overlay-content evening-summary-content">
@@ -806,9 +832,12 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
+  <!-- Excel export (admin leaderboard) -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
   <!-- Scripts -->
-  <script src="data.js?v=21"></script>
-  <script src="auth.js?v=21"></script>
-  <script src="app.js?v=21"></script>
+  <script src="data.js?v=22"></script>
+  <script src="auth.js?v=22"></script>
+  <script src="app.js?v=22"></script>
 </body>
 </html>

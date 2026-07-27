@@ -18,6 +18,30 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+// ===== ADMIN EXCEL EXPORT — COLUMN SPEC =====
+// Single source of truth for the leaderboard export: column label + how each
+// cell is computed from one daily-log record, so labels and points logic can
+// never drift apart. Values are BASE points (count/flag × the standard POINTS
+// value) — NOT the streak-multiplied KP the user actually banked that day,
+// since only the current streak is persisted, not its historical value per day.
+const EXPORT_COLUMNS = [
+  { label: 'Navkarsi', points: log => log.navkarsiDone ? POINTS.navkarsi : 0 },
+  { label: 'Wake < 7AM', points: log => log.wakeUpDone ? POINTS.wakeUpEarly : 0 },
+  { label: 'Sleep < 12AM', points: log => log.sleepDone ? POINTS.sleepEarly : 0 },
+  { label: 'Pranam', points: log => log.pranamDone ? POINTS.pranam : 0 },
+  { label: 'Pooja', points: log => log.poojaDone ? POINTS.pooja : 0 },
+  { label: 'Samayik', points: log => (log.samayikDone || 0) * POINTS.samayik },
+  { label: 'Devasiya', points: log => log.devasiyaDone ? POINTS.devasiya : 0 },
+  { label: 'Raysiya', points: log => log.raysiyaDone ? POINTS.raysiya : 0 },
+  { label: 'Book Reading', points: log => Math.floor((log.bookReadingMins || 0) / 30) * POINTS.bookReading },
+  { label: 'Ratri Bhojan Tyag', points: log => log.ratriBhojanDone ? POINTS.ratriBhojan : 0 },
+  { label: 'Kandmool Tyag', points: log => log.kandmoolDone ? POINTS.kandmool : 0 },
+  { label: 'Daily Niyam', points: log => log.dailyNiyamDone ? POINTS.dailyNiyam : 0 },
+  { label: 'Ashta Prakari', points: log => log.ashtaPrakariDone ? POINTS.ashtaPrakari : 0 },
+  { label: 'Screen Time Penalty', points: log => -(Math.floor((((log.screenTimeHours || 0) * 60) + (log.screenTimeMins || 0)) / 60) * POINTS.screenTimePenalty) },
+  { label: 'Perfect Day Bonus', points: log => log.perfectDay ? POINTS.perfectDay : 0 },
+];
+
 class KalyanMitra {
   constructor() {
     this.currentRole = null;
@@ -666,6 +690,128 @@ class KalyanMitra {
     }
   }
 
+  // ===== EXCEL EXPORT (ADMIN LEADERBOARD) =====
+
+  // Pure data step — no DOM, no network. Mirrors the exact same authorization
+  // filter as _renderLeaderboardFromSnap() (admin role excluded, only uids in
+  // this._adminUserUids kept) so the export can never leak users outside the
+  // admin's own sangh(s).
+  _collectExportRows(allUsers, fromKey, toKey) {
+    const rows = [];
+    Object.entries(allUsers || {}).forEach(([uid, data]) => {
+      if (!data || data.role === 'admin') return;
+      if (!this._adminUserUids.includes(uid)) return;
+
+      const totals = EXPORT_COLUMNS.map(() => 0);
+      let actualKP = 0;
+      let daysLogged = 0;
+      let perfectDays = 0;
+
+      const logs = data.daily_logs || {};
+      Object.entries(logs).forEach(([dateKey, log]) => {
+        // Zero-padded YYYY-MM-DD keys sort lexicographically = chronologically.
+        if (!log || dateKey < fromKey || dateKey > toKey) return;
+        daysLogged++;
+        if (log.perfectDay) perfectDays++;
+        actualKP += log.kpEarned || 0;
+        EXPORT_COLUMNS.forEach((col, i) => { totals[i] += col.points(log); });
+      });
+
+      const totalBasePoints = totals.reduce((sum, v) => sum + v, 0);
+      rows.push({ name: data.name || uid, totals, totalBasePoints, actualKP, daysLogged, perfectDays });
+    });
+
+    rows.sort((a, b) => b.totalBasePoints - a.totalBasePoints);
+    return rows;
+  }
+
+  openExportDialog() {
+    const errorEl = document.getElementById('export-error');
+    if (errorEl) errorEl.classList.add('hidden');
+
+    const fromEl = document.getElementById('export-from');
+    const toEl = document.getElementById('export-to');
+    if (fromEl && !fromEl.value) {
+      const now = new Date();
+      fromEl.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    }
+    if (toEl && !toEl.value) toEl.value = this.getTodayKey();
+
+    const o = document.getElementById('export-overlay');
+    if (o) { o.classList.remove('hidden'); o.classList.add('show'); }
+  }
+
+  closeExportDialog() {
+    const o = document.getElementById('export-overlay');
+    if (o) { o.classList.remove('show'); o.classList.add('hidden'); }
+  }
+
+  async runExport() {
+    const fromEl = document.getElementById('export-from');
+    const toEl = document.getElementById('export-to');
+    const errorEl = document.getElementById('export-error');
+    const btn = document.getElementById('btn-run-export');
+    const btnSpan = btn ? btn.querySelector('span') : null;
+
+    const showError = (msg) => {
+      if (errorEl) { errorEl.textContent = msg; errorEl.classList.remove('hidden'); }
+    };
+
+    const fromKey = fromEl ? fromEl.value : '';
+    const toKey = toEl ? toEl.value : '';
+
+    if (!fromKey || !toKey) return showError('Please select both a From and To date.');
+    if (fromKey > toKey) return showError('From date must be before To date.');
+    if (typeof XLSX === 'undefined') {
+      return showError('Export library failed to load. Please check your connection and reload the page.');
+    }
+    if (!this._adminUserUids || this._adminUserUids.length === 0) {
+      return showError('No users found for your sangh.');
+    }
+
+    if (errorEl) errorEl.classList.add('hidden');
+    const originalLabel = btnSpan ? btnSpan.textContent : '';
+    if (btn) btn.disabled = true;
+    if (btnSpan) btnSpan.textContent = 'Exporting...';
+
+    try {
+      const snap = await db.ref('users').once('value');
+      const rows = this._collectExportRows(snap.val() || {}, fromKey, toKey);
+
+      if (rows.length === 0) {
+        showError('No users found for your sangh in this range.');
+        return;
+      }
+
+      const noteRow = [
+        "Niyam columns show base points (count/flag × the standard value) — not the streak-multiplied KP the user actually earned. \"Actual KP Recorded\" is the real total from the app."
+      ];
+      const header = [
+        'Name', ...EXPORT_COLUMNS.map(c => c.label),
+        'Total (Base Points)', 'Actual KP Recorded', 'Days Logged', 'Perfect Days'
+      ];
+      const aoa = [noteRow, header];
+      rows.forEach(r => {
+        aoa.push([r.name, ...r.totals, r.totalBasePoints, r.actualKP, r.daysLogged, r.perfectDays]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = header.map((h, i) => ({ wch: i === 0 ? 20 : Math.max(10, h.length + 2) }));
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Niyam Points');
+      XLSX.writeFile(wb, `MyNiyam_Export_${fromKey}_to_${toKey}.xlsx`);
+
+      this.closeExportDialog();
+    } catch (e) {
+      console.error('Export failed:', e);
+      showError('Export failed. Please try again.');
+    } finally {
+      if (btn) btn.disabled = false;
+      if (btnSpan) btnSpan.textContent = originalLabel;
+    }
+  }
+
   async selectAdminUser(uid) {
     // Detach old user listeners (but keep leaderboard listener alive)
     this._detachAllListeners();
@@ -827,6 +973,14 @@ class KalyanMitra {
     // Day detail close
     const closeDayBtn = document.getElementById('btn-close-day-detail');
     if (closeDayBtn) closeDayBtn.addEventListener('click', () => this.closeDayDetail());
+
+    // Export leaderboard to Excel
+    const openExportBtn = document.getElementById('btn-open-export');
+    if (openExportBtn) openExportBtn.addEventListener('click', () => this.openExportDialog());
+    const cancelExportBtn = document.getElementById('btn-cancel-export');
+    if (cancelExportBtn) cancelExportBtn.addEventListener('click', () => this.closeExportDialog());
+    const runExportBtn = document.getElementById('btn-run-export');
+    if (runExportBtn) runExportBtn.addEventListener('click', () => this.runExport());
   }
 
   // ===== FIREBASE SYNC & REALTIME LISTENERS =====

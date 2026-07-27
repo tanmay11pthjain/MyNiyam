@@ -3135,6 +3135,22 @@ body {
 }
 
 /* ===== LEADERBOARD ===== */
+.export-bar { display: flex; justify-content: flex-end; margin-bottom: 4px; }
+.btn-export {
+  padding: 10px 18px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.btn-export:hover { transform: scale(1.02); box-shadow: 0 4px 16px rgba(232, 114, 42, 0.35); }
+.btn-export:active { transform: scale(0.98); }
+
 .leaderboard-list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
 .leaderboard-card { display: flex; align-items: center; background: white; border-radius: 16px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s; }
 .leaderboard-card:active { transform: scale(0.98); }

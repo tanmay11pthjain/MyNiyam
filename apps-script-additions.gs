@@ -1,200 +1,322 @@
 // ============================================================
-// MyNiyam — Profile Get/Update + Sangh List additions for Apps Script
+// MyNiyam — COMPLETE Apps Script backend
 //
-// This file is NOT loaded by the web app. It is source-of-record for backend
-// code that must be pasted into your existing Apps Script project (the one
-// deployed behind the /exec URL in auth.js) and redeployed.
+// This file is NOT loaded by the web app. Paste its ENTIRE contents into your
+// Apps Script project (replacing everything currently in Code.gs), then
+// redeploy.
 //
-// After pasting: use "Manage deployments" -> edit the EXISTING deployment
-// (do not create a new one, or the /exec URL will change and auth.js:4 will
-// need to be updated to match). Also check "Who has access" is set to
-// "Anyone" — anything stricter makes Apps Script omit CORS headers entirely,
-// which is what was breaking EVERY action, not just get_sanghs: fetch()
-// calls for google_login/register/get_sangh_users were failing the exact
-// same way (visible in the browser console as a CORS error on /exec). The
-// doGet(e) added below gives the client's JSONP fallback a way around that
-// regardless of this setting, but fixing "Who has access" is still the real,
-// permanent fix.
+// WHY THIS IS A FULL REPLACEMENT:
+// Testing the live /exec URL returned "Script function not found: doPost".
+// The deployed project has no doPost at all, which means NONE of the Sheets
+// actions have ever worked — google_login, register and get_sangh_users were
+// all failing silently behind the client's try/catch fallbacks. So this file
+// now implements every action from scratch and depends on nothing pre-existing.
+//
+// DEPLOY SETTINGS (all three matter):
+//   Deploy -> Manage deployments -> edit (pencil) the existing deployment
+//     Version:         New version      <- required, or your edits aren't live
+//     Execute as:      Me
+//     Who has access:  Anyone           <- anything stricter breaks CORS
+//   Keep editing the EXISTING deployment so the /exec URL stays the same;
+//   a brand-new deployment gets a different URL and auth.js would need updating.
 // ============================================================
 
-// ---- CONFIG: adjust these two blocks to match your actual Sheet ----
+// ---- CONFIG ----
 
-// The exact name of the sheet/tab that holds one row per registered user.
-const PROFILE_SHEET_NAME = 'Users'; // <-- set this to your real sheet/tab name
+// Leave '' if this script is bound to the spreadsheet (Extensions -> Apps Script
+// from inside the sheet). If it's a standalone script, paste the spreadsheet ID
+// here (the long id in the sheet's URL between /d/ and /edit).
+const SPREADSHEET_ID = '';
 
-// Maps each logical field to the EXACT column header text in row 1 of that
-// sheet (matched case-insensitively, whitespace-trimmed). Edit the
-// right-hand strings to match your real headers.
-const PROFILE_COLUMNS = {
-  uid: 'UID',
-  name: 'Name',
-  dob: 'DOB',
-  phone: 'Phone',
-  city: 'City',
-  area: 'Area',
-  sanghCode: 'Sangh Code',
-  email: 'Email',
+const USERS_SHEET_NAME  = 'Users';
+const SANGH_SHEET_NAME  = 'Sanghs';
+
+// Created automatically if the Users sheet is missing or empty.
+const USER_HEADERS = [
+  'UID', 'Name', 'Email', 'DOB', 'Phone', 'City', 'Area',
+  'Sangh Code', 'Role', 'Sangh Codes', 'Registered At'
+];
+
+// Logical field -> column header text (matched case-insensitively, trimmed).
+const USER_COLUMNS = {
+  uid: 'UID', name: 'Name', email: 'Email', dob: 'DOB', phone: 'Phone',
+  city: 'City', area: 'Area', sanghCode: 'Sangh Code',
+  role: 'Role', sanghCodes: 'Sangh Codes', registeredAt: 'Registered At'
 };
 
-// Fields the app is allowed to update via update_profile. Sangh, name, dob,
-// email and uid are intentionally excluded from this list — even if a
-// malicious client sends them, handleUpdateProfile() below ignores anything
-// not in this list. This whitelist, not the client UI, is what actually
-// enforces "the user cannot change their sangh".
+const SANGH_COLUMNS = { code: 'Code', name: 'Name', city: 'City' };
+
+// Only these may be written by update_profile. Sangh, name, dob, email and uid
+// are excluded on purpose: even if a modified client sends them they are
+// ignored here. This whitelist — not the client UI — is what actually enforces
+// "the user cannot change their sangh".
 const PROFILE_EDITABLE_FIELDS = ['phone', 'city', 'area'];
 
-// ---- Header -> column index map, built fresh on every call so a header ----
-// ---- reordered in the Sheet is picked up automatically.                ----
-function _profileHeaderMap_(sheet) {
-  const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const byHeaderText = {};
-  headerRow.forEach(function (h, i) {
-    byHeaderText[String(h).trim().toLowerCase()] = i; // 0-based column index
-  });
-  const resolved = {};
-  for (const key in PROFILE_COLUMNS) {
-    const headerText = String(PROFILE_COLUMNS[key]).trim().toLowerCase();
-    if (headerText in byHeaderText) resolved[key] = byHeaderText[headerText];
-  }
-  return resolved;
+// ---- SHEET HELPERS ----
+
+function _ss_() {
+  return SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActive();
 }
 
-function _findProfileRow_(sheet, colMap, uid) {
-  if (colMap.uid === undefined) return -1; // uid column not found — can't look anyone up
+function _sanghSheet_() {
+  const ss = _ss_();
+  if (!ss) return null;
+  return ss.getSheetByName(SANGH_SHEET_NAME) || ss.getSheets()[1] || null;
+}
+
+// Creates the Users sheet (and its header row) on first use so a fresh
+// workbook works without any manual setup.
+function _usersSheet_() {
+  const ss = _ss_();
+  if (!ss) return null;
+  let sheet = ss.getSheetByName(USERS_SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(USERS_SHEET_NAME);
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, USER_HEADERS.length).setValues([USER_HEADERS]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+// Builds { logicalField: 0-basedColumnIndex } from row 1, rebuilt on every call
+// so reordering or renaming columns in the sheet is picked up automatically.
+function _headerMap_(sheet, columnsSpec) {
+  const lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return {};
+  const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const byText = {};
+  headerRow.forEach(function (h, i) { byText[String(h).trim().toLowerCase()] = i; });
+  const map = {};
+  for (const key in columnsSpec) {
+    const text = String(columnsSpec[key]).trim().toLowerCase();
+    if (text in byText) map[key] = byText[text];
+  }
+  return map;
+}
+
+function _findUserRow_(sheet, colMap, uid, email) {
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return -1; // header only, no data rows yet
-  const uidValues = sheet.getRange(2, colMap.uid + 1, lastRow - 1, 1).getValues();
-  for (let i = 0; i < uidValues.length; i++) {
-    if (String(uidValues[i][0]).trim() === String(uid).trim()) return i + 2; // 1-based sheet row
+  if (lastRow < 2) return -1;
+  const width = sheet.getLastColumn();
+  const rows = sheet.getRange(2, 1, lastRow - 1, width).getValues();
+  const wantUid = String(uid || '').trim();
+  const wantEmail = String(email || '').trim().toLowerCase();
+
+  for (let i = 0; i < rows.length; i++) {
+    if (colMap.uid !== undefined && wantUid &&
+        String(rows[i][colMap.uid]).trim() === wantUid) return i + 2;
+  }
+  // Fall back to email so a row created before the UID was known still matches.
+  if (wantEmail && colMap.email !== undefined) {
+    for (let i = 0; i < rows.length; i++) {
+      if (String(rows[i][colMap.email]).trim().toLowerCase() === wantEmail) return i + 2;
+    }
   }
   return -1;
 }
 
-// ---- action: get_profile ----
-// Request:  { action: 'get_profile', uid }
-// Response: { success: true, profile: { name, dob, phone, city, area, sanghCode, email } }
-//        or { success: false, error: 'not_found' | 'sheet_not_found' }
-function handleGetProfile(params) {
-  const sheet = SpreadsheetApp.getActive().getSheetByName(PROFILE_SHEET_NAME);
-  if (!sheet) return { success: false, error: 'sheet_not_found' };
-
-  const colMap = _profileHeaderMap_(sheet);
-  const row = _findProfileRow_(sheet, colMap, params.uid);
-  if (row === -1) return { success: false, error: 'not_found' };
-
-  const rowValues = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const profile = {};
-  for (const key in colMap) {
-    profile[key] = rowValues[colMap[key]];
-  }
-  return { success: true, profile: profile };
+function _rowToObject_(sheet, colMap, row) {
+  const values = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const obj = {};
+  for (const key in colMap) obj[key] = values[colMap[key]];
+  return obj;
 }
 
-// ---- action: update_profile ----
-// Request:  { action: 'update_profile', uid, phone, city, area }
-//           (any other field in the payload, e.g. sanghCode, is ignored server-side)
-// Response: { success: true } or { success: false, error: '...' }
-function handleUpdateProfile(params) {
-  const sheet = SpreadsheetApp.getActive().getSheetByName(PROFILE_SHEET_NAME);
-  if (!sheet) return { success: false, error: 'sheet_not_found' };
+function _setField_(sheet, colMap, row, field, value) {
+  if (colMap[field] === undefined) return; // column absent — skip rather than write to the wrong one
+  sheet.getRange(row, colMap[field] + 1).setValue(value);
+}
 
-  const colMap = _profileHeaderMap_(sheet);
-  const row = _findProfileRow_(sheet, colMap, params.uid);
-  if (row === -1) return { success: false, error: 'not_found' };
+// ---- ACTION: get_sanghs ----
+function handleGetSanghs() {
+  const sheet = _sanghSheet_();
+  if (!sheet) return { success: false, error: 'sangh_sheet_not_found' };
 
-  PROFILE_EDITABLE_FIELDS.forEach(function (field) {
-    if (colMap[field] === undefined) return; // column not found in sheet — skip safely
-    if (!(field in params)) return; // field not sent by client — leave existing value alone
-    sheet.getRange(row, colMap[field] + 1).setValue(params[field]);
+  const colMap = _headerMap_(sheet, SANGH_COLUMNS);
+  if (colMap.code === undefined) return { success: false, error: 'code_column_not_found' };
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { success: true, sanghs: [] };
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const sanghs = [];
+  rows.forEach(function (r) {
+    const code = String(r[colMap.code] || '').trim();
+    if (!code) return; // skip blank rows
+    sanghs.push({
+      code: code,
+      name: colMap.name !== undefined ? String(r[colMap.name] || '').trim() : '',
+      city: colMap.city !== undefined ? String(r[colMap.city] || '').trim() : ''
+    });
   });
+  return { success: true, sanghs: sanghs };
+}
+
+// ---- ACTION: google_login ----
+// Returns role/sanghCodes/registered. Never creates a row — registration does that.
+//
+// To make someone an ADMIN: add a row in Users with their UID (or Email),
+// set Role = admin, and put the sangh codes they manage in "Sangh Codes"
+// as a comma-separated list (e.g. SNG001,SNG002).
+function handleGoogleLogin(params) {
+  params = params || {}; // tolerate being run bare from the editor
+  const sheet = _usersSheet_();
+  if (!sheet) return { success: false, error: 'users_sheet_not_found' };
+
+  const colMap = _headerMap_(sheet, USER_COLUMNS);
+  const row = _findUserRow_(sheet, colMap, params.uid, params.email);
+  if (row === -1) return { success: true, role: 'user', sanghCodes: [], registered: false };
+
+  const rec = _rowToObject_(sheet, colMap, row);
+  const role = String(rec.role || 'user').trim().toLowerCase() === 'admin' ? 'admin' : 'user';
+  const ownCode = String(rec.sanghCode || '').trim();
+
+  let sanghCodes = String(rec.sanghCodes || '')
+    .split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s; });
+  if (!sanghCodes.length && ownCode) sanghCodes = [ownCode];
+
+  // Backfill the UID if this row was matched by email only, so later lookups hit
+  // the fast UID path and stay stable if the email ever changes.
+  if (colMap.uid !== undefined && params.uid && !String(rec.uid || '').trim()) {
+    _setField_(sheet, colMap, row, 'uid', params.uid);
+  }
+
+  return { success: true, role: role, sanghCodes: sanghCodes, registered: !!ownCode };
+}
+
+// ---- ACTION: register ----
+function handleRegister(params) {
+  params = params || {}; // tolerate being run bare from the editor
+  // Never create an empty row: without a uid or email there is nothing to key
+  // the row on, and running this bare from the editor would otherwise append
+  // a blank row to the sheet on every Run.
+  if (!String(params.uid || '').trim() && !String(params.email || '').trim()) {
+    return { success: false, error: 'missing_uid_and_email' };
+  }
+  const sheet = _usersSheet_();
+  if (!sheet) return { success: false, error: 'users_sheet_not_found' };
+
+  const colMap = _headerMap_(sheet, USER_COLUMNS);
+  let row = _findUserRow_(sheet, colMap, params.uid, params.email);
+  if (row === -1) {
+    // Upsert: target the first free row, then fill it cell-by-cell via the header
+    // map. appendRow([]) is avoided because an empty array throws, and writing
+    // past the grid's row count would be out of bounds — so grow it if needed.
+    row = sheet.getLastRow() + 1;
+    if (row > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1);
+  }
+
+  _setField_(sheet, colMap, row, 'uid', params.uid || '');
+  _setField_(sheet, colMap, row, 'name', params.name || '');
+  _setField_(sheet, colMap, row, 'email', params.email || '');
+  _setField_(sheet, colMap, row, 'dob', params.dob || '');
+  _setField_(sheet, colMap, row, 'phone', params.phone || '');
+  _setField_(sheet, colMap, row, 'city', params.city || '');
+  _setField_(sheet, colMap, row, 'area', params.area || '');
+  _setField_(sheet, colMap, row, 'sanghCode', params.sanghCode || '');
+  _setField_(sheet, colMap, row, 'registeredAt', new Date().toISOString());
+
+  // Don't clobber an existing Role (an admin re-registering must stay an admin).
+  if (colMap.role !== undefined && !String(sheet.getRange(row, colMap.role + 1).getValue() || '').trim()) {
+    _setField_(sheet, colMap, row, 'role', 'user');
+  }
 
   return { success: true };
 }
 
-// ============================================================
-// Sangh List (sheet named "Sanghs", columns: Code, Name, City)
-//
-// Fixes the registration-form dropdown, which was showing empty because the
-// client's get_sanghs request had no matching backend branch — and,
-// separately, because of the CORS issue described at the top of this file.
-// ============================================================
+// ---- ACTION: get_sangh_users ----
+function handleGetSanghUsers(params) {
+  params = params || {}; // tolerate being run bare from the editor
+  const sheet = _usersSheet_();
+  if (!sheet) return { success: false, error: 'users_sheet_not_found' };
 
-// Looked up by NAME first (confirmed sheet name: "Sanghs"), falling back to
-// position (second sheet, 0-indexed) if that name isn't found — so this
-// still works even if the tab gets renamed later.
-const SANGH_SHEET_NAME = 'Sanghs';
+  const colMap = _headerMap_(sheet, USER_COLUMNS);
+  if (colMap.sanghCode === undefined) return { success: true, users: [] };
 
-// Maps each logical field to the EXACT column header text in row 1 of the
-// sangh list — matched case-insensitively, whitespace-trimmed.
-const SANGH_COLUMNS = {
-  code: 'Code',
-  name: 'Name',
-  city: 'City',
-};
-
-function _getSanghSheet_() {
-  const ss = SpreadsheetApp.getActive();
-  return ss.getSheetByName(SANGH_SHEET_NAME) || ss.getSheets()[1] || null;
-}
-
-// ---- action: get_sanghs ----
-// Request:  { action: 'get_sanghs' }  (no uid needed)
-// Response: { success: true, sanghs: [{ code, name, city }, ...] }
-//        or { success: false, error: 'sheet_not_found' | 'code_column_not_found' }
-function handleGetSanghs() {
-  const sheet = _getSanghSheet_();
-  if (!sheet) return { success: false, error: 'sheet_not_found' };
-
-  const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const byHeaderText = {};
-  headerRow.forEach(function (h, i) {
-    byHeaderText[String(h).trim().toLowerCase()] = i; // 0-based column index
-  });
-  const colMap = {};
-  for (const key in SANGH_COLUMNS) {
-    const headerText = String(SANGH_COLUMNS[key]).trim().toLowerCase();
-    if (headerText in byHeaderText) colMap[key] = byHeaderText[headerText];
-  }
-  if (colMap.code === undefined) return { success: false, error: 'code_column_not_found' };
+  const wanted = (params.sanghCodes || []).map(function (c) { return String(c).trim().toLowerCase(); });
+  if (!wanted.length) return { success: true, users: [] };
 
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return { success: true, sanghs: [] }; // header only, no data rows yet
+  if (lastRow < 2) return { success: true, users: [] };
 
-  const dataRows = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-  const sanghs = [];
-  dataRows.forEach(function (row) {
-    const code = String(row[colMap.code] || '').trim();
-    if (!code) return; // skip blank rows
-    sanghs.push({
-      code: code,
-      name: colMap.name !== undefined ? String(row[colMap.name] || '').trim() : '',
-      city: colMap.city !== undefined ? String(row[colMap.city] || '').trim() : '',
+  const rows = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const users = [];
+  rows.forEach(function (r) {
+    const code = String(r[colMap.sanghCode] || '').trim().toLowerCase();
+    if (!code || wanted.indexOf(code) === -1) return;
+    const uid = colMap.uid !== undefined ? String(r[colMap.uid] || '').trim() : '';
+    if (!uid) return; // the client keys off uid; a row without one is unusable
+    users.push({
+      uid: uid,
+      name: colMap.name !== undefined ? String(r[colMap.name] || '').trim() : '',
+      sanghCode: colMap.sanghCode !== undefined ? String(r[colMap.sanghCode] || '').trim() : ''
     });
   });
-
-  return { success: true, sanghs: sanghs };
+  return { success: true, users: users };
 }
 
-// Run this manually from the Apps Script editor (select testGetSanghs in the
-// function dropdown, then Run) to confirm the sheet reads correctly BEFORE
-// testing through the browser at all. Check View -> Logs for the result.
-function testGetSanghs() {
-  const result = handleGetSanghs();
-  Logger.log(JSON.stringify(result));
-  return result;
+// ---- ACTION: get_profile ----
+function handleGetProfile(params) {
+  params = params || {}; // tolerate being run bare from the editor
+  const sheet = _usersSheet_();
+  if (!sheet) return { success: false, error: 'users_sheet_not_found' };
+
+  const colMap = _headerMap_(sheet, USER_COLUMNS);
+  const row = _findUserRow_(sheet, colMap, params.uid, params.email);
+  if (row === -1) return { success: false, error: 'not_found' };
+
+  const rec = _rowToObject_(sheet, colMap, row);
+  return {
+    success: true,
+    profile: {
+      name: String(rec.name || ''),
+      // Dates come back as Date objects; send YYYY-MM-DD so it round-trips into
+      // the <input type="date"> and the client's DOB formatter.
+      dob: (rec.dob instanceof Date)
+        ? Utilities.formatDate(rec.dob, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+        : String(rec.dob || ''),
+      phone: String(rec.phone || ''),
+      city: String(rec.city || ''),
+      area: String(rec.area || ''),
+      sanghCode: String(rec.sanghCode || ''),
+      email: String(rec.email || '')
+    }
+  };
 }
 
-// ============================================================
-// JSONP-aware response wrapper + a doGet(e) that works for EVERY action
-// ============================================================
+// ---- ACTION: update_profile ----
+function handleUpdateProfile(params) {
+  params = params || {}; // tolerate being run bare from the editor
+  const sheet = _usersSheet_();
+  if (!sheet) return { success: false, error: 'users_sheet_not_found' };
 
-// Wraps a plain result object as JSONP (callback(...)) when the request
-// carried a `callback` query param, or as plain JSON otherwise. Use this for
-// get_profile/update_profile/get_sanghs — see WIRING below for how the 3
-// pre-existing actions get the same treatment without touching their logic.
-function respond_(result, e) {
+  const colMap = _headerMap_(sheet, USER_COLUMNS);
+  const row = _findUserRow_(sheet, colMap, params.uid, params.email);
+  if (row === -1) return { success: false, error: 'not_found' };
+
+  PROFILE_EDITABLE_FIELDS.forEach(function (field) {
+    if (!(field in params)) return; // not sent — leave the existing value alone
+    _setField_(sheet, colMap, row, field, params[field]);
+  });
+  return { success: true };
+}
+
+// ---- ROUTER ----
+function routeAction(params) {
+  const action = params && params.action;
+  switch (action) {
+    case 'google_login':    return handleGoogleLogin(params);
+    case 'get_sanghs':      return handleGetSanghs();
+    case 'register':        return handleRegister(params);
+    case 'get_sangh_users': return handleGetSanghUsers(params);
+    case 'get_profile':     return handleGetProfile(params);
+    case 'update_profile':  return handleUpdateProfile(params);
+    default:                return { success: false, error: 'unknown_action: ' + action };
+  }
+}
+
+function _respond_(result, callback) {
   const text = JSON.stringify(result);
-  const callback = e && e.parameter && e.parameter.callback;
   if (callback) {
     return ContentService.createTextOutput(callback + '(' + text + ')')
       .setMimeType(ContentService.MimeType.JAVASCRIPT);
@@ -202,37 +324,46 @@ function respond_(result, e) {
   return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);
 }
 
-// The client's JSONP fallback (auth.js: _fetchViaJsonp) sends EVERY action —
-// including the pre-existing google_login/register/get_sangh_users — as a GET
-// with ?callback=...&payload=<JSON>. Rather than re-implementing those three
-// actions' logic here (which would risk diverging from your real
-// implementation and is safer not to guess at), this doGet reconstructs a
-// POST-shaped event and calls your EXISTING doPost(e) directly, then
-// re-wraps whatever it returns as JSONP.
-//
-// IMPORTANT: if your project ALREADY defines a doGet(e) function anywhere,
-// delete that one (or merge its logic in here) — you cannot have two.
+function _parseParams_(e, body) {
+  if (body) { try { return JSON.parse(body); } catch (err) { /* fall through */ } }
+  if (e && e.parameter && e.parameter.payload) {
+    try { return JSON.parse(e.parameter.payload); } catch (err) { /* fall through */ } }
+  return (e && e.parameter) || {};
+}
+
+function doPost(e) {
+  try {
+    const params = _parseParams_(e, e && e.postData && e.postData.contents);
+    return _respond_(routeAction(params), e && e.parameter && e.parameter.callback);
+  } catch (err) {
+    return _respond_({ success: false, error: String(err) }, e && e.parameter && e.parameter.callback);
+  }
+}
+
+// Serves the client's JSONP fallback (auth.js _fetchViaJsonp), which sends
+// ?callback=...&payload=<json>. Calls routeAction directly — it must NOT call
+// doPost, since e.postData doesn't exist on a GET.
 function doGet(e) {
-  const fakeEvent = { parameter: e.parameter, postData: { contents: (e.parameter && e.parameter.payload) || '{}' } };
-  const output = doPost(fakeEvent); // your existing doPost — must return a ContentService TextOutput
-  const text = output.getContent();
-  const callback = e.parameter && e.parameter.callback;
-  if (callback) {
-    return ContentService.createTextOutput(callback + '(' + text + ')')
-      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  try {
+    const params = _parseParams_(e, null);
+    return _respond_(routeAction(params), e && e.parameter && e.parameter.callback);
+  } catch (err) {
+    return _respond_({ success: false, error: String(err) }, e && e.parameter && e.parameter.callback);
   }
-  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);
 }
 
-// ============================================================
-// WIRING — the only edits needed in your EXISTING doPost(e):
-//
-//   if (action === 'get_profile')    return respond_(handleGetProfile(params), e);
-//   if (action === 'update_profile') return respond_(handleUpdateProfile(params), e);
-//   if (action === 'get_sanghs')     return respond_(handleGetSanghs(), e);
-//
-// Add these alongside your current branches for 'google_login' / 'register' /
-// 'get_sangh_users' — leave those three completely untouched. The doGet(e)
-// above then makes ALL SIX actions work over JSONP automatically, since it
-// simply forwards to your doPost.
-// ============================================================
+// ---- TESTS: run these from the editor (Run button) before touching the app ----
+function testGetSanghs() {
+  const r = handleGetSanghs();
+  Logger.log(JSON.stringify(r, null, 2));
+  return r;
+}
+
+function testSetup() {
+  const ss = _ss_();
+  Logger.log('Spreadsheet: ' + (ss ? ss.getName() : 'NULL — set SPREADSHEET_ID at the top'));
+  if (ss) Logger.log('Sheets: ' + ss.getSheets().map(function (s) { return s.getName(); }).join(', '));
+  Logger.log('Sangh sheet found: ' + (_sanghSheet_() ? 'yes' : 'NO'));
+  Logger.log('Users sheet found/created: ' + (_usersSheet_() ? 'yes' : 'NO'));
+  Logger.log('get_sanghs -> ' + JSON.stringify(handleGetSanghs()));
+}
