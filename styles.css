@@ -825,6 +825,13 @@ body {
   color: var(--text-secondary);
 }
 
+.panchang-location {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  opacity: 0.75;
+  margin-bottom: 4px;
+}
+
 .tithi-display {
   text-align: center;
   padding: 10px 0 14px;

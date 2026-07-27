@@ -42,6 +42,101 @@ const EXPORT_COLUMNS = [
   { label: 'Perfect Day Bonus', points: log => log.perfectDay ? POINTS.perfectDay : 0 },
 ];
 
+// ===== SUN TIMES — pure NOAA/Meeus solar calculation =====
+// No DOM, no network, no class state — takes lat/lng/elevation/date/timezone
+// and returns real Date objects (UTC instants). Returning Date rather than a
+// bare decimal-hour float is deliberate: a float loses its timezone identity,
+// which was the root cause of every downstream formatting bug in the old
+// implementation (minutes rounding to 60, hours never wrapping past 24, the
+// fallback path silently assuming IST while the network path assumed the
+// device's zone). A single Date is unambiguous regardless of who reads it.
+const SunTimes = (() => {
+  const toRad = deg => deg * Math.PI / 180;
+  const toDeg = rad => rad * 180 / Math.PI;
+
+  // Y/M/D as seen in `timeZone`, so the calendar day we compute for is the
+  // location's day, not whatever day the device's clock happens to be on.
+  function _localDateParts(date, timeZone) {
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const parts = {};
+    fmt.formatToParts(date).forEach(p => { parts[p.type] = p.value; });
+    return { year: parseInt(parts.year, 10), month: parseInt(parts.month, 10), day: parseInt(parts.day, 10) };
+  }
+
+  // Julian Day anchored at UTC noon of the given calendar date. Anchoring on
+  // noon (rather than whatever instant `date` happens to represent) makes the
+  // result independent of what time of day this function is called — the old
+  // fallback derived "day of year" from the live clock, which could shift the
+  // computed sunrise/sunset by a fraction of a day near local midnight.
+  function _julianDayAtNoon(year, month, day) {
+    const noonUTC = Date.UTC(year, month - 1, day, 12, 0, 0);
+    return noonUTC / 86400000 + 2440587.5;
+  }
+
+  // Standard NOAA solar position algorithm (per Jean Meeus, Astronomical
+  // Algorithms). `elevationM` applies the horizon-dip correction
+  // (2.076 * sqrt(metres) arcminutes) on top of the standard 34' atmospheric
+  // refraction — this is what makes sunrise measurably earlier and sunset
+  // later at elevated sites (hill-station sanghs like Palitana or Mt. Abu).
+  // Returns { sunrise, sunset, solarNoon } as Date objects; sunrise/sunset
+  // are null for genuine polar day/night rather than a clamped, bogus time.
+  function sunTimesFor(lat, lng, elevationM, date, timeZone) {
+    const tz = timeZone || 'UTC';
+    const { year, month, day } = _localDateParts(date, tz);
+    const jd = _julianDayAtNoon(year, month, day);
+    const T = (jd - 2451545.0) / 36525;
+
+    const L0 = ((280.46646 + T * (36000.76983 + T * 0.0003032)) % 360 + 360) % 360;
+    const M = 357.52911 + T * (35999.05029 - 0.0001537 * T);
+    const e = 0.016708634 - T * (0.000042037 + 0.0000001267 * T);
+    const C = Math.sin(toRad(M)) * (1.914602 - T * (0.004817 + 0.000014 * T))
+      + Math.sin(toRad(2 * M)) * (0.019993 - 0.000101 * T)
+      + Math.sin(toRad(3 * M)) * 0.000289;
+    const trueLong = L0 + C;
+    const omega = 125.04 - 1934.136 * T;
+    const lambda = trueLong - 0.00569 - 0.00478 * Math.sin(toRad(omega));
+
+    const e0 = 23 + (26 + (21.448 - T * (46.815 + T * (0.00059 - T * 0.001813))) / 60) / 60;
+    const obliqCorr = e0 + 0.00256 * Math.cos(toRad(omega));
+
+    const declination = Math.asin(Math.sin(toRad(obliqCorr)) * Math.sin(toRad(lambda)));
+
+    const y = Math.pow(Math.tan(toRad(obliqCorr) / 2), 2);
+    const eqTime = 4 * toDeg(
+      y * Math.sin(2 * toRad(L0))
+      - 2 * e * Math.sin(toRad(M))
+      + 4 * e * y * Math.sin(toRad(M)) * Math.cos(2 * toRad(L0))
+      - 0.5 * y * y * Math.sin(4 * toRad(L0))
+      - 1.25 * e * e * Math.sin(2 * toRad(M))
+    );
+
+    const elevationDipDeg = 2.076 * Math.sqrt(Math.max(0, elevationM || 0)) / 60;
+    const zenith = 90.833 + elevationDipDeg;
+
+    const latRad = toRad(lat);
+    const cosHA = (Math.cos(toRad(zenith)) - Math.sin(latRad) * Math.sin(declination))
+      / (Math.cos(latRad) * Math.cos(declination));
+
+    const utcMidnightMs = Date.UTC(year, month - 1, day, 0, 0, 0);
+    const solarNoonMin = 720 - 4 * lng - eqTime;
+    const solarNoon = new Date(utcMidnightMs + solarNoonMin * 60000);
+
+    if (cosHA < -1 || cosHA > 1) {
+      // |cosHA| > 1 means the hour-angle equation has no real solution —
+      // the sun never crosses this zenith at this latitude/date (polar
+      // day or polar night). Report "no event" rather than an invented time.
+      return { sunrise: null, sunset: null, solarNoon };
+    }
+
+    const haDeg = toDeg(Math.acos(cosHA));
+    const sunrise = new Date(utcMidnightMs + (solarNoonMin - 4 * haDeg) * 60000);
+    const sunset = new Date(utcMidnightMs + (solarNoonMin + 4 * haDeg) * 60000);
+    return { sunrise, sunset, solarNoon };
+  }
+
+  return { sunTimesFor };
+})();
+
 class KalyanMitra {
   constructor() {
     this.currentRole = null;
@@ -49,6 +144,7 @@ class KalyanMitra {
     this.autoLockInterval = null;
     this.currentDayLocked = false;
     this.currentDayLockValue = null;
+    this.location = null; // resolved in fetchGeolocationAndPanchang(); falls back to DEFAULT_LOCATION until then
     this.init();
   }
 
@@ -361,7 +457,10 @@ class KalyanMitra {
     document.getElementById('admin-panel').classList.add('hidden');
 
     this.checkDailyReset();
-    await this.fetchGeolocationAndPanchang();
+    // Not awaited: renders from the last-known/default location immediately,
+    // then refines via GPS and Open-Meteo in the background. Never blocks the
+    // dashboard on a geolocation prompt or a network round-trip.
+    this.fetchGeolocationAndPanchang();
     this.grantDailyLogin();
     this.renderDashboard();
     this.renderAchievements();
@@ -423,21 +522,47 @@ class KalyanMitra {
   }
 
   async fetchGeolocationAndPanchang() {
-    if (navigator.geolocation) {
-      try {
-        const position = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
-        });
-        
-        this.settings.locationLat = position.coords.latitude;
-        this.settings.locationLng = position.coords.longitude;
-        this.settings.locationName = "Live Location";
-        this.saveSettings();
-      } catch (e) {
-        console.warn("Geolocation denied or timeout. Using fallback location.", e);
-      }
+    // Load this user's OWN saved location — a per-user node, never the global
+    // settings singleton. Writing GPS coordinates to db.ref('settings') used
+    // to broadcast one user's precise location to every connected client and
+    // re-trigger everyone's panchang calculation on every save.
+    try {
+      const snap = await db.ref(`users/${this.uid}/location`).once('value');
+      this.location = snap.val() ? { ...DEFAULT_LOCATION, ...snap.val() } : { ...DEFAULT_LOCATION };
+    } catch (e) {
+      console.warn('Failed to load saved location, using default:', e);
+      this.location = { ...DEFAULT_LOCATION };
     }
-    await this.calculatePanchang();
+
+    // Render immediately from whatever location we have — never wait on a
+    // GPS prompt or the network to show a panchang card.
+    this.calculatePanchang();
+
+    if (!navigator.geolocation) return;
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: false,
+          timeout: 8000,
+          // Sun times don't need a metre-accurate fix — accepting a fix up to
+          // 30 minutes old avoids a fresh GPS acquisition on every app open.
+          maximumAge: 30 * 60 * 1000
+        });
+      });
+      this.location.lat = position.coords.latitude;
+      this.location.lng = position.coords.longitude;
+      this.location.source = 'gps';
+      this.location.updatedAt = new Date().toISOString();
+      db.ref(`users/${this.uid}/location`).update({
+        lat: this.location.lat,
+        lng: this.location.lng,
+        source: 'gps',
+        updatedAt: this.location.updatedAt
+      });
+      this.calculatePanchang(); // re-render with the refined coordinates
+    } catch (e) {
+      console.warn('Geolocation denied or timed out — using last known location.', e);
+    }
   }
 
   // ===== ADMIN INITIALIZATION =====
@@ -1017,7 +1142,11 @@ class KalyanMitra {
       this.settings = val ? { ...DEFAULT_SETTINGS, ...val } : { ...DEFAULT_SETTINGS };
       if (!this.initializing) {
         if (this.currentRole === 'user') {
-          this.calculatePanchang();
+          // Deliberately NOT calling calculatePanchang() here — location now
+          // lives per-user, not in this shared node, so nothing here should
+          // affect sun times. Recomputing on every settings change used to
+          // fan out an Open-Meteo/geolocation refresh to every connected
+          // client whenever anyone (including an admin) saved settings.
           this.renderDashboard();
         } else {
           this.loadAdminSettingsUI();
@@ -1120,6 +1249,7 @@ class KalyanMitra {
         // over to today; it is the single owner of back-locking.
         await this.checkDailyReset();
         this.renderDashboard();
+        this.calculatePanchang(); // roll the panchang card to the new day too
       }
       // Update lock UI
       this.updateLockUI();
@@ -1221,96 +1351,95 @@ class KalyanMitra {
   // ===== PANCHANG CALCULATIONS =====
   async calculatePanchang() {
     const now = new Date();
-    const lat = this.settings.locationLat;
-    const lng = this.settings.locationLng;
-    
+    const loc = this.location || DEFAULT_LOCATION;
     const tithiInfo = this.calculateTithi(now);
-    
-    let sunTimes;
+    const todayKey = this.getTodayKey();
+
+    // Cache check — at most one Open-Meteo call per day per location.
+    const cacheKey = `myniyam_sun_${loc.lat.toFixed(3)}_${loc.lng.toFixed(3)}_${todayKey}`;
+    let cached = null;
     try {
-      const url = `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lng}&formatted=0`;
-      const res = await fetch(url);
-      const data = await res.json();
-      
-      if (data.status === "OK") {
-        const sunriseUTC = new Date(data.results.sunrise);
-        const sunsetUTC = new Date(data.results.sunset);
-        
-        const getDecimalHour = (d) => d.getHours() + (d.getMinutes() / 60);
-        
-        const sunriseLocal = getDecimalHour(sunriseUTC);
-        const sunsetLocal = getDecimalHour(sunsetUTC);
-        
-        sunTimes = { 
-          sunrise: sunriseLocal, 
-          sunset: sunsetLocal, 
-          navkarsi: sunriseLocal + (48 / 60) 
-        };
-      } else {
-        throw new Error("API response not OK");
-      }
-    } catch (e) {
-      console.warn("Failed to fetch Sunrise API, falling back to manual calc", e);
-      sunTimes = this.calculateSunriseSunset(lat, lng, now);
+      const raw = localStorage.getItem(cacheKey);
+      if (raw) cached = JSON.parse(raw);
+    } catch (e) { /* corrupt/unavailable cache — ignore and recompute */ }
+
+    if (cached) {
+      this.renderPanchang(
+        { sunrise: new Date(cached.sunrise), sunset: new Date(cached.sunset) },
+        tithiInfo, now, cached.timezone
+      );
+      return;
     }
 
-    this.renderPanchang(sunTimes, tithiInfo, now);
+    // Render the local calculation immediately — the card must never be
+    // blank or stalled on a network round trip.
+    const local = SunTimes.sunTimesFor(loc.lat, loc.lng, loc.elevation, now, loc.timezone);
+    this.renderPanchang(local, tithiInfo, now, loc.timezone);
+
+    // Refine via Open-Meteo in the background (not awaited by any caller —
+    // calculatePanchang() itself is fire-and-forget from every call site).
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}&daily=sunrise,sunset&timezone=auto&forecast_days=1`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      const data = await res.json();
+      if (!data || !data.daily || !data.daily.sunrise || !data.daily.sunrise[0]) {
+        throw new Error('Unexpected Open-Meteo response shape');
+      }
+
+      const seaLevelSunrise = new Date(data.daily.sunrise[0]);
+      const seaLevelSunset = new Date(data.daily.sunset[0]);
+      const elevation = typeof data.elevation === 'number' ? data.elevation : loc.elevation;
+      const timezone = data.timezone || loc.timezone;
+
+      // Open-Meteo reports sea-level times; apply the same elevation delta our
+      // own model would add, so the elevation correction still applies without
+      // double-counting it on top of Open-Meteo's own atmospheric modeling.
+      const seaLevelLocal = SunTimes.sunTimesFor(loc.lat, loc.lng, 0, now, timezone);
+      const elevatedLocal = SunTimes.sunTimesFor(loc.lat, loc.lng, elevation, now, timezone);
+      const sunriseDelta = (seaLevelLocal.sunrise && elevatedLocal.sunrise)
+        ? elevatedLocal.sunrise.getTime() - seaLevelLocal.sunrise.getTime() : 0;
+      const sunsetDelta = (seaLevelLocal.sunset && elevatedLocal.sunset)
+        ? elevatedLocal.sunset.getTime() - seaLevelLocal.sunset.getTime() : 0;
+
+      const sunTimes = {
+        sunrise: new Date(seaLevelSunrise.getTime() + sunriseDelta),
+        sunset: new Date(seaLevelSunset.getTime() + sunsetDelta)
+      };
+
+      // Persist refined elevation/timezone for next time.
+      if (elevation !== loc.elevation || timezone !== loc.timezone) {
+        this.location.elevation = elevation;
+        this.location.timezone = timezone;
+        this.location.source = 'open-meteo';
+        db.ref(`users/${this.uid}/location`).update({ elevation, timezone, source: 'open-meteo' });
+      }
+
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({
+          sunrise: sunTimes.sunrise.toISOString(),
+          sunset: sunTimes.sunset.toISOString(),
+          timezone
+        }));
+      } catch (e) { /* storage full/unavailable — non-fatal, just skip caching */ }
+
+      this.renderPanchang(sunTimes, tithiInfo, now, timezone);
+    } catch (e) {
+      console.warn('Open-Meteo fetch failed — keeping the local calculation on screen.', e);
+    }
   }
 
-  calculateSunriseSunset(lat, lng, date) {
-    const toRad = (deg) => deg * (Math.PI / 180);
-    const toDeg = (rad) => rad * (180 / Math.PI);
-    const start = new Date(date.getFullYear(), 0, 0);
-    const diff = date - start;
-    const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const zenith = 90.833;
-    const lngHour = lng / 15;
-
-    // Sunrise
-    const tRise = dayOfYear + ((6 - lngHour) / 24);
-    const mRise = (0.9856 * tRise) - 3.289;
-    let lRise = mRise + (1.916 * Math.sin(toRad(mRise))) + (0.020 * Math.sin(toRad(2 * mRise))) + 282.634;
-    lRise = ((lRise % 360) + 360) % 360;
-    let raRise = toDeg(Math.atan(0.91764 * Math.tan(toRad(lRise))));
-    raRise = ((raRise % 360) + 360) % 360;
-    raRise += (Math.floor(lRise / 90) * 90) - (Math.floor(raRise / 90) * 90);
-    raRise /= 15;
-    const sinDecRise = 0.39782 * Math.sin(toRad(lRise));
-    const cosDecRise = Math.cos(Math.asin(sinDecRise));
-    const cosHRise = (Math.cos(toRad(zenith)) - (sinDecRise * Math.sin(toRad(lat)))) / (cosDecRise * Math.cos(toRad(lat)));
-    const hRise = (360 - toDeg(Math.acos(Math.max(-1, Math.min(1, cosHRise))))) / 15;
-    let utRise = hRise + raRise - (0.06571 * tRise) - 6.622;
-    utRise = ((utRise % 24) + 24) % 24;
-
-    // Sunset
-    const tSet = dayOfYear + ((18 - lngHour) / 24);
-    const mSet = (0.9856 * tSet) - 3.289;
-    let lSet = mSet + (1.916 * Math.sin(toRad(mSet))) + (0.020 * Math.sin(toRad(2 * mSet))) + 282.634;
-    lSet = ((lSet % 360) + 360) % 360;
-    let raSet = toDeg(Math.atan(0.91764 * Math.tan(toRad(lSet))));
-    raSet = ((raSet % 360) + 360) % 360;
-    raSet += (Math.floor(lSet / 90) * 90) - (Math.floor(raSet / 90) * 90);
-    raSet /= 15;
-    const sinDecSet = 0.39782 * Math.sin(toRad(lSet));
-    const cosDecSet = Math.cos(Math.asin(sinDecSet));
-    const cosHSet = (Math.cos(toRad(zenith)) - (sinDecSet * Math.sin(toRad(lat)))) / (cosDecSet * Math.cos(toRad(lat)));
-    const hSet = toDeg(Math.acos(Math.max(-1, Math.min(1, cosHSet)))) / 15;
-    let utSet = hSet + raSet - (0.06571 * tSet) - 6.622;
-    utSet = ((utSet % 24) + 24) % 24;
-
-    const istOffset = 5.5;
-    let sunriseIST = ((utRise + istOffset) % 24 + 24) % 24;
-    let sunsetIST = ((utSet + istOffset) % 24 + 24) % 24;
-
-    return { sunrise: sunriseIST, sunset: sunsetIST, navkarsi: sunriseIST + (48 / 60) };
-  }
-
-  formatTime(decimalHours) {
-    const hours = Math.floor(decimalHours);
-    const minutes = Math.round((decimalHours - hours) * 60);
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const displayHour = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
-    return `${displayHour}:${String(minutes).padStart(2, '0')} ${period}`;
+  // Formats a Date as a 12-hour clock time in `timezone` (falls back to the
+  // device's own zone for an unknown/invalid IANA name, or before any zone has
+  // been resolved yet). Using Intl instead of decimal-hour arithmetic
+  // structurally rules out the old ":60 minutes" and "24:18 PM" bugs.
+  _formatClockTime(date, timezone) {
+    if (!(date instanceof Date) || isNaN(date.getTime())) return '--:--';
+    const opts = { hour: 'numeric', minute: '2-digit', hour12: true };
+    try {
+      return new Intl.DateTimeFormat('en-US', { ...opts, timeZone: timezone }).format(date);
+    } catch (e) {
+      return new Intl.DateTimeFormat('en-US', opts).format(date);
+    }
   }
 
   calculateTithi(date) {
@@ -1334,18 +1463,41 @@ class KalyanMitra {
   }
 
   // ===== RENDERING =====
-  renderPanchang(sunTimes, tithiInfo, now) {
+  renderPanchang(sunTimes, tithiInfo, now, timezone) {
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     document.getElementById('panchang-date').textContent = now.toLocaleDateString('en-IN', options);
-    
+
     const pakshaName = tithiInfo.paksha === 'Shukla Paksha' ? 'Shukla' : 'Krushna';
     const tithiNum = (tithiInfo.tithiIndex % 15) + 1;
     document.getElementById('tithi-value').textContent = `${tithiInfo.jainMonth} ${pakshaName} ${tithiNum}`;
-    
-    if (sunTimes) {
-      document.getElementById('sunrise-time').textContent = this.formatTime(sunTimes.sunrise);
-      document.getElementById('navkarsi-time').textContent = this.formatTime(sunTimes.navkarsi);
-      document.getElementById('sunset-time').textContent = this.formatTime(sunTimes.sunset);
+
+    const sunriseEl = document.getElementById('sunrise-time');
+    const navkarsiEl = document.getElementById('navkarsi-time');
+    const sunsetEl = document.getElementById('sunset-time');
+
+    if (sunTimes && sunTimes.sunrise) {
+      const navkarsi = new Date(sunTimes.sunrise.getTime() + 48 * 60000);
+      sunriseEl.textContent = this._formatClockTime(sunTimes.sunrise, timezone);
+      navkarsiEl.textContent = this._formatClockTime(navkarsi, timezone);
+    } else {
+      sunriseEl.textContent = '--:--';
+      navkarsiEl.textContent = '--:--';
+    }
+
+    if (sunTimes && sunTimes.sunset) {
+      sunsetEl.textContent = this._formatClockTime(sunTimes.sunset, timezone);
+    } else {
+      sunsetEl.textContent = '--:--';
+    }
+
+    // No reverse-geocoding exists, so show the raw coordinates + elevation +
+    // source rather than a fabricated place name — this is what actually lets
+    // a user spot "this is the wrong location" at a glance.
+    const locEl = document.getElementById('panchang-location');
+    if (locEl) {
+      const loc = this.location || DEFAULT_LOCATION;
+      const sourceLabel = loc.source === 'default' ? 'Default' : 'GPS';
+      locEl.textContent = `📍 ${loc.lat.toFixed(2)}, ${loc.lng.toFixed(2)} · ${Math.round(loc.elevation)}m · ${sourceLabel}`;
     }
   }
 

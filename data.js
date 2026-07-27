@@ -164,10 +164,20 @@ const DEFAULT_SETTINGS = {
   enableDailyNiyam: true,
   currentDailyNiyamId: 0, // Index of PACHCHAKHANS array
   samayikTarget: 1,
-  locationLat: 12.9716,
-  locationLng: 77.5946,
-  locationName: 'Bangalore',
   introSeen: false,
+};
+
+// ===== DEFAULT LOCATION (per-user, NOT part of global settings) =====
+// Used only as a last-resort fallback before any geolocation fix or Open-Meteo
+// response has ever been recorded for this user.
+const DEFAULT_LOCATION = {
+  lat: 12.9716,
+  lng: 77.5946,
+  elevation: 920,       // metres — Bangalore
+  timezone: 'Asia/Kolkata',
+  name: 'Bangalore',
+  source: 'default',    // 'default' | 'gps' | 'open-meteo'
+  updatedAt: null,
 };
 
 // ===== DEFAULT PROFILE =====
