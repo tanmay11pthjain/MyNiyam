@@ -103,7 +103,16 @@ const Auth = (() => {
       try {
         const result = JSON.parse(text);
         if (result.success) {
-          return { role: result.role || "user", sanghCodes: result.sanghCodes || [], registered: !!result.registered };
+          return {
+            role: result.role || "user",
+            sanghCodes: result.sanghCodes || [],
+            registered: !!result.registered,
+            // Piggybacks the Sheet's full row onto every login response — see
+            // apps-script-additions.gs handleGoogleLogin — so the app can sync
+            // Sheet edits (including a changed Sangh Code) on every load with
+            // no extra network request. null for a not-yet-registered user.
+            profile: result.profile || null
+          };
         }
       } catch (parseErr) {
         console.error("Failed to parse Sheets response:", text);
@@ -111,7 +120,7 @@ const Auth = (() => {
     } catch (e) {
       console.error("Sheets role fetch failed:", e);
     }
-    return { role: "user", sanghCodes: [], registered: false };
+    return { role: "user", sanghCodes: [], registered: false, profile: null };
   }
 
   // ===== INIT — Start Firebase auth listener =====
@@ -132,7 +141,7 @@ const Auth = (() => {
     _unsubFirebase = firebase.auth().onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
         // User is signed in — fetch role and registration status from Sheets (master)
-        const { role, sanghCodes, registered } = await _fetchRoleFromSheets(
+        const { role, sanghCodes, registered, profile } = await _fetchRoleFromSheets(
           firebaseUser.uid,
           firebaseUser.email,
           firebaseUser.displayName || firebaseUser.email.split('@')[0]
@@ -145,7 +154,8 @@ const Auth = (() => {
           email: firebaseUser.email,
           photoURL: firebaseUser.photoURL,
           sanghCodes: sanghCodes,
-          registered: registered
+          registered: registered,
+          profile: profile
         };
 
         localStorage.setItem('myniyam_session', JSON.stringify(currentUser));

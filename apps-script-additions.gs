@@ -127,6 +127,23 @@ function _setField_(sheet, colMap, row, field, value) {
   sheet.getRange(row, colMap[field] + 1).setValue(value);
 }
 
+// Normalizes a raw row record (from _rowToObject_) into the profile shape the
+// client expects. Shared by handleGetProfile and handleGoogleLogin so the two
+// can never disagree on field names or the Date->'yyyy-MM-dd' DOB conversion.
+function _profileFromRow_(rec) {
+  return {
+    name: String(rec.name || ''),
+    dob: (rec.dob instanceof Date)
+      ? Utilities.formatDate(rec.dob, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+      : String(rec.dob || ''),
+    phone: String(rec.phone || ''),
+    city: String(rec.city || ''),
+    area: String(rec.area || ''),
+    sanghCode: String(rec.sanghCode || ''),
+    email: String(rec.email || '')
+  };
+}
+
 // ---- ACTION: get_sanghs ----
 function handleGetSanghs() {
   const sheet = _sanghSheet_();
@@ -153,7 +170,13 @@ function handleGetSanghs() {
 }
 
 // ---- ACTION: google_login ----
-// Returns role/sanghCodes/registered. Never creates a row — registration does that.
+// Returns role/sanghCodes/registered/profile. Never creates a row —
+// registration does that.
+//
+// `profile` piggybacks the full row (already loaded for role/sanghCodes) onto
+// every login response so the client can sync Sheet edits — including a
+// changed Sangh Code — WITHOUT a second request. This is what makes the
+// Sheet the live source of truth rather than only mattering at registration.
 //
 // To make someone an ADMIN: add a row in Users with their UID (or Email),
 // set Role = admin, and put the sangh codes they manage in "Sangh Codes"
@@ -165,7 +188,7 @@ function handleGoogleLogin(params) {
 
   const colMap = _headerMap_(sheet, USER_COLUMNS);
   const row = _findUserRow_(sheet, colMap, params.uid, params.email);
-  if (row === -1) return { success: true, role: 'user', sanghCodes: [], registered: false };
+  if (row === -1) return { success: true, role: 'user', sanghCodes: [], registered: false, profile: null };
 
   const rec = _rowToObject_(sheet, colMap, row);
   const role = String(rec.role || 'user').trim().toLowerCase() === 'admin' ? 'admin' : 'user';
@@ -181,7 +204,10 @@ function handleGoogleLogin(params) {
     _setField_(sheet, colMap, row, 'uid', params.uid);
   }
 
-  return { success: true, role: role, sanghCodes: sanghCodes, registered: !!ownCode };
+  return {
+    success: true, role: role, sanghCodes: sanghCodes, registered: !!ownCode,
+    profile: _profileFromRow_(rec)
+  };
 }
 
 // ---- ACTION: register ----
@@ -266,22 +292,7 @@ function handleGetProfile(params) {
   if (row === -1) return { success: false, error: 'not_found' };
 
   const rec = _rowToObject_(sheet, colMap, row);
-  return {
-    success: true,
-    profile: {
-      name: String(rec.name || ''),
-      // Dates come back as Date objects; send YYYY-MM-DD so it round-trips into
-      // the <input type="date"> and the client's DOB formatter.
-      dob: (rec.dob instanceof Date)
-        ? Utilities.formatDate(rec.dob, Session.getScriptTimeZone(), 'yyyy-MM-dd')
-        : String(rec.dob || ''),
-      phone: String(rec.phone || ''),
-      city: String(rec.city || ''),
-      area: String(rec.area || ''),
-      sanghCode: String(rec.sanghCode || ''),
-      email: String(rec.email || '')
-    }
-  };
+  return { success: true, profile: _profileFromRow_(rec) };
 }
 
 // ---- ACTION: update_profile ----

@@ -456,6 +456,12 @@ class KalyanMitra {
     document.getElementById('app').classList.add('app-visible');
     document.getElementById('admin-panel').classList.add('hidden');
 
+    // Sheet is the master: sync every load (piggybacked on the login response
+    // already fetched — no extra network call), so an edit made in the Sheet
+    // — including a changed Sangh Code — takes effect without the user
+    // needing to open the Profile tab first.
+    await this._syncFromSheetProfile(this._currentAuthUser.profile);
+
     this.checkDailyReset();
     // Not awaited: renders from the last-known/default location immediately,
     // then refines via GPS and Open-Meteo in the background. Never blocks the
@@ -519,6 +525,65 @@ class KalyanMitra {
     } catch (e) {
       console.warn('Failed to load sangh info for admin header:', e);
     }
+  }
+
+  // Applies a Sheet-sourced profile to Firebase and detects a sangh transfer
+  // by comparing against the value already stored — that comparison MUST
+  // happen before _mirrorProfileToFirebase() overwrites it, which is why the
+  // read comes first. Keeps the sangh_users/{code}/{uid} index correct on
+  // transfer and shows a one-time notice. Shared by initUser() (runs on every
+  // app load) and refreshProfileFromSheet() (the Profile tab), so the two
+  // entry points can't disagree on how a Sheet edit is applied.
+  async _syncFromSheetProfile(profile) {
+    if (!profile) return;
+    try {
+      const snap = await db.ref(`users/${this.uid}/registration`).once('value');
+      const oldSanghCode = (snap.val() || {}).sanghCode || '';
+
+      await this._mirrorProfileToFirebase(profile);
+
+      // Only fires when the OLD code was non-empty — this is what stops a
+      // brand-new registration (old code "") from triggering a false
+      // "you've been transferred" notice on first load.
+      const newSanghCode = profile.sanghCode || '';
+      if (oldSanghCode && newSanghCode && oldSanghCode !== newSanghCode) {
+        // sanghName/sanghCity are Firebase-only convenience fields captured
+        // once at registration from the sangh dropdown — the Sheet has no
+        // equivalent columns, so _mirrorProfileToFirebase() only ever updates
+        // sanghCode. Left alone, renderUserHeaderBrand()/_paintSanghChip()
+        // would pair the NEW code with the OLD sangh's stale name. Clearing
+        // them forces both to re-resolve the new code via Auth.fetchSanghs().
+        await db.ref(`users/${this.uid}/registration`).update({ sanghName: null, sanghCity: null });
+        await db.ref(`sangh_users/${oldSanghCode}/${this.uid}`).remove();
+        await db.ref(`sangh_users/${newSanghCode}/${this.uid}`).set(true);
+        await this._showSanghTransferNotice(newSanghCode);
+      }
+
+      this.renderUserHeaderBrand();
+    } catch (e) {
+      console.warn('Failed to sync profile from Sheet:', e);
+    }
+  }
+
+  async _showSanghTransferNotice(newSanghCode) {
+    const textEl = document.getElementById('sangh-transfer-text');
+    const overlay = document.getElementById('sangh-transfer-overlay');
+    if (!textEl || !overlay) return;
+    let label = newSanghCode;
+    try {
+      const [resolved] = await this._resolveSanghLabels([newSanghCode]);
+      if (resolved) label = resolved;
+    } catch (e) {
+      console.warn('Failed to resolve new sangh name for transfer notice:', e);
+    }
+    textEl.textContent = `You have been transferred to ${label}.`;
+    overlay.classList.remove('hidden');
+    overlay.classList.add('show');
+  }
+
+  closeSanghTransferNotice() {
+    const overlay = document.getElementById('sangh-transfer-overlay');
+    if (overlay) { overlay.classList.remove('show'); overlay.classList.add('hidden'); }
   }
 
   async fetchGeolocationAndPanchang() {
@@ -1057,6 +1122,10 @@ class KalyanMitra {
     // Profile
     const btnProfileSave = document.getElementById('btn-profile-save');
     if (btnProfileSave) btnProfileSave.addEventListener('click', () => this.saveProfileEdits());
+
+    // Sangh transfer notice
+    const btnCloseTransfer = document.getElementById('btn-close-sangh-transfer');
+    if (btnCloseTransfer) btnCloseTransfer.addEventListener('click', () => this.closeSanghTransferNotice());
   }
 
   setupAdminEventListeners() {
@@ -2317,7 +2386,7 @@ class KalyanMitra {
       const profile = await Auth.fetchProfile(this.uid);
       if (profile) {
         this._paintProfile(profile);
-        await this._mirrorProfileToFirebase(profile);
+        await this._syncFromSheetProfile(profile);
       } else {
         console.warn('No profile returned from Sheet — keeping Firebase values on screen.');
       }
