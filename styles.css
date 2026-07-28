@@ -2399,6 +2399,17 @@ body {
   line-height: 1.5;
 }
 
+/* ----- Lock Tab: selected-user name / empty state ----- */
+.lock-user-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: #fff3e0;
+  border-radius: 10px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+}
+
 /* ----- Admin Section ----- */
 .admin-section {
   padding: 16px;

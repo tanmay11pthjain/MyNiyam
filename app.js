@@ -813,6 +813,11 @@ class KalyanMitra {
   async initAdmin() {
     this.initializing = false;
     this.settings = { ...DEFAULT_SETTINGS };
+    // A fresh admin session has no user selected yet. Without this,
+    // this.uid stays at the admin's OWN uid (set on login), so any
+    // lock/unlock/reset action taken before selecting a user would target
+    // the admin's own record instead of doing nothing.
+    this._clearAdminSelection();
 
     // Store admin's sangh codes from auth
     this._adminSanghCodes = this._currentAuthUser.sanghCodes || [];
@@ -1027,8 +1032,7 @@ class KalyanMitra {
 
       // 4. If currently viewing this user, return to leaderboard
       if (this.uid === uidToDelete) {
-        this._detachAllListeners();
-        this.uid = null;
+        this._clearAdminSelection();
         document.getElementById('admin-individual').classList.add('hidden');
         document.getElementById('admin-overview').classList.remove('hidden');
         this.switchAdminTab('admin-leaderboard');
@@ -1181,37 +1185,61 @@ class KalyanMitra {
     }
   }
 
+  // Resets all per-user admin view state to defaults. Used both when
+  // selecting a NEW user (so stale state from whoever was viewed before
+  // can't leak into the new selection) and when clearing the selection
+  // entirely, via _clearAdminSelection() below.
+  _resetAdminUserState() {
+    this.profile = { ...DEFAULT_PROFILE };
+    this.dailyLog = { ...DEFAULT_DAILY_LOG, date: this.getTodayKey() };
+    this.currentDayLocked = false;
+    this.currentDayLockValue = null;
+    // The all-daily_logs listener that populates this is intentionally not
+    // part of setupRealtimeSync()'s awaited Promise.all, so without this
+    // reset a niyam-stats/history read could momentarily reuse the
+    // PREVIOUS user's cached logs before the new listener fires.
+    this._cachedDailyLogs = null;
+  }
+
+  // Clears the admin's current user selection entirely — no lingering uid,
+  // profile, lock state, or daily log from whichever user was last viewed.
+  // Must run whenever the admin is NOT looking at a specific user: on
+  // initAdmin() (a fresh session defaults this.uid to the admin's OWN uid
+  // otherwise), "← Back" to the leaderboard, and after deleting the
+  // currently-viewed user.
+  _clearAdminSelection() {
+    this._detachAllListeners();
+    this._adminSelectedUid = null;
+    this._adminSelectedName = null;
+    this.uid = null;
+    this._resetAdminUserState();
+  }
+
   async selectAdminUser(uid) {
     // Detach old user listeners (but keep leaderboard listener alive)
     this._detachAllListeners();
-    
+
     // Set new target
     this.uid = uid;
+    this._adminSelectedUid = uid;
     this.initializing = true;
-    
+
     // Initialize defaults so renderAdminProgress doesn't read undefined
-    this.profile = { ...DEFAULT_PROFILE };
-    this.dailyLog = { ...DEFAULT_DAILY_LOG, date: this.getTodayKey() };
+    this._resetAdminUserState();
     this.settings = { ...DEFAULT_SETTINGS };
-    this.currentDayLocked = false;
-    this.currentDayLockValue = null;
-    // The all-daily_logs listener that populates this (below, in
-    // setupRealtimeSync) is intentionally not part of the awaited Promise.all,
-    // so without this reset a niyam-stats/history read could momentarily
-    // reuse the PREVIOUS user's cached logs before the new listener fires.
-    this._cachedDailyLogs = null;
 
     // Show the individual view, hide the overview
     document.getElementById('admin-overview').classList.add('hidden');
     document.getElementById('admin-individual').classList.remove('hidden');
-    
+
     const nameEl = document.getElementById('admin-viewing-name');
-    
+
     // Fetch user name from top-level user record
     const nameSnap = await db.ref(`users/${uid}/name`).once('value');
     const userName = nameSnap.val() || uid;
+    this._adminSelectedName = userName;
     if (nameEl) nameEl.textContent = `Viewing: ${userName}`;
-    
+
     // Reset admin history state to current month for new user
     const now = new Date();
     this._adminHistoryMonth = now.getMonth();
@@ -1373,7 +1401,7 @@ class KalyanMitra {
     if (backBtn) backBtn.addEventListener('click', () => {
       document.getElementById('admin-individual').classList.add('hidden');
       document.getElementById('admin-overview').classList.remove('hidden');
-      this._detachAllListeners();
+      this._clearAdminSelection();
       this.switchAdminTab('admin-leaderboard');
     });
 
@@ -1588,10 +1616,16 @@ class KalyanMitra {
   }
 
   async lockDay() {
-    const lockKey = `users/${this.uid}/lock_status/${this.getTodayKey()}`;
-    await db.ref(lockKey).set(this._lockValue('admin'));
+    const todayKey = this.getTodayKey();
+    const lockValue = this._lockValue('admin');
+    // Set locally before the await resolves (matching confirmSubmitDay()'s
+    // pattern), so the caller's repaint is correct even if the lock_status
+    // listener is detached or hasn't fired yet.
+    this.currentDayLocked = true;
+    this.currentDayLockValue = lockValue;
+    await db.ref(`users/${this.uid}/lock_status/${todayKey}`).set(lockValue);
     // Process end-of-day when locked
-    this.processEndOfDay();
+    this.processEndOfDay(todayKey);
   }
 
   startAutoLockCheck() {
@@ -1680,6 +1714,18 @@ class KalyanMitra {
   // daily-reset/midnight path without double-counting the streak.
   processEndOfDay(dateKey = this.getTodayKey()) {
     if (this.dailyLog.finalized) return;
+    // Snapshot exactly what updateStreak()/the perfect-day counter are about
+    // to change, so an admin unlock can revert this finalization precisely —
+    // an increment and a reset-to-0 are otherwise indistinguishable after
+    // the fact.
+    this.dailyLog.finalizeSnapshot = {
+      currentStreak: this.profile.currentStreak,
+      longestStreak: this.profile.longestStreak,
+      totalPerfectDays: this.profile.totalPerfectDays || 0,
+      streakFreezeUsed: !!this.profile.streakFreezeUsed,
+      streakFreezeMonth: this.profile.streakFreezeMonth || null,
+      perfectDay: !!this.dailyLog.perfectDay,
+    };
     const allDone = this.isAllTasksComplete();
     this.updateStreak(allDone);
     this.dailyLog.finalized = true;
@@ -3543,12 +3589,29 @@ class KalyanMitra {
   }
 
   renderAdminLock() {
+    const nameEl = document.getElementById('lock-user-name');
+    const managedEl = document.getElementById('lock-managed-content');
+
+    // The Lock tab is reachable from the bottom nav at any time, but
+    // lock_status is per-user — with no user selected there is nothing to
+    // show or act on. Returning here (before touching this.dailyLog) is
+    // also what keeps a fresh admin session from crashing on an
+    // uninitialized dailyLog.
+    if (!this._adminSelectedUid) {
+      if (nameEl) nameEl.textContent = '⚠️ No user selected — choose one from the Leaderboard tab to manage their lock.';
+      if (managedEl) managedEl.classList.add('hidden');
+      return;
+    }
+    if (nameEl) nameEl.textContent = `Managing: ${this._adminSelectedName || this.uid}`;
+    if (managedEl) managedEl.classList.remove('hidden');
+
     const locked = this.isDayLocked();
     const icon = document.getElementById('lock-status-icon');
     const text = document.getElementById('lock-status-text');
     const card = document.getElementById('lock-status-card');
     const btn = document.getElementById('btn-lock-day');
     const unlockBtn = document.getElementById('btn-unlock-day');
+    if (!icon || !text || !card || !btn) return;
 
     if (locked) {
       const byLabel = { user: 'the user', admin: 'you (admin)', auto: 'auto-lock at midnight' }[this._lockedBy()] || 'unknown';
@@ -3568,7 +3631,8 @@ class KalyanMitra {
     }
 
     // Lock preview
-    const d = this.dailyLog, s = this.settings;
+    const d = this.dailyLog || DEFAULT_DAILY_LOG;
+    const s = this.settings || DEFAULT_SETTINGS;
     const preview = document.getElementById('lock-preview-list');
     const items = [
       s.enableNavkarsi ? `<div class="lock-preview-item"><span>🚰 Navkarsi:</span> <strong>${d.navkarsiDone ? '✓' : '✗'}</strong></div>` : '',
@@ -3585,25 +3649,60 @@ class KalyanMitra {
       s.enableScreenTime ? `<div class="lock-preview-item"><span>📱 Screen:</span> <strong>${d.screenTimeHours || 0}h ${d.screenTimeMins || 0}m</strong></div>` : '',
       s.enableDailyNiyam ? `<div class="lock-preview-item"><span>✨ Niyam:</span> <strong>${d.dailyNiyamDone ? '✓' : '✗'}</strong></div>` : '',
     ];
-    preview.innerHTML = items.filter(Boolean).join('');
+    if (preview) preview.innerHTML = items.filter(Boolean).join('');
   }
 
-  adminLockDay() {
+  async adminLockDay() {
+    if (!this._adminSelectedUid) {
+      alert('Select a user from the Leaderboard tab first.');
+      return;
+    }
     if (this.isDayLocked()) return;
-    if (confirm('🔒 Lock today\'s submissions? The user will no longer be able to modify today\'s activities unless you unlock it.')) {
-      this.lockDay();
-      this.renderAdminLock();
-      this.renderAdminProgress();
-    }
+    if (!confirm('🔒 Lock today\'s submissions? The user will no longer be able to modify today\'s activities unless you unlock it.')) return;
+
+    await this.lockDay();
+    this.renderAdminLock();
+    this.renderAdminProgress();
   }
 
-  adminUnlockDay() {
-    if (!this.isDayLocked()) return;
-    if (confirm('🔓 Unlock today\'s submissions? The user will be able to modify today\'s activities again.')) {
-      db.ref(`users/${this.uid}/lock_status/${this.getTodayKey()}`).remove();
-      this.renderAdminLock();
-      this.renderAdminProgress();
+  async adminUnlockDay() {
+    if (!this._adminSelectedUid) {
+      alert('Select a user from the Leaderboard tab first.');
+      return;
     }
+    if (!this.isDayLocked()) return;
+    if (!confirm('🔓 Unlock today\'s submissions? The user will be able to modify today\'s activities again.')) return;
+
+    const todayKey = this.getTodayKey();
+    // Await the removal itself (previously fire-and-forget) — the lines
+    // below set local state directly rather than waiting on the lock_status
+    // listener, so the tab repaints correctly even if that listener was
+    // detached (e.g. after switching users) or is momentarily behind.
+    await db.ref(`users/${this.uid}/lock_status/${todayKey}`).remove();
+    this.currentDayLocked = false;
+    this.currentDayLockValue = null;
+
+    // Revert exactly what processEndOfDay() changed when it finalized this
+    // day, so a corrected re-submit re-finalizes without double-counting the
+    // streak or the perfect-day tally. A day finalized before
+    // finalizeSnapshot existed has no snapshot to revert from — leave
+    // `finalized` as-is rather than guessing (see processEndOfDay()).
+    const snap = this.dailyLog && this.dailyLog.finalizeSnapshot;
+    if (this.dailyLog && this.dailyLog.finalized && snap) {
+      this.profile.currentStreak = snap.currentStreak;
+      this.profile.longestStreak = snap.longestStreak;
+      this.profile.totalPerfectDays = snap.totalPerfectDays;
+      this.profile.streakFreezeUsed = snap.streakFreezeUsed;
+      this.profile.streakFreezeMonth = snap.streakFreezeMonth;
+      this.dailyLog.perfectDay = snap.perfectDay;
+      this.dailyLog.finalized = false;
+      this.dailyLog.finalizeSnapshot = null;
+      this.saveProfile();
+      this.saveDailyLogFor(todayKey, this.dailyLog);
+    }
+
+    this.renderAdminLock();
+    this.renderAdminProgress();
   }
 
   // ===== LOGOUT =====
@@ -3635,6 +3734,10 @@ class KalyanMitra {
   }
 
   resetProgress() {
+    if (!this._adminSelectedUid) {
+      alert('Select a user from the Leaderboard tab first.');
+      return;
+    }
     if (confirm('DANGER! This will delete all progress, points, and logs for this user. Are you sure?')) {
         db.ref(`users/${this.uid}/profile`).remove();
         db.ref(`users/${this.uid}/daily_logs`).remove();

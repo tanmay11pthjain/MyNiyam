@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
 
@@ -706,24 +706,27 @@
       <div class="admin-section">
         <h2 class="section-heading">🔒 Lock Day</h2>
         <p class="admin-desc">Lock today's submissions to finalize the user's activity status. You can unlock it again if needed.</p>
+        <p class="lock-user-name" id="lock-user-name"></p>
 
-        <div class="lock-status-card" id="lock-status-card">
-          <div class="lock-status-icon" id="lock-status-icon">🔓</div>
-          <div class="lock-status-text" id="lock-status-text">Today is <strong>unlocked</strong>. User can still modify activities.</div>
-        </div>
+        <div id="lock-managed-content">
+          <div class="lock-status-card" id="lock-status-card">
+            <div class="lock-status-icon" id="lock-status-icon">🔓</div>
+            <div class="lock-status-text" id="lock-status-text">Today is <strong>unlocked</strong>. User can still modify activities.</div>
+          </div>
 
-        <div class="lock-summary" id="lock-summary">
-          <p>Current status if locked now:</p>
-          <div id="lock-preview-list"><!-- Populated by JS --></div>
-        </div>
+          <div class="lock-summary" id="lock-summary">
+            <p>Current status if locked now:</p>
+            <div id="lock-preview-list"><!-- Populated by JS --></div>
+          </div>
 
-        <button class="btn-lock-day" id="btn-lock-day">🔒 Lock Today's Submissions</button>
-        <button class="btn-unlock-day" id="btn-unlock-day" disabled>🔓 Unlock Today's Submissions</button>
-        <p class="lock-note">⏰ Auto-lock also happens at midnight. Users can also submit and lock their own entry.</p>
+          <button class="btn-lock-day" id="btn-lock-day">🔒 Lock Today's Submissions</button>
+          <button class="btn-unlock-day" id="btn-unlock-day" disabled>🔓 Unlock Today's Submissions</button>
+          <p class="lock-note">⏰ Auto-lock also happens at midnight. Users can also submit and lock their own entry.</p>
 
-        <div class="settings-group danger-zone" style="margin-top:24px">
-          <h3 class="settings-group-title">⚠️ Danger Zone</h3>
-          <button class="btn-reset" id="btn-admin-reset">Reset All User Progress</button>
+          <div class="settings-group danger-zone" style="margin-top:24px">
+            <h3 class="settings-group-title">⚠️ Danger Zone</h3>
+            <button class="btn-reset" id="btn-admin-reset">Reset All User Progress</button>
+          </div>
         </div>
       </div>
     </div>
@@ -889,8 +892,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=28"></script>
-  <script src="auth.js?v=28"></script>
-  <script src="app.js?v=28"></script>
+  <script src="data.js?v=29"></script>
+  <script src="auth.js?v=29"></script>
+  <script src="app.js?v=29"></script>
 </body>
 </html>

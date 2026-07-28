@@ -227,6 +227,7 @@ const DEFAULT_DAILY_LOG = {
   perfectDay: false,
   bonuses: [],
   finalized: false,   // true once end-of-day has been processed for this date
+  finalizeSnapshot: null, // profile fields as they were just before finalizing, so an admin unlock can revert them exactly
 };
 
 // ===== POINT VALUES =====
