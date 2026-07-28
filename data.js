@@ -34,12 +34,12 @@ const BADGES = [
   { id: 'samayik_master', name: 'Samayik Master', icon: '🧘', desc: '50 samayiks completed', rarity: 'Uncommon', condition: 'totalSamayik', threshold: 50 },
   { id: 'perfect_week', name: 'Perfect Week', icon: '💎', desc: 'All tasks every day for 7 days', rarity: 'Rare', condition: 'perfectDays', threshold: 7 },
   { id: 'monthly_champion', name: 'Monthly Champion', icon: '👑', desc: '30-day streak', rarity: 'Epic', condition: 'streak', threshold: 30 },
-  { id: 'karma_king', name: 'Karma King', icon: '⭐', desc: 'Earn 10,000 KP total', rarity: 'Legendary', condition: 'totalKP', threshold: 10000 },
-  { id: 'spiritual_warrior', name: 'Spiritual Warrior', icon: '🕉️', desc: 'Earn 7,000 KP total', rarity: 'Epic', condition: 'totalKP', threshold: 7000 },
+  { id: 'karma_king', name: 'Karma King', icon: '⭐', desc: 'Earn 3,500 AP total', rarity: 'Legendary', condition: 'totalKP', threshold: 3500 },
+  { id: 'spiritual_warrior', name: 'Spiritual Warrior', icon: '🕉️', desc: 'Earn 2,500 AP total', rarity: 'Epic', condition: 'totalKP', threshold: 2500 },
   { id: 'pratikraman_pro', name: 'Pratikraman Pro', icon: '🙏', desc: 'Complete both daily pratikraman 20 times', rarity: 'Uncommon', condition: 'totalFullPratikraman', threshold: 20 },
   { id: 'niyam_follower', name: 'Niyam Follower', icon: '✨', desc: 'Follow daily pachchakhan 15 times', rarity: 'Common', condition: 'totalNiyam', threshold: 15 },
   { id: 'first_step', name: 'First Step', icon: '👣', desc: 'Complete your first activity', rarity: 'Common', condition: 'totalActivities', threshold: 1 },
-  { id: 'century', name: 'Century', icon: '💯', desc: 'Earn 100 KP in a single day', rarity: 'Uncommon', condition: 'dailyKP', threshold: 100 },
+  { id: 'century', name: 'Century', icon: '💯', desc: 'Earn 100 AP in a single day', rarity: 'Uncommon', condition: 'dailyKP', threshold: 100 },
 ];
 
 // ===== PACHCHAKHAN (DAILY VOWS) =====
@@ -182,7 +182,8 @@ const DEFAULT_LOCATION = {
 
 // ===== DEFAULT PROFILE =====
 const DEFAULT_PROFILE = {
-  totalKP: 10,             // Start with 10 (endowed progress)
+  totalKP: 0,              // Raw points only — no starting bonus
+  rawPointsMigrated: false, // set true after _migrateToRawPoints() has run once
   currentStreak: 0,
   longestStreak: 0,
   lastActiveDate: null,

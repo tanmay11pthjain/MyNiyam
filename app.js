@@ -18,13 +18,14 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ===== ADMIN EXCEL EXPORT — COLUMN SPEC =====
-// Single source of truth for the leaderboard export: column label + how each
-// cell is computed from one daily-log record, so labels and points logic can
-// never drift apart. Values are BASE points (count/flag × the standard POINTS
-// value) — NOT the streak-multiplied KP the user actually banked that day,
-// since only the current streak is persisted, not its historical value per day.
-const EXPORT_COLUMNS = [
+// ===== RAW NIYAM POINTS — single source of truth =====
+// What a day's raw points are, derived purely from what was actually done
+// that day (POINTS.* × the relevant flag/counter). No streak multiplier, no
+// Perfect Day bonus, no daily-login bonus — none of those are part of the
+// score anymore. The live award path (activity handlers), the historical
+// recompute (_migrateToRawPoints), and the admin Excel export all read from
+// this same list, so they can never disagree on what "raw points" means.
+const RAW_POINT_RULES = [
   { label: 'Navkarsi', points: log => log.navkarsiDone ? POINTS.navkarsi : 0 },
   { label: 'Wake < 7AM', points: log => log.wakeUpDone ? POINTS.wakeUpEarly : 0 },
   { label: 'Sleep < 12AM', points: log => log.sleepDone ? POINTS.sleepEarly : 0 },
@@ -39,8 +40,17 @@ const EXPORT_COLUMNS = [
   { label: 'Daily Niyam', points: log => log.dailyNiyamDone ? POINTS.dailyNiyam : 0 },
   { label: 'Ashta Prakari', points: log => log.ashtaPrakariDone ? POINTS.ashtaPrakari : 0 },
   { label: 'Screen Time Penalty', points: log => -(Math.floor((((log.screenTimeHours || 0) * 60) + (log.screenTimeMins || 0)) / 60) * POINTS.screenTimePenalty) },
-  { label: 'Perfect Day Bonus', points: log => log.perfectDay ? POINTS.perfectDay : 0 },
 ];
+
+// A day's total raw points — the same figure used for kpEarned everywhere.
+function computeRawDayPoints(log) {
+  return RAW_POINT_RULES.reduce((sum, rule) => sum + rule.points(log), 0);
+}
+
+// ===== ADMIN EXCEL EXPORT — COLUMN SPEC =====
+// The export's columns ARE the raw-point rules — no separate list to keep in
+// sync, and no more 'Perfect Day Bonus' column now that bonus is gone.
+const EXPORT_COLUMNS = RAW_POINT_RULES;
 
 // ===== MONTHLY NIYAM STATS — pure per-niyam spec =====
 // Single source of truth for the "days/times followed" overlay (admin +
@@ -553,6 +563,12 @@ class KalyanMitra {
     // needing to open the Profile tab first.
     await this._syncFromSheetProfile(this._currentAuthUser.profile);
 
+    // One-time: recompute totalKP (and every day's kpEarned) from raw niyam
+    // points, dropping the old streak-multiplier/bonus inflation. Must finish
+    // before the dashboard/achievements render below, or the user briefly
+    // sees their old inflated total.
+    await this._migrateToRawPoints();
+
     this.checkDailyReset();
     // Not awaited: renders from the last-known/default location immediately,
     // then refines via GPS and Open-Meteo in the background. Never blocks the
@@ -568,6 +584,51 @@ class KalyanMitra {
     // Not awaited: a one-time check (guarded by localStorage) for
     // already-registered users with no profile photo yet.
     this._maybePromptForPhoto();
+  }
+
+  // One-time migration to raw-points-only scoring. Recomputes every day's
+  // kpEarned from RAW_POINT_RULES (the same rules the live award path and the
+  // Excel export use) and sums them into a fresh profile.totalKP — discarding
+  // whatever inflation past streak multipliers/Perfect-Day/daily-login bonuses
+  // baked into the old numbers. Guarded by profile.rawPointsMigrated so it
+  // never re-runs once it succeeds; on failure the guard is deliberately left
+  // unset so the next login retries rather than silently staying un-migrated.
+  //
+  // Idempotent by construction: every run recomputes from the same source
+  // daily_logs, so running it twice (e.g. a retry after a partial failure)
+  // always converges on the same total rather than compounding.
+  async _migrateToRawPoints() {
+    if (this.profile.rawPointsMigrated) return;
+    try {
+      const snap = await db.ref(`users/${this.uid}/daily_logs`).once('value');
+      const logs = snap.val() || {};
+
+      let total = 0;
+      const updates = {};
+      Object.entries(logs).forEach(([dateKey, log]) => {
+        if (!log) return;
+        const raw = computeRawDayPoints(log);
+        total += raw;
+        if (log.kpEarned !== raw) updates[`${dateKey}/kpEarned`] = raw;
+      });
+
+      if (Object.keys(updates).length > 0) {
+        await db.ref(`users/${this.uid}/daily_logs`).update(updates);
+      }
+
+      // Keep today's in-memory log in sync so the dashboard doesn't show a
+      // stale kpEarned until the realtime listener happens to refire.
+      const todayKey = this.getTodayKey();
+      if (logs[todayKey] && this.dailyLog && this.dailyLog.date === todayKey) {
+        this.dailyLog.kpEarned = computeRawDayPoints(this.dailyLog);
+      }
+
+      this.profile.totalKP = total;
+      this.profile.rawPointsMigrated = true;
+      await this.saveProfile();
+    } catch (e) {
+      console.warn('Raw-points migration failed — will retry on next load.', e);
+    }
   }
 
   // Resolves each sangh code to "Name (CODE)", using knownNames where available
@@ -881,7 +942,7 @@ class KalyanMitra {
         <div class="lb-rank">#${index + 1}</div>
         <div class="lb-info">
           <span class="lb-name">${u.name}</span>
-          <span class="lb-stats">${u.kp} KP • 🔥 ${u.streak}</span>
+          <span class="lb-stats">${u.kp} AP • 🔥 ${u.streak}</span>
         </div>
         <div style="display: flex; gap: 8px; align-items: center;">
           <div class="lb-action">👁️ View</div>
@@ -1068,11 +1129,11 @@ class KalyanMitra {
       }
 
       const noteRow = [
-        "Niyam columns show base points (count/flag × the standard value) — not the streak-multiplied KP the user actually earned. \"Actual KP Recorded\" is the real total from the app."
+        "Niyam columns show raw points earned from each niyam that month. \"Total (Raw Points)\" and \"Actual AP Recorded\" should match for any user whose history has been migrated to raw scoring."
       ];
       const header = [
         'Name', ...EXPORT_COLUMNS.map(c => c.label),
-        'Total (Base Points)', 'Actual KP Recorded', 'Days Logged', 'Perfect Days'
+        'Total (Raw Points)', 'Actual AP Recorded', 'Days Logged', 'Perfect Days'
       ];
       const aoa = [noteRow, header];
       rows.forEach(r => {
@@ -1551,7 +1612,8 @@ class KalyanMitra {
     const lastLogin = localStorage.getItem(`km_lastLogin_${this.uid}`);
     if (lastLogin !== todayKey) {
       localStorage.setItem(`km_lastLogin_${this.uid}`, todayKey);
-      this.addKarmaPoints(POINTS.dailyLogin, 'Daily Login Bonus!');
+      // No longer awards points — raw scoring only counts niyams actually
+      // performed. daysActive still tracks genuine login activity.
       this.profile.daysActive = (this.profile.daysActive || 0) + 1;
     }
   }
@@ -1723,7 +1785,7 @@ class KalyanMitra {
   }
 
   renderHeader() {
-    document.getElementById('karma-points').textContent = `${this.profile.totalKP} KP`;
+    document.getElementById('karma-points').textContent = `${this.profile.totalKP} AP`;
 
     document.getElementById('streak-count').textContent = this.profile.currentStreak;
     const flame = document.getElementById('streak-flame');
@@ -1880,7 +1942,7 @@ class KalyanMitra {
     const fill = document.getElementById('daily-progress-fill');
     fill.style.width = `${pct}%`;
     fill.classList.toggle('perfect', completed >= total);
-    document.getElementById('daily-kp').textContent = `+${this.dailyLog.kpEarned || 0} KP earned today`;
+    document.getElementById('daily-kp').textContent = `+${this.dailyLog.kpEarned || 0} AP earned today`;
   }
 
   renderNiyam() {
@@ -1911,20 +1973,18 @@ class KalyanMitra {
     if (this.isDayLocked()) return;
     if (this.dailyLog[prop] === isDone) return;
     this.dailyLog[prop] = isDone;
-    
-    let actualPoints = this.applyStreakMultiplier(points);
+
     if (isDone) {
-      this.addKarmaPoints(actualPoints, elId);
+      this.addKarmaPoints(points, elId);
       this.showCompletionBurst(document.getElementById(`${elId}-card`));
       // Track lifetime stats
       this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
       if (prop === 'dailyNiyamDone') this.profile.totalNiyam = (this.profile.totalNiyam || 0) + 1;
     } else {
-      this.deductKarmaPoints(actualPoints);
+      this.deductKarmaPoints(points);
       if (prop === 'dailyNiyamDone') this.profile.totalNiyam = Math.max(0, (this.profile.totalNiyam || 0) - 1);
       if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
         this.dailyLog.perfectDay = false;
-        this.deductKarmaPoints(POINTS.perfectDay);
       }
     }
     this.afterActivity();
@@ -1936,7 +1996,7 @@ class KalyanMitra {
     const statKey = slot === 'morning' ? 'totalDevasiya' : 'totalRaysiya';
     const wasDone = !!this.dailyLog[prop];
     this.dailyLog[prop] = !wasDone;
-    const pts = this.applyStreakMultiplier(POINTS.devasiya); // both are 30 KP
+    const pts = POINTS.devasiya; // both devasiya and raysiya are worth 30 AP
 
     if (!wasDone) {
       this.addKarmaPoints(pts, 'Pratikraman');
@@ -1948,7 +2008,6 @@ class KalyanMitra {
       this.profile[statKey] = Math.max(0, (this.profile[statKey] || 0) - 1);
       if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
         this.dailyLog.perfectDay = false;
-        this.deductKarmaPoints(POINTS.perfectDay);
       }
     }
     this.afterActivity();
@@ -1957,8 +2016,8 @@ class KalyanMitra {
   completePooja() {
     if (this.isDayLocked() || this.dailyLog.poojaDone) return;
     this.dailyLog.poojaDone = true;
-    let points = this.applyStreakMultiplier(POINTS.pooja);
-    if (this.dailyLog.ashtaPrakariDone) points += POINTS.ashtaPrakari; 
+    let points = POINTS.pooja;
+    if (this.dailyLog.ashtaPrakariDone) points += POINTS.ashtaPrakari;
     this.addKarmaPoints(points, 'Pooja');
     this.showCompletionBurst(document.getElementById('pooja-card'));
     this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
@@ -1970,12 +2029,11 @@ class KalyanMitra {
   undoPooja() {
     if (this.isDayLocked() || !this.dailyLog.poojaDone) return;
     this.dailyLog.poojaDone = false;
-    let points = this.applyStreakMultiplier(POINTS.pooja);
+    let points = POINTS.pooja;
     if (this.dailyLog.ashtaPrakariDone) points += POINTS.ashtaPrakari;
     this.deductKarmaPoints(points);
     if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
       this.dailyLog.perfectDay = false;
-      this.deductKarmaPoints(POINTS.perfectDay);
     }
     this.afterActivity();
   }
@@ -1999,9 +2057,9 @@ class KalyanMitra {
     const newVal = Math.max(0, oldVal + delta);
     if (oldVal === newVal) return;
     this.dailyLog[prop] = newVal;
-    
-    const points = this.applyStreakMultiplier(pointsPerUnit);
-    
+
+    const points = pointsPerUnit;
+
     if (delta > 0) {
       this.addKarmaPoints(points, elId);
       this.showCompletionBurst(document.getElementById(`${elId}-card`));
@@ -2016,7 +2074,6 @@ class KalyanMitra {
       if (prop === 'bookReadingMins') this.profile.totalSwadhyay = Math.max(0, (this.profile.totalSwadhyay || 0) - 1);
       if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
         this.dailyLog.perfectDay = false;
-        this.deductKarmaPoints(POINTS.perfectDay);
       }
     }
     this.afterActivity();
@@ -2128,7 +2185,7 @@ class KalyanMitra {
         <div class="summary-row"><span>${this.dailyLog.perfectDay ? '🎊' : '📆'} Perfect Day</span><span>${this.dailyLog.perfectDay ? 'Yes!' : 'Not today'}</span></div>`;
     }
     const kpEl = document.getElementById('summary-kp');
-    if (kpEl) kpEl.textContent = `+${this.dailyLog.kpEarned || 0} KP earned today`;
+    if (kpEl) kpEl.textContent = `+${this.dailyLog.kpEarned || 0} AP earned today`;
     const streakEl = document.getElementById('summary-streak');
     if (streakEl) streakEl.textContent = this.profile.currentStreak > 0 ? `🔥 ${this.profile.currentStreak}-day streak!` : '';
     const pool = (total > 0 && completed >= total) ? MOTIVATIONAL_MESSAGES.complete : MOTIVATIONAL_MESSAGES.progress;
@@ -2178,16 +2235,6 @@ class KalyanMitra {
     this.showKPPopup(-points);
   }
 
-  applyStreakMultiplier(points) {
-    const s = this.profile.currentStreak;
-    let m = 1;
-    if (s >= 30) m = 3;
-    else if (s >= 14) m = 2.5;
-    else if (s >= 7) m = 2;
-    else if (s >= 3) m = 1.5;
-    return Math.round(points * m);
-  }
-
   updateStreak(wasComplete) {
     if (wasComplete) {
       this.profile.currentStreak += 1;
@@ -2212,7 +2259,8 @@ class KalyanMitra {
     if (this.isAllTasksComplete() && !this.dailyLog.perfectDay) {
       this.dailyLog.perfectDay = true;
       this.profile.totalPerfectDays = (this.profile.totalPerfectDays || 0) + 1;
-      this.addKarmaPoints(POINTS.perfectDay, 'Perfect Day! 🎊');
+      // No longer awards points — raw scoring only counts niyams actually
+      // performed. The Perfect Day badge/star/stats still track this flag.
     }
   }
 
@@ -2295,7 +2343,7 @@ class KalyanMitra {
   // ===== ANIMATIONS =====
   showKPPopup(points) {
     const popup = document.getElementById('kp-popup');
-    popup.textContent = points >= 0 ? `+${points} KP` : `${points} KP`;
+    popup.textContent = points >= 0 ? `+${points} AP` : `${points} AP`;
     popup.className = points >= 0 ? 'kp-popup show' : 'kp-popup show kp-negative';
     setTimeout(() => { popup.className = 'kp-popup hidden'; }, 1500);
   }
@@ -2875,7 +2923,7 @@ class KalyanMitra {
         </div>
         <div class="history-meta">
           <span class="history-pct">${done}/${total} (${pct}%)</span>
-          <span class="history-kp">+${kp} KP</span>
+          <span class="history-kp">+${kp} AP</span>
         </div>
         <div class="history-icons">${icons.join(' ')}</div>
       </div>`;
@@ -3029,7 +3077,7 @@ class KalyanMitra {
     const kp = log.kpEarned || 0;
     const isPerfect = log.perfectDay;
     summaryEl.innerHTML = `
-      <span class="day-detail-kp">+${kp} KP</span>
+      <span class="day-detail-kp">+${kp} AP</span>
       ${isPerfect ? '<span class="day-detail-badge">⭐ Perfect Day</span>' : ''}
     `;
 
@@ -3173,7 +3221,7 @@ class KalyanMitra {
     const badgeCount = (p.badges || []).length;
     document.getElementById('admin-user-level-icon').textContent = '🏅';
     document.getElementById('admin-user-level').textContent = `${badgeCount} Badge${badgeCount === 1 ? '' : 's'} Earned`;
-    document.getElementById('admin-user-kp').textContent = `${p.totalKP} KP`;
+    document.getElementById('admin-user-kp').textContent = `${p.totalKP} AP`;
     document.getElementById('admin-user-streak').textContent = `${p.currentStreak} day streak`;
     const flame = document.getElementById('admin-user-streak-flame');
     const st = p.currentStreak;
