@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=13">
+  <link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body>
 
@@ -430,6 +430,7 @@
           <div class="stat-item"><span class="stat-value" id="stat-total-raysiya">0</span><span class="stat-label">Raysiya</span></div>
           <div class="stat-item"><span class="stat-value" id="stat-perfect-days">0</span><span class="stat-label">Perfect Days</span></div>
         </div>
+        <button class="btn-export btn-niyam-stats-trigger" id="btn-niyam-stats-achievements">📊 Monthly Niyam Stats</button>
         <h2 class="section-heading">🏆 Trophy Shelf</h2>
         <div class="badges-grid" id="badges-grid"></div>
       </div>
@@ -439,6 +440,7 @@
     <!-- TAB: HISTORY -->
     <div id="tab-history" class="tab-content">
       <h2 class="section-heading">📅 My Progress History</h2>
+      <button class="btn-export btn-niyam-stats-trigger" id="btn-niyam-stats-history">📊 Monthly Niyam Stats</button>
       <div class="history-nav">
         <button id="btn-history-prev" class="btn-history-nav">← Prev</button>
         <span id="history-month-label" class="history-month-label">July 2026</span>
@@ -679,19 +681,7 @@
             </div>
           </div>
 
-          <h3 class="sub-heading">Today's Activities</h3>
-          <div class="admin-today-grid" id="admin-today-grid"></div>
-
-          <h3 class="sub-heading">Lifetime Stats</h3>
-          <div class="admin-stats-grid">
-            <div class="stat-item"><span class="stat-value" id="admin-stat-kp">0</span><span class="stat-label">Total KP</span></div>
-            <div class="stat-item"><span class="stat-value" id="admin-stat-streak">0</span><span class="stat-label">Best Streak</span></div>
-            <div class="stat-item"><span class="stat-value" id="admin-stat-samayik">0</span><span class="stat-label">Samayiks</span></div>
-            <div class="stat-item"><span class="stat-value" id="admin-stat-swadhyay">0</span><span class="stat-label">Pages</span></div>
-            <div class="stat-item"><span class="stat-value" id="admin-stat-devasiya">0</span><span class="stat-label">Devasiya</span></div>
-            <div class="stat-item"><span class="stat-value" id="admin-stat-raysiya">0</span><span class="stat-label">Raysiya</span></div>
-            <div class="stat-item"><span class="stat-value" id="admin-stat-perfect">0</span><span class="stat-label">Perfect Days</span></div>
-          </div>
+          <button class="btn-export btn-niyam-stats-trigger" id="btn-niyam-stats-admin">📊 Monthly Niyam Stats</button>
 
           <h3 class="sub-heading">🏆 Badges Earned</h3>
           <div class="admin-badges-list" id="admin-badges-list">
@@ -839,6 +829,21 @@
     </div>
   </div>
 
+  <!-- Monthly Niyam Stats (admin + user, shared) -->
+  <div id="niyam-stats-overlay" class="overlay hidden">
+    <div class="overlay-content niyam-stats-content">
+      <h2 class="summary-title">📊 Monthly Niyam Stats</h2>
+      <div class="history-nav">
+        <button id="btn-niyam-stats-prev" class="btn-history-nav">← Prev</button>
+        <span id="niyam-stats-month-label" class="history-month-label">July 2026</span>
+        <button id="btn-niyam-stats-next" class="btn-history-nav">Next →</button>
+      </div>
+      <p class="niyam-stats-summary" id="niyam-stats-summary"></p>
+      <div class="niyam-stats-list" id="niyam-stats-list"></div>
+      <button class="btn-continue" id="btn-close-niyam-stats">Close</button>
+    </div>
+  </div>
+
   <!-- Evening Summary -->
   <div id="evening-summary-overlay" class="overlay hidden">
     <div class="overlay-content evening-summary-content">
@@ -867,8 +872,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=25"></script>
-  <script src="auth.js?v=25"></script>
-  <script src="app.js?v=25"></script>
+  <script src="data.js?v=26"></script>
+  <script src="auth.js?v=26"></script>
+  <script src="app.js?v=26"></script>
 </body>
 </html>

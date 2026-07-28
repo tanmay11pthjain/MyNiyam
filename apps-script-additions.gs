@@ -32,9 +32,18 @@ const USERS_SHEET_NAME  = 'Users';
 const SANGH_SHEET_NAME  = 'Sanghs';
 
 // Created automatically if the Users sheet is missing or empty.
+//
+// TWO photo columns, on purpose:
+//   'Photo'      -> the actual visible in-cell image (what you look at)
+//   'Photo Data' -> the raw base64 string (what the app reads back)
+// Both are needed because once an image is placed in a cell via CellImage,
+// Apps Script can no longer read its source URL back out — getValue() returns
+// a CellImage object whose getUrl() is null. So the base64 must be kept in its
+// own text column for get_photo to serve. You can safely hide 'Photo Data' in
+// the Sheet; the script addresses columns by header name, not position.
 const USER_HEADERS = [
   'UID', 'Name', 'Email', 'DOB', 'Phone', 'City', 'Area',
-  'Sangh Code', 'Role', 'Sangh Codes', 'Registered At', 'Photo'
+  'Sangh Code', 'Role', 'Sangh Codes', 'Registered At', 'Photo', 'Photo Data'
 ];
 
 // Logical field -> column header text (matched case-insensitively, trimmed).
@@ -42,8 +51,12 @@ const USER_COLUMNS = {
   uid: 'UID', name: 'Name', email: 'Email', dob: 'DOB', phone: 'Phone',
   city: 'City', area: 'Area', sanghCode: 'Sangh Code',
   role: 'Role', sanghCodes: 'Sangh Codes', registeredAt: 'Registered At',
-  photo: 'Photo'
+  photo: 'Photo', photoData: 'Photo Data'
 };
+
+// Row height (px) used for rows carrying a photo, so the in-cell image is
+// actually visible instead of squashed into a default ~21px row.
+const PHOTO_ROW_HEIGHT = 60;
 
 const SANGH_COLUMNS = { code: 'Code', name: 'Name', city: 'City' };
 
@@ -63,6 +76,30 @@ function _isValidPhotoDataUrl_(photo) {
   return typeof photo === 'string' &&
     /^data:image\/(jpeg|jpg|png|webp);base64,/.test(photo) &&
     photo.length > 0 && photo.length <= MAX_PHOTO_CHARS;
+}
+
+// Writes a photo to BOTH photo columns: the raw base64 into 'Photo Data'
+// (machine-readable, what get_photo serves) and a real in-cell image into
+// 'Photo' (human-readable, what you see in the Sheet).
+//
+// The image write is wrapped in its own try/catch on purpose: newCellImage()
+// is a newer API, and if it ever fails we still want the base64 saved so the
+// app keeps working — a missing thumbnail in the Sheet is cosmetic, losing
+// the user's photo is not.
+function _setPhotoCell_(sheet, colMap, row, dataUrl) {
+  _setField_(sheet, colMap, row, 'photoData', dataUrl);
+
+  if (colMap.photo === undefined) return;
+  try {
+    const image = SpreadsheetApp.newCellImage()
+      .setSourceUrl(dataUrl)
+      .setAltTextTitle('Profile photo')
+      .build();
+    sheet.getRange(row, colMap.photo + 1).setValue(image);
+    sheet.setRowHeight(row, PHOTO_ROW_HEIGHT);
+  } catch (err) {
+    Logger.log('Could not render in-cell image (base64 still saved): ' + err);
+  }
 }
 
 // ---- SHEET HELPERS ----
@@ -258,7 +295,7 @@ function handleRegister(params) {
   // Only written when it validates — an invalid/oversized value from a client
   // bug is skipped rather than corrupting the cell or blocking registration.
   if (params.photo && _isValidPhotoDataUrl_(params.photo)) {
-    _setField_(sheet, colMap, row, 'photo', params.photo);
+    _setPhotoCell_(sheet, colMap, row, params.photo);
   }
 
   // Don't clobber an existing Role (an admin re-registering must stay an admin).
@@ -346,10 +383,27 @@ function handleGetPhoto(params) {
   const colMap = _headerMap_(sheet, USER_COLUMNS);
   const row = _findUserRow_(sheet, colMap, params.uid, params.email);
   if (row === -1) return { success: false, error: 'not_found' };
-  if (colMap.photo === undefined) return { success: true, photo: '' };
 
-  const photo = String(sheet.getRange(row, colMap.photo + 1).getValue() || '');
-  return { success: true, photo: photo };
+  // Read from 'Photo Data', not 'Photo' — a cell holding a CellImage returns
+  // an object from getValue(), and its source URL is not retrievable.
+  if (colMap.photoData !== undefined) {
+    const data = sheet.getRange(row, colMap.photoData + 1).getValue();
+    if (typeof data === 'string' && data.indexOf('data:image') === 0) {
+      return { success: true, photo: data };
+    }
+  }
+
+  // Legacy fallback: rows written before the split still carry raw base64 in
+  // 'Photo'. Anything else there (i.e. an actual CellImage object) is not a
+  // string and correctly falls through to ''.
+  if (colMap.photo !== undefined) {
+    const legacy = sheet.getRange(row, colMap.photo + 1).getValue();
+    if (typeof legacy === 'string' && legacy.indexOf('data:image') === 0) {
+      return { success: true, photo: legacy };
+    }
+  }
+
+  return { success: true, photo: '' };
 }
 
 // ---- ACTION: update_photo ----
@@ -365,12 +419,16 @@ function handleUpdatePhoto(params) {
   if (!sheet) return { success: false, error: 'users_sheet_not_found' };
 
   const colMap = _headerMap_(sheet, USER_COLUMNS);
-  if (colMap.photo === undefined) return { success: false, error: 'photo_column_not_found' };
+  // 'Photo Data' is the one that actually must exist — it's what get_photo
+  // serves back. The visible 'Photo' image column is a nice-to-have.
+  if (colMap.photoData === undefined && colMap.photo === undefined) {
+    return { success: false, error: 'photo_column_not_found' };
+  }
 
   const row = _findUserRow_(sheet, colMap, params.uid, params.email);
   if (row === -1) return { success: false, error: 'not_found' };
 
-  _setField_(sheet, colMap, row, 'photo', params.photo);
+  _setPhotoCell_(sheet, colMap, row, params.photo);
   return { success: true };
 }
 
@@ -441,4 +499,41 @@ function testSetup() {
   Logger.log('Sangh sheet found: ' + (_sanghSheet_() ? 'yes' : 'NO'));
   Logger.log('Users sheet found/created: ' + (_usersSheet_() ? 'yes' : 'NO'));
   Logger.log('get_sanghs -> ' + JSON.stringify(handleGetSanghs()));
+}
+
+// ---- ONE-TIME MIGRATION ----
+// Run this ONCE from the editor after adding the 'Photo Data' column, to
+// convert rows that already hold raw base64 text in 'Photo' into a real
+// in-cell image + a 'Photo Data' entry.
+//
+// Safe to re-run: rows already converted are skipped, because a converted
+// 'Photo' cell no longer returns a string from getValue().
+function migratePhotos() {
+  const sheet = _usersSheet_();
+  if (!sheet) { Logger.log('Users sheet not found'); return; }
+
+  const colMap = _headerMap_(sheet, USER_COLUMNS);
+  if (colMap.photo === undefined) { Logger.log('No "Photo" column found'); return; }
+  if (colMap.photoData === undefined) {
+    Logger.log('No "Photo Data" column found — add that header first, then re-run.');
+    return;
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) { Logger.log('No data rows'); return; }
+
+  let converted = 0;
+  let skipped = 0;
+  for (let row = 2; row <= lastRow; row++) {
+    const value = sheet.getRange(row, colMap.photo + 1).getValue();
+    if (typeof value !== 'string' || value.indexOf('data:image') !== 0) { skipped++; continue; }
+    if (!_isValidPhotoDataUrl_(value)) {
+      Logger.log('Row ' + row + ': photo present but invalid/oversized — left untouched.');
+      skipped++;
+      continue;
+    }
+    _setPhotoCell_(sheet, colMap, row, value);
+    converted++;
+  }
+  Logger.log('migratePhotos done. Converted: ' + converted + ', skipped: ' + skipped);
 }

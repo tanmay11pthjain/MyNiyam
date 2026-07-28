@@ -42,6 +42,41 @@ const EXPORT_COLUMNS = [
   { label: 'Perfect Day Bonus', points: log => log.perfectDay ? POINTS.perfectDay : 0 },
 ];
 
+// ===== MONTHLY NIYAM STATS — pure per-niyam spec =====
+// Single source of truth for the "days/times followed" overlay (admin +
+// user). Every niyam gets `countsDay(log, settings)` — did it count as
+// followed that day; a counter/duration niyam also gets `amount(log)` (the
+// raw quantity to sum) and `formatAmount(total)` (how to display that sum).
+// Screen Time is deliberately excluded — it's a penalty, not something
+// "followed", matching how getTotalTasksCount() already treats it.
+const NIYAM_STATS = [
+  { flag: 'enableNavkarsi', icon: '🌅', label: 'Navkarsi', countsDay: log => !!log.navkarsiDone },
+  { flag: 'enableWakeup', icon: '⏰', label: 'Wake < 7AM', countsDay: log => !!log.wakeUpDone },
+  { flag: 'enableSleep', icon: '🌙', label: 'Sleep < 12AM', countsDay: log => !!log.sleepDone },
+  { flag: 'enablePranam', icon: '🙇', label: 'Pranam', countsDay: log => !!log.pranamDone },
+  { flag: 'enablePooja', icon: '🪔', label: 'Pooja', countsDay: log => !!log.poojaDone },
+  {
+    flag: 'enableSamayik', icon: '🧘', label: 'Samayik',
+    countsDay: (log, s) => (log.samayikDone || 0) >= parseInt((s && s.samayikTarget) || 1, 10),
+    amount: log => log.samayikDone || 0,
+    formatAmount: total => `${total} time${total === 1 ? '' : 's'}`
+  },
+  { flag: 'enablePratikraman', icon: '🌅', label: 'Devasiya', countsDay: log => !!log.devasiyaDone },
+  { flag: 'enablePratikraman', icon: '🌙', label: 'Raysiya', countsDay: log => !!log.raysiyaDone },
+  {
+    flag: 'enableBookReading', icon: '📖', label: 'Book Reading',
+    countsDay: log => (log.bookReadingMins || 0) >= 30,
+    amount: log => log.bookReadingMins || 0,
+    formatAmount: totalMins => {
+      const h = Math.floor(totalMins / 60), m = totalMins % 60;
+      return h > 0 ? `${h}h${m > 0 ? ' ' + m + 'm' : ''}` : `${m}m`;
+    }
+  },
+  { flag: 'enableRatriBhojan', icon: '🍽️', label: 'Ratri Bhojan Tyag', countsDay: log => !!log.ratriBhojanDone },
+  { flag: 'enableKandmool', icon: '🌱', label: 'Kandmool Tyag', countsDay: log => !!log.kandmoolDone },
+  { flag: 'enableDailyNiyam', icon: '✨', label: 'Daily Niyam', countsDay: log => !!log.dailyNiyamDone },
+];
+
 // ===== SUN TIMES — pure NOAA/Meeus solar calculation =====
 // No DOM, no network, no class state — takes lat/lng/elevation/date/timezone
 // and returns real Date objects (UTC instants). Returning Date rather than a
@@ -1075,6 +1110,11 @@ class KalyanMitra {
     this.settings = { ...DEFAULT_SETTINGS };
     this.currentDayLocked = false;
     this.currentDayLockValue = null;
+    // The all-daily_logs listener that populates this (below, in
+    // setupRealtimeSync) is intentionally not part of the awaited Promise.all,
+    // so without this reset a niyam-stats/history read could momentarily
+    // reuse the PREVIOUS user's cached logs before the new listener fires.
+    this._cachedDailyLogs = null;
 
     // Show the individual view, hide the overview
     document.getElementById('admin-overview').classList.add('hidden');
@@ -1161,6 +1201,18 @@ class KalyanMitra {
     if (hPrev) hPrev.addEventListener('click', () => this._changeHistoryMonth(-1, false));
     if (hNext) hNext.addEventListener('click', () => this._changeHistoryMonth(1, false));
 
+    // Monthly Niyam Stats — entry points on both History and Achievements tabs
+    const btnStatsFromHistory = document.getElementById('btn-niyam-stats-history');
+    if (btnStatsFromHistory) btnStatsFromHistory.addEventListener('click', () => this.openNiyamStats());
+    const btnStatsFromAchievements = document.getElementById('btn-niyam-stats-achievements');
+    if (btnStatsFromAchievements) btnStatsFromAchievements.addEventListener('click', () => this.openNiyamStats());
+    const btnCloseNiyamStats = document.getElementById('btn-close-niyam-stats');
+    if (btnCloseNiyamStats) btnCloseNiyamStats.addEventListener('click', () => this.closeNiyamStats());
+    const niyamStatsPrev = document.getElementById('btn-niyam-stats-prev');
+    const niyamStatsNext = document.getElementById('btn-niyam-stats-next');
+    if (niyamStatsPrev) niyamStatsPrev.addEventListener('click', () => this._changeNiyamStatsMonth(-1));
+    if (niyamStatsNext) niyamStatsNext.addEventListener('click', () => this._changeNiyamStatsMonth(1));
+
     // Logout
     document.getElementById('btn-user-logout').addEventListener('click', () => this.logout());
 
@@ -1241,6 +1293,19 @@ class KalyanMitra {
     // Day detail close
     const closeDayBtn = document.getElementById('btn-close-day-detail');
     if (closeDayBtn) closeDayBtn.addEventListener('click', () => this.closeDayDetail());
+
+    // Monthly Niyam Stats — admin entry point + the overlay's own controls.
+    // Bound here too (not just in setupUserEventListeners()) because an admin
+    // session never runs that function — only one of the two ever executes
+    // per role, so there is no double-binding in practice.
+    const btnStatsAdmin = document.getElementById('btn-niyam-stats-admin');
+    if (btnStatsAdmin) btnStatsAdmin.addEventListener('click', () => this.openNiyamStats());
+    const btnCloseNiyamStatsAdmin = document.getElementById('btn-close-niyam-stats');
+    if (btnCloseNiyamStatsAdmin) btnCloseNiyamStatsAdmin.addEventListener('click', () => this.closeNiyamStats());
+    const niyamStatsPrevAdmin = document.getElementById('btn-niyam-stats-prev');
+    const niyamStatsNextAdmin = document.getElementById('btn-niyam-stats-next');
+    if (niyamStatsPrevAdmin) niyamStatsPrevAdmin.addEventListener('click', () => this._changeNiyamStatsMonth(-1));
+    if (niyamStatsNextAdmin) niyamStatsNextAdmin.addEventListener('click', () => this._changeNiyamStatsMonth(1));
 
     // Export leaderboard to Excel
     const openExportBtn = document.getElementById('btn-open-export');
@@ -2826,6 +2891,122 @@ class KalyanMitra {
     });
   }
 
+  // ===== MONTHLY NIYAM STATS (admin + user, shared) =====
+
+  // Pure — no DOM, no network. Walks the given month's date keys against
+  // NIYAM_STATS and returns per-niyam totals plus month-level context.
+  // Skips future dates with the same `dateKey > today` guard used by
+  // _renderHistoryDays(), so the current month is never measured against
+  // days that haven't happened yet.
+  _computeNiyamStats(logs, year, month) {
+    const s = this.settings || DEFAULT_SETTINGS;
+    const today = this.getTodayKey();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const enabled = NIYAM_STATS.filter(n => s[n.flag]);
+    const stats = enabled.map(n => ({
+      icon: n.icon, label: n.label, days: 0,
+      amount: n.amount ? 0 : null, formatAmount: n.formatAmount || null
+    }));
+
+    const safeLogs = logs || {};
+    let daysElapsed = 0, daysRecorded = 0, perfectDays = 0;
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (dateKey > today) break; // future — this and every later day this month haven't happened
+      daysElapsed++;
+
+      const log = safeLogs[dateKey];
+      if (!log) continue;
+      daysRecorded++;
+      if (log.perfectDay) perfectDays++;
+
+      enabled.forEach((n, i) => {
+        if (n.countsDay(log, s)) stats[i].days++;
+        if (n.amount) stats[i].amount += (n.amount(log) || 0);
+      });
+    }
+
+    return { stats, daysElapsed, daysRecorded, perfectDays };
+  }
+
+  // Always resets to the current month on open — deliberate, so admin
+  // switching between users (or the user reopening later) never shows a
+  // stale month left over from a previous view.
+  openNiyamStats() {
+    const now = new Date();
+    this._niyamStatsMonth = now.getMonth();
+    this._niyamStatsYear = now.getFullYear();
+    const overlay = document.getElementById('niyam-stats-overlay');
+    if (overlay) { overlay.classList.remove('hidden'); overlay.classList.add('show'); }
+    this.renderNiyamStats();
+  }
+
+  closeNiyamStats() {
+    const overlay = document.getElementById('niyam-stats-overlay');
+    if (overlay) { overlay.classList.remove('show'); overlay.classList.add('hidden'); }
+  }
+
+  _changeNiyamStatsMonth(delta) {
+    this._niyamStatsMonth += delta;
+    if (this._niyamStatsMonth > 11) { this._niyamStatsMonth = 0; this._niyamStatsYear++; }
+    if (this._niyamStatsMonth < 0) { this._niyamStatsMonth = 11; this._niyamStatsYear--; }
+    this.renderNiyamStats();
+  }
+
+  // Shared by both admin and user: on the admin side this.uid is already the
+  // selected user (set in selectAdminUser()), so reading
+  // users/{this.uid}/daily_logs needs no branching. Uses _cachedDailyLogs
+  // when already populated (set by renderHistory()/renderAdminHistory()'s
+  // listener); otherwise fetches it directly — this is the guard that keeps
+  // the user-side Achievements-tab entry point working even if History was
+  // never opened this session.
+  async renderNiyamStats() {
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const labelEl = document.getElementById('niyam-stats-month-label');
+    if (labelEl) labelEl.textContent = `${monthNames[this._niyamStatsMonth]} ${this._niyamStatsYear}`;
+
+    const listEl = document.getElementById('niyam-stats-list');
+    const summaryEl = document.getElementById('niyam-stats-summary');
+    if (!listEl) return;
+
+    let logs = this._cachedDailyLogs;
+    if (logs == null) {
+      listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#795548;">Loading...</div>';
+      if (summaryEl) summaryEl.textContent = '';
+      try {
+        const snap = await db.ref(`users/${this.uid}/daily_logs`).once('value');
+        logs = snap.val() || {};
+        this._cachedDailyLogs = logs;
+      } catch (e) {
+        listEl.innerHTML = '<div style="text-align:center; color:red;">Failed to load stats.</div>';
+        return;
+      }
+    }
+
+    const { stats, daysElapsed, daysRecorded, perfectDays } =
+      this._computeNiyamStats(logs, this._niyamStatsYear, this._niyamStatsMonth);
+
+    if (summaryEl) {
+      summaryEl.textContent = daysElapsed > 0
+        ? `${daysRecorded} of ${daysElapsed} day${daysElapsed === 1 ? '' : 's'} logged · ${perfectDays} perfect day${perfectDays === 1 ? '' : 's'}`
+        : 'No days have occurred yet in this month.';
+    }
+
+    if (stats.length === 0) {
+      listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#795548;">No niyams are currently enabled.</div>';
+      return;
+    }
+
+    listEl.innerHTML = stats.map(st => `
+      <div class="niyam-stat-row">
+        <span class="niyam-stat-icon">${st.icon}</span>
+        <span class="niyam-stat-label">${st.label}</span>
+        <span class="niyam-stat-value">${st.days} day${st.days === 1 ? '' : 's'}${st.amount !== null && st.formatAmount ? ' · ' + st.formatAmount(st.amount) : ''}</span>
+      </div>
+    `).join('');
+  }
+
   showDayDetail(dateKey) {
     const logs = this._cachedDailyLogs || {};
     const log = logs[dateKey];
@@ -2986,7 +3167,7 @@ class KalyanMitra {
   }
 
   renderAdminProgress() {
-    const p = this.profile, d = this.dailyLog, s = this.settings;
+    const p = this.profile;
 
     // Badges earned
     const badgeCount = (p.badges || []).length;
@@ -3002,38 +3183,10 @@ class KalyanMitra {
     else if (st >= 3) flame.textContent = '🔥';
     else flame.textContent = '🕯️';
 
-    // Today's activities — build dynamically from enabled settings
-    const grid = document.getElementById('admin-today-grid');
-    if (grid) {
-      const activities = [
-        { key: 'enableNavkarsi', icon: '🚰', name: 'Navkarsi', status: d.navkarsiDone ? '✓' : '✗', done: !!d.navkarsiDone },
-        { key: 'enableWakeup', icon: '🌅', name: 'Wake < 7AM', status: d.wakeUpDone ? '✓' : '✗', done: !!d.wakeUpDone },
-        { key: 'enableSleep', icon: '🌙', name: 'Sleep < 12AM', status: d.sleepDone ? '✓' : '✗', done: !!d.sleepDone },
-        { key: 'enablePranam', icon: '🙇', name: 'Pranam', status: d.pranamDone ? '✓' : '✗', done: !!d.pranamDone },
-        { key: 'enablePooja', icon: '🪔', name: 'Pooja', status: d.poojaDone ? (d.ashtaPrakariDone ? '✓ +Ashta' : '✓') : '✗', done: !!d.poojaDone },
-        { key: 'enableSamayik', icon: '🧘', name: 'Samayik', status: `${d.samayikDone || 0}`, done: (d.samayikDone || 0) > 0 },
-        { key: 'enablePratikraman', icon: '🌅', name: 'Devasiya', status: d.devasiyaDone ? '✓' : '✗', done: !!d.devasiyaDone },
-        { key: 'enablePratikraman', icon: '🌙', name: 'Raysiya', status: d.raysiyaDone ? '✓' : '✗', done: !!d.raysiyaDone },
-        { key: 'enableBookReading', icon: '📖', name: 'Book Reading', status: `${d.bookReadingMins || 0} min`, done: (d.bookReadingMins || 0) >= 30 },
-        { key: 'enableRatriBhojan', icon: '🚫', name: 'Ratri Bhojan Tyag', status: d.ratriBhojanDone ? '✓' : '✗', done: !!d.ratriBhojanDone },
-        { key: 'enableKandmool', icon: '🥔', name: 'Kandmool Tyag', status: d.kandmoolDone ? '✓' : '✗', done: !!d.kandmoolDone },
-        { key: 'enableScreenTime', icon: '📱', name: 'Screen Time', status: `${d.screenTimeHours || 0}h ${d.screenTimeMins || 0}m`, done: false },
-        { key: 'enableDailyNiyam', icon: '✨', name: 'Daily Niyam', status: d.dailyNiyamDone ? '✓' : '✗', done: !!d.dailyNiyamDone },
-      ];
-      grid.innerHTML = activities
-        .filter(a => s[a.key])
-        .map(a => `<div class="admin-activity-item"><span class="admin-act-icon">${a.icon}</span><span class="admin-act-name">${a.name}</span><span class="admin-act-status ${a.done ? 'done' : ''}">${a.status}</span></div>`)
-        .join('');
-    }
-
-    // Lifetime stats
-    document.getElementById('admin-stat-kp').textContent = p.totalKP;
-    document.getElementById('admin-stat-streak').textContent = p.longestStreak;
-    document.getElementById('admin-stat-samayik').textContent = p.totalSamayik || 0;
-    document.getElementById('admin-stat-swadhyay').textContent = p.totalSwadhyay || 0;
-    document.getElementById('admin-stat-devasiya').textContent = p.totalDevasiya || 0;
-    document.getElementById('admin-stat-raysiya').textContent = p.totalRaysiya || 0;
-    document.getElementById('admin-stat-perfect').textContent = p.totalPerfectDays || 0;
+    // Today's Activities and Lifetime Stats were removed here in favour of the
+    // Monthly Niyam Stats overlay (renderNiyamStats()) — the former duplicated
+    // what clicking a day in Activity History already shows, and the latter's
+    // all-time totals said little about recent practice.
 
     // Badges
     const badgeList = document.getElementById('admin-badges-list');
