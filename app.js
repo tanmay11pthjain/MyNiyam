@@ -52,6 +52,30 @@ function computeRawDayPoints(log) {
 // sync, and no more 'Perfect Day Bonus' column now that bonus is gone.
 const EXPORT_COLUMNS = RAW_POINT_RULES;
 
+// ===== STREAK SAVER — PAST-DAY EDIT FIELD SPEC =====
+// Drives the day-edit overlay's rows. 'toggle' fields flip a boolean prop;
+// 'counter' fields step a numeric prop by `step`; 'screentime' steps whole
+// hours only, matching the live dashboard (screenTimeMins is never adjusted
+// there either, so raw-point math stays identical between an edited day and
+// a live one). Ashta Prakari's `dependsOn` mirrors the live rule that it
+// only ever scores alongside Pooja (toggleAshtaPrakari()).
+const DAY_EDIT_FIELDS = [
+  { key: 'enableNavkarsi', prop: 'navkarsiDone', icon: '🌅', label: 'Navkarsi', type: 'toggle' },
+  { key: 'enableWakeup', prop: 'wakeUpDone', icon: '⏰', label: 'Wake < 7AM', type: 'toggle' },
+  { key: 'enableSleep', prop: 'sleepDone', icon: '🌙', label: 'Sleep < 12AM', type: 'toggle' },
+  { key: 'enablePranam', prop: 'pranamDone', icon: '🙇', label: 'Pranam', type: 'toggle' },
+  { key: 'enablePooja', prop: 'poojaDone', icon: '🪔', label: 'Pooja', type: 'toggle' },
+  { key: 'enablePooja', prop: 'ashtaPrakariDone', icon: '🍽️', label: 'Ashta Prakari', type: 'toggle', dependsOn: 'poojaDone' },
+  { key: 'enableSamayik', prop: 'samayikDone', icon: '🧘', label: 'Samayik', type: 'counter', step: 1 },
+  { key: 'enablePratikraman', prop: 'devasiyaDone', icon: '🌅', label: 'Devasiya', type: 'toggle' },
+  { key: 'enablePratikraman', prop: 'raysiyaDone', icon: '🌙', label: 'Raysiya', type: 'toggle' },
+  { key: 'enableBookReading', prop: 'bookReadingMins', icon: '📖', label: 'Book Reading', type: 'counter', step: 30, unit: 'min' },
+  { key: 'enableRatriBhojan', prop: 'ratriBhojanDone', icon: '🍽️', label: 'Ratri Bhojan Tyag', type: 'toggle' },
+  { key: 'enableKandmool', prop: 'kandmoolDone', icon: '🌱', label: 'Kandmool Tyag', type: 'toggle' },
+  { key: 'enableDailyNiyam', prop: 'dailyNiyamDone', icon: '✨', label: 'Daily Niyam', type: 'toggle' },
+  { key: 'enableScreenTime', prop: 'screenTimeHours', icon: '📱', label: 'Screen Time', type: 'screentime' },
+];
+
 // ===== MONTHLY NIYAM STATS — pure per-niyam spec =====
 // Single source of truth for the "days/times followed" overlay (admin +
 // user). Every niyam gets `countsDay(log, settings)` — did it count as
@@ -1283,6 +1307,14 @@ class KalyanMitra {
     const closeDayEl = document.getElementById('btn-close-day-detail');
     if (closeDayEl) closeDayEl.addEventListener('click', () => this.closeDayDetail());
 
+    // Streak saver — past-day edit overlay
+    const closeDayEditBtn = document.getElementById('btn-close-day-edit');
+    if (closeDayEditBtn) closeDayEditBtn.addEventListener('click', () => this.closeDayEdit());
+    const cancelDayEditBtn = document.getElementById('btn-cancel-day-edit');
+    if (cancelDayEditBtn) cancelDayEditBtn.addEventListener('click', () => this.closeDayEdit());
+    const saveDayEditBtn = document.getElementById('btn-save-day-edit');
+    if (saveDayEditBtn) saveDayEditBtn.addEventListener('click', () => this.saveDayEdit());
+
     // Submit day
     const btnSubmit = document.getElementById('btn-submit-day');
     if (btnSubmit) btnSubmit.addEventListener('click', () => this.submitDay());
@@ -1482,6 +1514,59 @@ class KalyanMitra {
     const d = new Date();
     d.setDate(d.getDate() + offset);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // ===== STREAK SAVER =====
+  _currentMonthKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  // Read-only — does not mutate or persist the profile. The month rollover
+  // (resetting the used count for a new month) is applied lazily, only
+  // inside _consumeStreakSaver(), so merely rendering this count can never
+  // write to the profile.
+  _streakSaversLeft() {
+    const p = this.profile;
+    const used = (p.streakSaverMonth === this._currentMonthKey()) ? (p.streakSaversUsed || 0) : 0;
+    return Math.max(0, STREAK_SAVERS_PER_MONTH - used);
+  }
+
+  // Consumes one chance for the current month, rolling over the counter if
+  // the last use was in a previous month. This is the only place that
+  // persists streakSaversUsed/streakSaverMonth.
+  _consumeStreakSaver() {
+    const month = this._currentMonthKey();
+    if (this.profile.streakSaverMonth !== month) {
+      this.profile.streakSaverMonth = month;
+      this.profile.streakSaversUsed = 0;
+    }
+    this.profile.streakSaversUsed = (this.profile.streakSaversUsed || 0) + 1;
+  }
+
+  // Editable window: yesterday back through 7 days ago. Today is
+  // deliberately excluded — it's edited live via the dashboard, not this
+  // overlay. Date keys are YYYY-MM-DD, so lexicographic comparison sorts
+  // identically to chronological order and safely spans month boundaries.
+  _isStreakSaverEligible(dateKey) {
+    return dateKey >= this.getTodayKey(-7) && dateKey < this.getTodayKey();
+  }
+
+  // Walks backwards counting consecutive complete days against the given
+  // logs map (which the caller may have merged a fresh edit into). Today
+  // is counted separately and only if it's already complete, so an
+  // in-progress "today" can never break the walk through past days. Bounded
+  // at 3650 iterations (~10 years) as cheap insurance against a runaway loop.
+  _recomputeStreakFromHistory(allLogs) {
+    const s = this.settings;
+    let streak = 0;
+    if (this._isLogComplete(this.dailyLog, s)) streak++;
+    for (let offset = -1; offset > -3650; offset--) {
+      const dateKey = this.getTodayKey(offset);
+      if (!this._isLogComplete(allLogs[dateKey], s)) break;
+      streak++;
+    }
+    return streak;
   }
 
   // ===== LOCK SYSTEM =====
@@ -2265,13 +2350,22 @@ class KalyanMitra {
   }
 
   isAllTasksComplete() {
-    const d = this.dailyLog, s = this.settings;
+    return this._isLogComplete(this.dailyLog, this.settings);
+  }
+
+  // Pure completeness check against any log/settings pair — not tied to
+  // `this.dailyLog`, so it can be reused for past-day edits (streak saver)
+  // and streak recomputation. `parseInt(s.samayikTarget || 1)` guards against
+  // an NaN comparison if samayikTarget is ever missing.
+  _isLogComplete(log, settings) {
+    if (!log) return false;
+    const d = log, s = settings;
     if (s.enableNavkarsi && !d.navkarsiDone) return false;
     if (s.enableWakeup && !d.wakeUpDone) return false;
     if (s.enableSleep && !d.sleepDone) return false;
     if (s.enablePranam && !d.pranamDone) return false;
     if (s.enablePooja && !d.poojaDone) return false;
-    if (s.enableSamayik && (d.samayikDone || 0) < parseInt(s.samayikTarget)) return false;
+    if (s.enableSamayik && (d.samayikDone || 0) < parseInt(s.samayikTarget || 1)) return false;
     if (s.enablePratikraman && !d.devasiyaDone) return false;
     if (s.enablePratikraman && !d.raysiyaDone) return false;
     if (s.enableBookReading && (d.bookReadingMins || 0) < 30) return false;
@@ -2865,6 +2959,11 @@ class KalyanMitra {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const today = this.getTodayKey();
     const s = this.settings || DEFAULT_SETTINGS;
+    // Note: `isAdmin` is passed `true` from both call sites (user + admin
+    // history), so it cannot be used as a role signal. currentRole is the
+    // only trustworthy check — streak saver editing is user-only.
+    const canEdit = this.currentRole === 'user';
+    const saversLeft = canEdit ? this._streakSaversLeft() : 0;
     let html = '';
 
     for (let day = daysInMonth; day >= 1; day--) {
@@ -2873,11 +2972,16 @@ class KalyanMitra {
 
       const log = allLogs[dateKey];
       const clickAttr = log ? `data-datekey="${dateKey}" style="cursor:pointer"` : '';
+      const inWindow = canEdit && this._isStreakSaverEligible(dateKey);
+      const editBtn = !inWindow ? '' : (saversLeft > 0
+        ? `<button type="button" class="history-edit-btn" data-editkey="${dateKey}" title="Edit this day">✏️ Edit</button>`
+        : `<button type="button" class="history-edit-btn" disabled title="No streak savers left this month">✏️ Edit</button>`);
 
       if (!log) {
         html += `<div class="history-day history-empty">
           <div class="history-date">${this._formatHistoryDate(dateKey)}</div>
           <div class="history-summary">No data recorded</div>
+          ${editBtn}
         </div>`;
         continue;
       }
@@ -2926,6 +3030,7 @@ class KalyanMitra {
           <span class="history-kp">+${kp} AP</span>
         </div>
         <div class="history-icons">${icons.join(' ')}</div>
+        ${editBtn}
       </div>`;
     }
 
@@ -2937,6 +3042,21 @@ class KalyanMitra {
         this.showDayDetail(card.dataset.datekey);
       });
     });
+
+    if (canEdit) {
+      // stopPropagation so clicking Edit on a day that also has data doesn't
+      // also fire the day-detail click handler bound just above.
+      container.querySelectorAll('.history-edit-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.openDayEdit(btn.dataset.editkey);
+        });
+      });
+      const statusEl = document.getElementById('streak-saver-status');
+      if (statusEl) {
+        statusEl.textContent = `🛡️ Streak Savers: ${this._streakSaversLeft()} of ${STREAK_SAVERS_PER_MONTH} left this month`;
+      }
+    }
   }
 
   // ===== MONTHLY NIYAM STATS (admin + user, shared) =====
@@ -3117,6 +3237,182 @@ class KalyanMitra {
     this._openDayDetailKey = null;
     const o = document.getElementById('day-detail-overlay');
     if (o) { o.classList.remove('show'); o.classList.add('hidden'); }
+  }
+
+  // ===== STREAK SAVER — PAST-DAY EDIT OVERLAY =====
+  // Opens the dedicated edit overlay for a past day inside the streak-saver
+  // window. The draft is a standalone object, never `this.dailyLog` — so
+  // nothing here can be touched by today's realtime listener or the
+  // midnight rollover, and nothing the editor does can leak into today's
+  // live log.
+  openDayEdit(dateKey) {
+    if (this.currentRole !== 'user') return;
+    if (!this._isStreakSaverEligible(dateKey)) return;
+    if (this._streakSaversLeft() <= 0) return;
+
+    const overlay = document.getElementById('day-edit-overlay');
+    if (!overlay) return;
+
+    const existing = (this._cachedDailyLogs && this._cachedDailyLogs[dateKey]) || null;
+    this._dayEditKey = dateKey;
+    this._dayEditOriginal = existing ? { ...DEFAULT_DAILY_LOG, ...existing } : { ...DEFAULT_DAILY_LOG, date: dateKey };
+    this._dayEditDraft = { ...this._dayEditOriginal };
+
+    const dateEl = document.getElementById('day-edit-date');
+    if (dateEl) dateEl.textContent = this._formatHistoryDate(dateKey);
+    const errEl = document.getElementById('day-edit-error');
+    if (errEl) errEl.classList.add('hidden');
+
+    this._renderDayEditRows();
+    overlay.classList.remove('hidden');
+    overlay.classList.add('show');
+  }
+
+  closeDayEdit() {
+    this._dayEditKey = null;
+    this._dayEditOriginal = null;
+    this._dayEditDraft = null;
+    const o = document.getElementById('day-edit-overlay');
+    if (o) { o.classList.remove('show'); o.classList.add('hidden'); }
+  }
+
+  _renderDayEditRows() {
+    const gridEl = document.getElementById('day-edit-grid');
+    const draft = this._dayEditDraft;
+    if (!gridEl || !draft) return;
+    const s = this.settings || DEFAULT_SETTINGS;
+
+    gridEl.innerHTML = DAY_EDIT_FIELDS.filter(f => s[f.key]).map(f => {
+      if (f.type === 'toggle') {
+        const disabled = !!(f.dependsOn && !draft[f.dependsOn]);
+        const checked = !disabled && !!draft[f.prop];
+        return `
+          <div class="day-edit-row${disabled ? ' day-edit-row-disabled' : ''}">
+            <span class="day-edit-icon">${f.icon}</span>
+            <span class="day-edit-label">${f.label}</span>
+            <button type="button" class="day-edit-toggle-btn${checked ? ' is-on' : ''}" data-prop="${f.prop}"${disabled ? ' disabled' : ''}>${checked ? '✓ Done' : 'Not done'}</button>
+          </div>`;
+      }
+      if (f.type === 'counter') {
+        const val = draft[f.prop] || 0;
+        const display = f.unit === 'min' ? `${val} min` : `${val}`;
+        return `
+          <div class="day-edit-row">
+            <span class="day-edit-icon">${f.icon}</span>
+            <span class="day-edit-label">${f.label}</span>
+            <div class="day-edit-counter">
+              <button type="button" class="day-edit-counter-btn" data-prop="${f.prop}" data-step="${-f.step}">−</button>
+              <span class="day-edit-counter-val">${display}</span>
+              <button type="button" class="day-edit-counter-btn" data-prop="${f.prop}" data-step="${f.step}">+</button>
+            </div>
+          </div>`;
+      }
+      // screentime — whole hours only, mirroring adjustScreenTime()'s live UI
+      const hrs = draft.screenTimeHours || 0;
+      return `
+        <div class="day-edit-row">
+          <span class="day-edit-icon">${f.icon}</span>
+          <span class="day-edit-label">${f.label}</span>
+          <div class="day-edit-counter">
+            <button type="button" class="day-edit-counter-btn" data-prop="screenTimeHours" data-step="-1">−</button>
+            <span class="day-edit-counter-val">${hrs}h</span>
+            <button type="button" class="day-edit-counter-btn" data-prop="screenTimeHours" data-step="1">+</button>
+          </div>
+        </div>`;
+    }).join('');
+
+    gridEl.querySelectorAll('.day-edit-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const prop = btn.dataset.prop;
+        draft[prop] = !draft[prop];
+        if (prop === 'poojaDone' && !draft[prop]) draft.ashtaPrakariDone = false;
+        this._renderDayEditRows();
+      });
+    });
+    gridEl.querySelectorAll('.day-edit-counter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const prop = btn.dataset.prop;
+        const step = parseInt(btn.dataset.step, 10);
+        draft[prop] = Math.max(0, (draft[prop] || 0) + step);
+        this._renderDayEditRows();
+      });
+    });
+  }
+
+  // Persists the edited day, then reconciles totalKP, perfect-day count,
+  // per-niyam lifetime stats, and the streak — all as deltas against the
+  // original log, never as blind overwrites, so nothing but the edited
+  // day's own contribution changes.
+  async saveDayEdit() {
+    const dateKey = this._dayEditKey;
+    const draft = this._dayEditDraft;
+    const before = this._dayEditOriginal;
+    if (!dateKey || !draft || !before) return;
+    if (!this._isStreakSaverEligible(dateKey)) { this.closeDayEdit(); return; }
+    if (this._streakSaversLeft() <= 0) return;
+
+    const s = this.settings || DEFAULT_SETTINGS;
+    // Normalize: Ashta only ever scores alongside Pooja, matching the live
+    // toggleAshtaPrakari() behavior — never mint points the live path wouldn't.
+    if (!draft.poojaDone) draft.ashtaPrakariDone = false;
+
+    const oldKp = computeRawDayPoints(before);
+    const newKp = computeRawDayPoints(draft);
+    draft.kpEarned = newKp;
+
+    const wasPerfect = !!before.perfectDay;
+    const isPerfect = this._isLogComplete(draft, s);
+    draft.perfectDay = isPerfect;
+    draft.finalized = true;
+
+    try {
+      await this.saveDailyLogFor(dateKey, draft);
+    } catch (e) {
+      console.warn('Streak-saver edit failed to save — chance not consumed.', e);
+      const errEl = document.getElementById('day-edit-error');
+      if (errEl) { errEl.textContent = 'Failed to save. Please try again.'; errEl.classList.remove('hidden'); }
+      return;
+    }
+
+    this.profile.totalKP = Math.max(0, (this.profile.totalKP || 0) + (newKp - oldKp));
+
+    if (isPerfect && !wasPerfect) this.profile.totalPerfectDays = (this.profile.totalPerfectDays || 0) + 1;
+    else if (!isPerfect && wasPerfect) this.profile.totalPerfectDays = Math.max(0, (this.profile.totalPerfectDays || 0) - 1);
+
+    const statDelta = (statKey, beforeVal, afterVal) => {
+      this.profile[statKey] = Math.max(0, (this.profile[statKey] || 0) + (afterVal - beforeVal));
+    };
+    statDelta('totalSamayik', before.samayikDone || 0, draft.samayikDone || 0);
+    statDelta('totalSwadhyay', Math.floor((before.bookReadingMins || 0) / 30), Math.floor((draft.bookReadingMins || 0) / 30));
+    statDelta('totalNiyam', before.dailyNiyamDone ? 1 : 0, draft.dailyNiyamDone ? 1 : 0);
+    statDelta('totalDevasiya', before.devasiyaDone ? 1 : 0, draft.devasiyaDone ? 1 : 0);
+    statDelta('totalRaysiya', before.raysiyaDone ? 1 : 0, draft.raysiyaDone ? 1 : 0);
+    // earlyPooja and totalActivities are deliberately left untouched — neither
+    // can be reconstructed for a past day without guessing (earlyPooja needs
+    // the actual wall-clock completion time; totalActivities has no clean
+    // per-log definition).
+
+    // Recompute the streak against logs with this edit merged in. Using
+    // max() rather than overwriting means a streak saver can only ever help:
+    // the streak-freeze feature can leave currentStreak legitimately higher
+    // than history implies (it forgives one missed day per month without
+    // recording which one), and a blind overwrite would silently erase that.
+    const mergedLogs = { ...(this._cachedDailyLogs || {}), [dateKey]: draft };
+    this._cachedDailyLogs = mergedLogs;
+    const recomputed = this._recomputeStreakFromHistory(mergedLogs);
+    this.profile.currentStreak = Math.max(recomputed, this.profile.currentStreak || 0);
+    if (this.profile.currentStreak > (this.profile.longestStreak || 0)) {
+      this.profile.longestStreak = this.profile.currentStreak;
+    }
+
+    this._consumeStreakSaver();
+    await this.saveProfile();
+
+    this.closeDayEdit();
+    this.renderDashboard();
+    this.renderAchievements();
+    this.renderHistory();
+    this.checkBadges();
   }
 
   _formatHistoryDate(dateKey) {

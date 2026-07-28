@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
 
@@ -441,6 +441,7 @@
     <div id="tab-history" class="tab-content">
       <h2 class="section-heading">📅 My Progress History</h2>
       <button class="btn-export btn-niyam-stats-trigger" id="btn-niyam-stats-history">📊 Monthly Niyam Stats</button>
+      <p class="streak-saver-status" id="streak-saver-status"></p>
       <div class="history-nav">
         <button id="btn-history-prev" class="btn-history-nav">← Prev</button>
         <span id="history-month-label" class="history-month-label">July 2026</span>
@@ -760,6 +761,22 @@
     </div>
   </div>
 
+  <!-- Streak Saver — Past Day Edit -->
+  <div id="day-edit-overlay" class="overlay hidden">
+    <div class="overlay-content day-edit-content">
+      <button class="btn-close-overlay" id="btn-close-day-edit">✕</button>
+      <h2 class="summary-title">🛡️ Streak Saver</h2>
+      <h3 class="day-edit-date" id="day-edit-date">Mon, 19 Jul</h3>
+      <p class="day-edit-hint">Update what you actually did this day. Saving uses one streak saver.</p>
+      <div class="day-edit-grid" id="day-edit-grid"></div>
+      <p class="day-edit-error hidden" id="day-edit-error"></p>
+      <div class="day-edit-actions">
+        <button class="btn-continue" id="btn-save-day-edit">Save</button>
+        <button class="btn-cancel" id="btn-cancel-day-edit">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Badge Unlock -->
   <div id="badge-unlock-overlay" class="overlay hidden">
     <div class="overlay-content badge-unlock-content">
@@ -872,8 +889,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=27"></script>
-  <script src="auth.js?v=27"></script>
-  <script src="app.js?v=27"></script>
+  <script src="data.js?v=28"></script>
+  <script src="auth.js?v=28"></script>
+  <script src="app.js?v=28"></script>
 </body>
 </html>

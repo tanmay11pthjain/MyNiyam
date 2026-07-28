@@ -189,6 +189,8 @@ const DEFAULT_PROFILE = {
   lastActiveDate: null,
   streakFreezeUsed: false,
   streakFreezeMonth: null,
+  streakSaversUsed: 0,      // streak-saver edits used in streakSaverMonth
+  streakSaverMonth: null,   // 'YYYY-MM' the above count applies to
   badges: [],
   // Lifetime stats
   totalSamayik: 0,
@@ -246,6 +248,9 @@ const POINTS = {
   perfectDay: 50,
   dailyLogin: 10,
 };
+
+// ===== STREAK SAVER =====
+const STREAK_SAVERS_PER_MONTH = 3;
 
 // ===== RARITY COLORS =====
 const RARITY_COLORS = {
