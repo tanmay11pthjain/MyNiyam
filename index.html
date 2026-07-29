@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=17">
+  <link rel="stylesheet" href="styles.css?v=18">
 </head>
 <body>
 
@@ -105,6 +105,7 @@
         <div class="kp-section">
           <span class="kp-icon">⭐</span>
           <span class="karma-points" id="karma-points">10 AP</span>
+          <span class="kp-period-label">This Month</span>
         </div>
         <div class="header-right">
           <div class="streak-section" id="streak-section">
@@ -420,16 +421,8 @@
     <!-- TAB: ACHIEVEMENTS -->
     <div id="tab-achievements" class="tab-content">
       <div class="achievements-container">
-        <h2 class="section-heading">📊 Your Stats</h2>
-        <div class="stats-grid" id="stats-grid">
-          <div class="stat-item"><span class="stat-value" id="stat-total-kp">10</span><span class="stat-label">Total AP</span></div>
-          <div class="stat-item"><span class="stat-value" id="stat-longest-streak">0</span><span class="stat-label">Best Streak</span></div>
-          <div class="stat-item"><span class="stat-value" id="stat-total-samayik">0</span><span class="stat-label">Samayiks</span></div>
-          <div class="stat-item"><span class="stat-value" id="stat-total-swadhyay">0</span><span class="stat-label">Pages Read</span></div>
-          <div class="stat-item"><span class="stat-value" id="stat-total-devasiya">0</span><span class="stat-label">Devasiya</span></div>
-          <div class="stat-item"><span class="stat-value" id="stat-total-raysiya">0</span><span class="stat-label">Raysiya</span></div>
-          <div class="stat-item"><span class="stat-value" id="stat-perfect-days">0</span><span class="stat-label">Perfect Days</span></div>
-        </div>
+        <h2 class="section-heading">📊 Your Lifetime Stats</h2>
+        <div class="stats-grid" id="stats-grid"><!-- Populated by JS: _renderLifetimeStats() --></div>
         <button class="btn-export btn-niyam-stats-trigger" id="btn-niyam-stats-achievements">📊 Monthly Niyam Stats</button>
         <h2 class="section-heading">🏆 Trophy Shelf</h2>
         <div class="badges-grid" id="badges-grid"></div>
@@ -696,6 +689,9 @@
             <button id="btn-admin-history-next" class="btn-history-nav">Next →</button>
           </div>
           <div class="history-list" id="admin-history-list"></div>
+
+          <h3 class="sub-heading">📊 Lifetime Stats</h3>
+          <div class="stats-grid" id="admin-stats-grid"><!-- Populated by JS: _renderLifetimeStats() --></div>
         </div>
 
       </div>
@@ -892,8 +888,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=29"></script>
-  <script src="auth.js?v=29"></script>
-  <script src="app.js?v=29"></script>
+  <script src="data.js?v=30"></script>
+  <script src="auth.js?v=30"></script>
+  <script src="app.js?v=30"></script>
 </body>
 </html>

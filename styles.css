@@ -667,6 +667,16 @@ body {
   line-height: 1.2;
 }
 
+.kp-period-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  opacity: 0.65;
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+
 /* Header Right — streak + logout side by side */
 .header-right {
   display: flex;

@@ -47,11 +47,6 @@ function computeRawDayPoints(log) {
   return RAW_POINT_RULES.reduce((sum, rule) => sum + rule.points(log), 0);
 }
 
-// ===== ADMIN EXCEL EXPORT — COLUMN SPEC =====
-// The export's columns ARE the raw-point rules — no separate list to keep in
-// sync, and no more 'Perfect Day Bonus' column now that bonus is gone.
-const EXPORT_COLUMNS = RAW_POINT_RULES;
-
 // ===== STREAK SAVER — PAST-DAY EDIT FIELD SPEC =====
 // Drives the day-edit overlay's rows. 'toggle' fields flip a boolean prop;
 // 'counter' fields step a numeric prop by `step`; 'screentime' steps whole
@@ -77,12 +72,17 @@ const DAY_EDIT_FIELDS = [
 ];
 
 // ===== MONTHLY NIYAM STATS — pure per-niyam spec =====
-// Single source of truth for the "days/times followed" overlay (admin +
-// user). Every niyam gets `countsDay(log, settings)` — did it count as
-// followed that day; a counter/duration niyam also gets `amount(log)` (the
-// raw quantity to sum) and `formatAmount(total)` (how to display that sum).
-// Screen Time is deliberately excluded — it's a penalty, not something
-// "followed", matching how getTotalTasksCount() already treats it.
+// Single source of truth for "days/times followed" — shared by the Monthly
+// Niyam Stats overlay, the lifetime stats grid (user Badges tab + admin
+// History), and the admin Excel export. Every niyam gets
+// `countsDay(log, settings)` — did it count as followed that day; a
+// counter/duration niyam also gets `amount(log)` (the raw quantity to sum)
+// and `formatAmount(total)` (how to display that sum). Entries marked
+// `penalty: true` (Screen Time) are excluded from the Monthly Niyam Stats
+// overlay specifically — it's a penalty, not something "followed" — but DO
+// appear in the lifetime grid and the export, where the raw amount is still
+// useful context. A spec with `amount` displays that amount everywhere;
+// otherwise it displays `days`.
 const NIYAM_STATS = [
   { flag: 'enableNavkarsi', icon: '🌅', label: 'Navkarsi', countsDay: log => !!log.navkarsiDone },
   { flag: 'enableWakeup', icon: '⏰', label: 'Wake < 7AM', countsDay: log => !!log.wakeUpDone },
@@ -90,7 +90,7 @@ const NIYAM_STATS = [
   { flag: 'enablePranam', icon: '🙇', label: 'Pranam', countsDay: log => !!log.pranamDone },
   { flag: 'enablePooja', icon: '🪔', label: 'Pooja', countsDay: log => !!log.poojaDone },
   {
-    flag: 'enableSamayik', icon: '🧘', label: 'Samayik',
+    flag: 'enableSamayik', icon: '🧘', label: 'Samayik', exportUnit: 'times',
     countsDay: (log, s) => (log.samayikDone || 0) >= parseInt((s && s.samayikTarget) || 1, 10),
     amount: log => log.samayikDone || 0,
     formatAmount: total => `${total} time${total === 1 ? '' : 's'}`
@@ -98,7 +98,7 @@ const NIYAM_STATS = [
   { flag: 'enablePratikraman', icon: '🌅', label: 'Devasiya', countsDay: log => !!log.devasiyaDone },
   { flag: 'enablePratikraman', icon: '🌙', label: 'Raysiya', countsDay: log => !!log.raysiyaDone },
   {
-    flag: 'enableBookReading', icon: '📖', label: 'Book Reading',
+    flag: 'enableBookReading', icon: '📖', label: 'Book Reading', exportUnit: 'mins',
     countsDay: log => (log.bookReadingMins || 0) >= 30,
     amount: log => log.bookReadingMins || 0,
     formatAmount: totalMins => {
@@ -109,6 +109,17 @@ const NIYAM_STATS = [
   { flag: 'enableRatriBhojan', icon: '🍽️', label: 'Ratri Bhojan Tyag', countsDay: log => !!log.ratriBhojanDone },
   { flag: 'enableKandmool', icon: '🌱', label: 'Kandmool Tyag', countsDay: log => !!log.kandmoolDone },
   { flag: 'enableDailyNiyam', icon: '✨', label: 'Daily Niyam', countsDay: log => !!log.dailyNiyamDone },
+  // Rides on the Pooja setting — there is no separate enable flag, matching DAY_EDIT_FIELDS.
+  { flag: 'enablePooja', icon: '🍽️', label: 'Ashta Prakari', countsDay: log => !!log.ashtaPrakariDone },
+  {
+    flag: 'enableScreenTime', icon: '📱', label: 'Screen Time', penalty: true, exportUnit: 'mins',
+    countsDay: () => false, // a penalty is never "followed"
+    amount: log => ((log.screenTimeHours || 0) * 60) + (log.screenTimeMins || 0),
+    formatAmount: totalMins => {
+      const h = Math.floor(totalMins / 60), m = totalMins % 60;
+      return h > 0 ? `${h}h${m > 0 ? ' ' + m + 'm' : ''}` : `${m}m`;
+    }
+  },
 ];
 
 // ===== SUN TIMES — pure NOAA/Meeus solar calculation =====
@@ -1068,33 +1079,25 @@ class KalyanMitra {
   // Pure data step — no DOM, no network. Mirrors the exact same authorization
   // filter as _renderLeaderboardFromSnap() (admin role excluded, only uids in
   // this._adminUserUids kept) so the export can never leak users outside the
-  // admin's own sangh(s).
+  // admin's own sangh(s). Per-niyam columns come from _computeNiyamRange() —
+  // the same "days followed" definition as the lifetime stats grid and the
+  // Monthly Niyam Stats overlay — so the sheet can never disagree with the
+  // app. `settings` is the one shared sangh-wide node, so every row is
+  // measured against the same enabled niyams in the same order.
   _collectExportRows(allUsers, fromKey, toKey) {
+    const s = this.settings || DEFAULT_SETTINGS;
     const rows = [];
     Object.entries(allUsers || {}).forEach(([uid, data]) => {
       if (!data || data.role === 'admin') return;
       if (!this._adminUserUids.includes(uid)) return;
 
-      const totals = EXPORT_COLUMNS.map(() => 0);
-      let actualKP = 0;
-      let daysLogged = 0;
-      let perfectDays = 0;
-
       const logs = data.daily_logs || {};
-      Object.entries(logs).forEach(([dateKey, log]) => {
-        // Zero-padded YYYY-MM-DD keys sort lexicographically = chronologically.
-        if (!log || dateKey < fromKey || dateKey > toKey) return;
-        daysLogged++;
-        if (log.perfectDay) perfectDays++;
-        actualKP += log.kpEarned || 0;
-        EXPORT_COLUMNS.forEach((col, i) => { totals[i] += col.points(log); });
-      });
+      const { stats, daysLogged, perfectDays, totalAP } = this._computeNiyamRange(logs, fromKey, toKey, s, true);
 
-      const totalBasePoints = totals.reduce((sum, v) => sum + v, 0);
-      rows.push({ name: data.name || uid, totals, totalBasePoints, actualKP, daysLogged, perfectDays });
+      rows.push({ name: data.name || uid, stats, totalAP, daysLogged, perfectDays });
     });
 
-    rows.sort((a, b) => b.totalBasePoints - a.totalBasePoints);
+    rows.sort((a, b) => b.totalAP - a.totalAP);
     return rows;
   }
 
@@ -1156,16 +1159,18 @@ class KalyanMitra {
         return;
       }
 
+      // Every row's `stats` array has the same shape and order (one shared
+      // `settings` node determines which niyams are enabled for everyone),
+      // so the first row's stats safely define the column headers.
+      const niyamLabels = rows[0].stats.map(st => `${st.label}${st.exportUnit ? ` (${st.exportUnit})` : ''}`);
       const noteRow = [
-        "Niyam columns show raw points earned from each niyam that month. \"Total (Raw Points)\" and \"Actual AP Recorded\" should match for any user whose history has been migrated to raw scoring."
+        "Niyam columns show days followed in the selected range (or the total amount, for columns with a unit in their header)."
       ];
-      const header = [
-        'Name', ...EXPORT_COLUMNS.map(c => c.label),
-        'Total (Raw Points)', 'Actual AP Recorded', 'Days Logged', 'Perfect Days'
-      ];
+      const header = ['Name', ...niyamLabels, 'Total AP', 'Days Logged', 'Perfect Days'];
       const aoa = [noteRow, header];
       rows.forEach(r => {
-        aoa.push([r.name, ...r.totals, r.totalBasePoints, r.actualKP, r.daysLogged, r.perfectDays]);
+        const niyamValues = r.stats.map(st => st.amount != null ? st.amount : st.days);
+        aoa.push([r.name, ...niyamValues, r.totalAP, r.daysLogged, r.perfectDays]);
       });
 
       const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -1504,17 +1509,26 @@ class KalyanMitra {
       }
     });
 
-    // Admin: listen to ALL daily_logs for history (real-time)
-    if (this.currentRole === 'admin') {
-      this.listenToRef(`${userPath}/daily_logs`, val => {
-        this._cachedDailyLogs = val || {};
-        if (!this.initializing) {
+    // Listen to ALL daily_logs (real-time). Admin's History tab always
+    // relied on this; users now need it too, for monthly AP in the header
+    // and the lifetime stats grid (Badges tab) — neither is derivable from
+    // the single per-day counters in profile. Deliberately not part of the
+    // awaited Promise.all below (see _resetAdminUserState()'s comment on
+    // _cachedDailyLogs) — both roles render an initial frame without it,
+    // then refresh the instant this first resolves.
+    this.listenToRef(`${userPath}/daily_logs`, val => {
+      this._cachedDailyLogs = val || {};
+      if (!this.initializing) {
+        if (this.currentRole === 'admin') {
           this.renderAdminHistory();
           // Re-render open day detail modal if visible
           if (this._openDayDetailKey) this.showDayDetail(this._openDayDetailKey);
+        } else {
+          this.renderHeader();
+          this.renderAchievements();
         }
-      });
-    }
+      }
+    });
 
     const p4 = this.listenToRef(`${userPath}/lock_status/${todayKey}`, val => {
       this.currentDayLocked = !!val;
@@ -1915,8 +1929,28 @@ class KalyanMitra {
     this.renderActivities();
   }
 
+  // This calendar month's AP: every OTHER day this month from the cached
+  // logs, plus today's live kpEarned from `this.dailyLog` — which updates
+  // instantly on every toggle, ahead of the daily_logs listener's round
+  // trip, so the header never lags a fresh toggle. Sums the stored
+  // `kpEarned` per day (not a recompute) so this always matches exactly
+  // what each day's History card shows. Falls back to just today's value
+  // when the cache hasn't arrived yet (e.g. the very first render after login).
+  _computeMonthlyAP() {
+    const todayKey = this.getTodayKey();
+    const monthPrefix = todayKey.slice(0, 7); // 'YYYY-MM'
+    const logs = this._cachedDailyLogs || {};
+    let total = this.dailyLog ? (this.dailyLog.kpEarned || 0) : 0;
+    Object.entries(logs).forEach(([dateKey, log]) => {
+      if (dateKey === todayKey) return; // today comes from this.dailyLog above
+      if (!log || !dateKey.startsWith(monthPrefix)) return;
+      total += log.kpEarned || 0;
+    });
+    return total;
+  }
+
   renderHeader() {
-    document.getElementById('karma-points').textContent = `${this.profile.totalKP} AP`;
+    document.getElementById('karma-points').textContent = `${this._computeMonthlyAP()} AP`;
 
     document.getElementById('streak-count').textContent = this.profile.currentStreak;
     const flame = document.getElementById('streak-flame');
@@ -2613,16 +2647,10 @@ class KalyanMitra {
 
   // ===== ACHIEVEMENTS TAB =====
   renderAchievements() {
-    document.getElementById('stat-total-kp').textContent = this.profile.totalKP;
-    document.getElementById('stat-longest-streak').textContent = this.profile.longestStreak;
-    document.getElementById('stat-total-samayik').textContent = this.profile.totalSamayik || 0;
-    document.getElementById('stat-total-swadhyay').textContent = this.profile.totalSwadhyay || 0;
-    document.getElementById('stat-total-devasiya').textContent = this.profile.totalDevasiya || 0;
-    document.getElementById('stat-total-raysiya').textContent = this.profile.totalRaysiya || 0;
-    document.getElementById('stat-perfect-days').textContent = this.profile.totalPerfectDays || 0;
+    this._renderLifetimeStats(document.getElementById('stats-grid'));
 
-    const grid = document.getElementById('badges-grid');
-    grid.innerHTML = '';
+    const badgesGrid = document.getElementById('badges-grid');
+    badgesGrid.innerHTML = '';
     for (const badge of BADGES) {
       const earned = this.profile.badges && this.profile.badges.includes(badge.id);
       const item = document.createElement('div');
@@ -2633,8 +2661,40 @@ class KalyanMitra {
         </div>
         <span class="badge-name">${earned ? badge.name : '???'}</span>
         <span class="badge-rarity" style="color: ${RARITY_COLORS[badge.rarity]}">${badge.rarity}</span>`;
-      grid.appendChild(item);
+      badgesGrid.appendChild(item);
     }
+  }
+
+  // Shared by the user's Badges tab and the admin's History section so the
+  // two can never disagree. Summary tiles come from `profile` (already
+  // lifetime-tracked); per-niyam tiles are computed fresh over the full
+  // daily_logs history via _computeNiyamRange() — most niyams have no
+  // profile counter at all, and the few that do can drift from a
+  // streak-saver edit. Renders only into gridEl; caller owns visibility.
+  _renderLifetimeStats(gridEl) {
+    if (!gridEl) return;
+    const p = this.profile || DEFAULT_PROFILE;
+    const s = this.settings || DEFAULT_SETTINGS;
+    const logs = this._cachedDailyLogs || {};
+    const today = this.getTodayKey();
+
+    // '0000-00-00' sorts before every real date key, so this covers the
+    // user's entire history without needing their actual first log date.
+    const { stats } = this._computeNiyamRange(logs, '0000-00-00', today, s, true);
+
+    const tiles = [
+      { value: p.totalKP || 0, label: 'Total AP' },
+      { value: p.longestStreak || 0, label: 'Best Streak' },
+      { value: p.totalPerfectDays || 0, label: 'Perfect Days' },
+      ...stats.map(st => ({
+        value: st.amount != null ? (st.formatAmount ? st.formatAmount(st.amount) : st.amount) : st.days,
+        label: `${st.icon} ${st.label}`,
+      })),
+    ];
+
+    gridEl.innerHTML = tiles
+      .map(t => `<div class="stat-item"><span class="stat-value">${t.value}</span><span class="stat-label">${t.label}</span></div>`)
+      .join('');
   }
 
   // ===== HISTORY =====
@@ -2999,6 +3059,11 @@ class KalyanMitra {
 
     const allLogs = this._cachedDailyLogs || {};
     this._renderHistoryDays(listEl, allLogs, this._adminHistoryYear, this._adminHistoryMonth, true);
+
+    // Lifetime stats for the currently-viewed user, at the bottom of the
+    // History section — shares _renderLifetimeStats() with the user's own
+    // Badges tab so the two can never disagree.
+    this._renderLifetimeStats(document.getElementById('admin-stats-grid'));
   }
 
   _renderHistoryDays(container, allLogs, year, month, isAdmin) {
@@ -3112,36 +3177,70 @@ class KalyanMitra {
   // Skips future dates with the same `dateKey > today` guard used by
   // _renderHistoryDays(), so the current month is never measured against
   // days that haven't happened yet.
-  _computeNiyamStats(logs, year, month) {
-    const s = this.settings || DEFAULT_SETTINGS;
-    const today = this.getTodayKey();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const enabled = NIYAM_STATS.filter(n => s[n.flag]);
+  // Pure — no DOM, no network. Walks every log entry whose YYYY-MM-DD key
+  // falls within [fromKey, toKey] (inclusive; zero-padded keys sort
+  // lexicographically = chronologically, the same range filter
+  // _collectExportRows() relies on) and tallies per-niyam days/amounts plus
+  // total AP, days logged, and perfect days. Shared by the Monthly Niyam
+  // Stats overlay (month-scoped, via _computeNiyamStats() below), the
+  // lifetime stats grid (full history), and the admin Excel export (an
+  // admin-chosen range) — one definition of "followed" everywhere.
+  // `includePenalties` gates `penalty: true` entries (Screen Time): off for
+  // the Monthly overlay (a penalty was never something "followed"), on for
+  // the lifetime grid and export, where the raw amount is still useful.
+  _computeNiyamRange(logs, fromKey, toKey, settings, includePenalties = true) {
+    const s = settings || DEFAULT_SETTINGS;
+    const enabled = NIYAM_STATS.filter(n => s[n.flag] && (includePenalties || !n.penalty));
     const stats = enabled.map(n => ({
       icon: n.icon, label: n.label, days: 0,
-      amount: n.amount ? 0 : null, formatAmount: n.formatAmount || null
+      amount: n.amount ? 0 : null, formatAmount: n.formatAmount || null,
+      exportUnit: n.exportUnit || null,
     }));
 
     const safeLogs = logs || {};
-    let daysElapsed = 0, daysRecorded = 0, perfectDays = 0;
+    let daysLogged = 0, perfectDays = 0, totalAP = 0;
 
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      if (dateKey > today) break; // future — this and every later day this month haven't happened
-      daysElapsed++;
-
-      const log = safeLogs[dateKey];
-      if (!log) continue;
-      daysRecorded++;
+    Object.entries(safeLogs).forEach(([dateKey, log]) => {
+      if (!log || dateKey < fromKey || dateKey > toKey) return;
+      daysLogged++;
       if (log.perfectDay) perfectDays++;
+      totalAP += computeRawDayPoints(log);
 
       enabled.forEach((n, i) => {
         if (n.countsDay(log, s)) stats[i].days++;
         if (n.amount) stats[i].amount += (n.amount(log) || 0);
       });
+    });
+
+    return { stats, daysLogged, perfectDays, totalAP };
+  }
+
+  _computeNiyamStats(logs, year, month) {
+    const today = this.getTodayKey();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Calendar-bounded day count — every day this month that has actually
+    // occurred (capped at today), independent of whether it has a log at
+    // all. Can't come from _computeNiyamRange(), which only walks entries
+    // that exist in `logs`.
+    let daysElapsed = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (dateKey > today) break; // future — this and every later day this month haven't happened
+      daysElapsed++;
     }
 
-    return { stats, daysElapsed, daysRecorded, perfectDays };
+    const fromKey = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const lastDayKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+    // Cap at today so a partial (current) month never counts unhappened
+    // days; for a future month this makes toKey < fromKey, which
+    // _computeNiyamRange() naturally resolves to zero matches.
+    const toKey = lastDayKey < today ? lastDayKey : today;
+
+    const { stats, daysLogged, perfectDays } =
+      this._computeNiyamRange(logs, fromKey, toKey, this.settings, false);
+
+    return { stats, daysElapsed, daysRecorded: daysLogged, perfectDays };
   }
 
   // Always resets to the current month on open — deliberate, so admin
