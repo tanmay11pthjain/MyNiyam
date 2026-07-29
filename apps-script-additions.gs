@@ -219,6 +219,46 @@ function handleGetSanghs() {
   return { success: true, sanghs: sanghs };
 }
 
+// ---- ACTION: get_stats ----
+// Public, aggregate-only counts for the landing page — never returns a uid,
+// name, email, or sangh row, so it's safe to call before anyone signs in.
+// `users` excludes admin rows and rows with a blank uid, so the number means
+// "sadhaks using the app", not "rows in the sheet".
+function handleGetStats() {
+  const stats = { users: 0, sanghs: 0 };
+
+  const usersSheet = _usersSheet_();
+  if (usersSheet) {
+    const colMap = _headerMap_(usersSheet, USER_COLUMNS);
+    const lastRow = usersSheet.getLastRow();
+    if (lastRow >= 2 && colMap.uid !== undefined) {
+      const rows = usersSheet.getRange(2, 1, lastRow - 1, usersSheet.getLastColumn()).getValues();
+      rows.forEach(function (r) {
+        const uid = String(r[colMap.uid] || '').trim();
+        if (!uid) return; // skip blank rows
+        const role = colMap.role !== undefined ? String(r[colMap.role] || '').trim().toLowerCase() : '';
+        if (role === 'admin') return;
+        stats.users++;
+      });
+    }
+  }
+
+  const sanghSheet = _sanghSheet_();
+  if (sanghSheet) {
+    const colMap = _headerMap_(sanghSheet, SANGH_COLUMNS);
+    const lastRow = sanghSheet.getLastRow();
+    if (lastRow >= 2 && colMap.code !== undefined) {
+      const rows = sanghSheet.getRange(2, 1, lastRow - 1, sanghSheet.getLastColumn()).getValues();
+      rows.forEach(function (r) {
+        const code = String(r[colMap.code] || '').trim();
+        if (code) stats.sanghs++;
+      });
+    }
+  }
+
+  return { success: true, users: stats.users, sanghs: stats.sanghs };
+}
+
 // ---- ACTION: google_login ----
 // Returns role/sanghCodes/registered/profile. Never creates a row —
 // registration does that.
@@ -438,6 +478,7 @@ function routeAction(params) {
   switch (action) {
     case 'google_login':    return handleGoogleLogin(params);
     case 'get_sanghs':      return handleGetSanghs();
+    case 'get_stats':       return handleGetStats();
     case 'register':        return handleRegister(params);
     case 'get_sangh_users': return handleGetSanghUsers(params);
     case 'get_profile':     return handleGetProfile(params);

@@ -242,6 +242,48 @@ const Auth = (() => {
     }
   }
 
+  let _statsCache = null;
+  let _statsFetchPromise = null;
+
+  // Public, aggregate-only counts for the landing page (get_stats returns
+  // just { users, sanghs } — no uid, name, email, or sangh row). Mirrors
+  // fetchSanghs()'s memoization pattern, and — unlike fetchSanghs — resolves
+  // null (not an empty object) on ANY failure, so the landing page can tell
+  // "no data yet" apart from "genuinely zero" and render a dash instead of 0.
+  async function fetchStats() {
+    if (_statsCache) return _statsCache;
+    if (_statsFetchPromise) return _statsFetchPromise;
+
+    _statsFetchPromise = (async () => {
+      try {
+        const text = await _sheetsRequest({ action: "get_stats" });
+        console.log("Stats response:", text);
+        try {
+          const result = JSON.parse(text);
+          if (result.success) {
+            const stats = {
+              users: Number(result.users) || 0,
+              sanghs: Number(result.sanghs) || 0
+            };
+            _statsCache = stats;
+            return stats;
+          }
+        } catch (parseErr) {
+          console.error("Failed to parse Stats response:", text);
+        }
+      } catch (e) {
+        console.error("Fetch stats failed:", e);
+      }
+      return null;
+    })();
+
+    try {
+      return await _statsFetchPromise;
+    } finally {
+      _statsFetchPromise = null;
+    }
+  }
+
   async function sendRegistration(uid, email, regData) {
     try {
       const text = await _sheetsRequest({
@@ -373,6 +415,7 @@ const Auth = (() => {
     getCurrentUser,
     sendRegistration,
     fetchSanghs,
+    fetchStats,
     fetchSanghUsers,
     fetchProfile,
     updateProfile,

@@ -225,7 +225,180 @@ class KalyanMitra {
     this.currentDayLocked = false;
     this.currentDayLockValue = null;
     this.location = null; // resolved in fetchGeolocationAndPanchang(); falls back to DEFAULT_LOCATION until then
+    this._landingStats = null;
+    this._landingStatsAnimated = false;
+    this._initLanding();
     this.init();
+  }
+
+  // ===== LANDING PAGE =====
+  // A pure overlay on top of the existing flow — position:fixed above
+  // #login-screen, dismissed by simply hiding it. init()'s auth state
+  // machine (below) is never touched: it resolves normally underneath while
+  // the visitor reads, so whichever screen belongs there (login,
+  // registration, dashboard, admin panel) is already correct by the time
+  // they dismiss the landing.
+  _initLanding() {
+    document.querySelectorAll('.landing-cta').forEach(btn => {
+      btn.addEventListener('click', () => this.dismissLanding());
+    });
+
+    this._createParticles('landing-particles');
+    this._renderLandingNiyamGrid();
+    // Kick off stats before wiring scroll effects — its synchronous prefix
+    // (the cache read) completes before this yields, so _setupLandingScrollEffects()
+    // (in particular its reduced-motion branch) can rely on this._landingStats
+    // already reflecting any cached value.
+    this._loadLandingStats();
+    this._setupLandingScrollEffects();
+  }
+
+  dismissLanding() {
+    const el = document.getElementById('landing-screen');
+    if (el) el.classList.add('hidden');
+    document.body.classList.remove('landing-open');
+  }
+
+  // Populates the "What you can track" grid from NIYAM_STATS — the single
+  // source of truth for the app's real niyam catalog — so the landing page
+  // can never advertise a niyam the app doesn't actually have. Screen Time
+  // (penalty: true) is excluded; it's a limit, not something to showcase.
+  _renderLandingNiyamGrid() {
+    const gridEl = document.getElementById('landing-niyam-grid');
+    if (!gridEl) return;
+    gridEl.innerHTML = NIYAM_STATS
+      .filter(n => !n.penalty)
+      .map(n => `
+        <div class="landing-niyam-item">
+          <span class="landing-niyam-icon">${n.icon}</span>
+          <span class="landing-niyam-label">${n.label}</span>
+        </div>
+      `).join('');
+  }
+
+  // Paints from a localStorage cache instantly (any age — better than a
+  // dash while the network call is in flight), then refreshes from
+  // Auth.fetchStats() (never throws; null on any failure) and re-caches.
+  // Only paints a dash — never NaN/undefined — when there is neither a
+  // cache nor a successful fetch.
+  async _loadLandingStats() {
+    const usersEl = document.getElementById('landing-stat-users');
+    const sanghsEl = document.getElementById('landing-stat-sanghs');
+    if (!usersEl && !sanghsEl) return;
+
+    const CACHE_KEY = 'myniyam_stats';
+    let cached = null;
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) cached = JSON.parse(raw);
+    } catch (e) { /* corrupt/unavailable cache — ignore */ }
+
+    if (cached && typeof cached.users === 'number' && typeof cached.sanghs === 'number') {
+      this._landingStats = cached;
+      // Paint immediately unless the stats band's own scroll observer has
+      // already claimed the first paint (see _setupLandingScrollEffects()).
+      if (!this._landingStatsAnimated) this._paintLandingStats(false);
+    }
+
+    const fresh = await Auth.fetchStats();
+    if (fresh) {
+      this._landingStats = fresh;
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(fresh)); } catch (e) { /* storage full/unavailable — non-fatal */ }
+      // If the scroll observer already animated once (or reduced-motion
+      // already painted once), correct the number in place rather than
+      // re-animating; otherwise leave it for the observer to animate in
+      // when the visitor actually scrolls to it.
+      if (this._landingStatsAnimated) this._paintLandingStats(false);
+    } else if (!cached) {
+      if (usersEl) usersEl.textContent = '—';
+      if (sanghsEl) sanghsEl.textContent = '—';
+    }
+  }
+
+  _paintLandingStats(animate) {
+    const stats = this._landingStats;
+    if (!stats) return;
+    const usersEl = document.getElementById('landing-stat-users');
+    const sanghsEl = document.getElementById('landing-stat-sanghs');
+    if (usersEl) this._setLandingStatValue(usersEl, stats.users, animate);
+    if (sanghsEl) this._setLandingStatValue(sanghsEl, stats.sanghs, animate);
+  }
+
+  _setLandingStatValue(el, value, animate) {
+    const target = Math.max(0, Math.round(Number(value) || 0));
+    if (animate) this._animateCount(el, target);
+    else el.textContent = target.toLocaleString();
+  }
+
+  // requestAnimationFrame count-up from 0 to `target` with ease-out. Only
+  // ever called when motion is allowed — see _setupLandingScrollEffects().
+  _animateCount(el, target) {
+    const duration = 1200;
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = Math.round(target * eased).toLocaleString();
+      if (t < 1) requestAnimationFrame(step);
+      else el.textContent = target.toLocaleString();
+    };
+    requestAnimationFrame(step);
+  }
+
+  // Scroll-driven behavior scoped to #landing-screen (which scrolls
+  // internally): reveals sections as they enter view, shows the sticky CTA
+  // bar once the hero scrolls away, and triggers the stats count-up exactly
+  // once. prefers-reduced-motion (or a browser without IntersectionObserver)
+  // skips all of it and shows every final state immediately — none of this
+  // is required to read or use the page.
+  _setupLandingScrollEffects() {
+    const scrollRoot = document.getElementById('landing-screen');
+    const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const revealEls = document.querySelectorAll('.landing-reveal');
+    const stickyBar = document.getElementById('landing-sticky-cta');
+    const heroEl = document.getElementById('landing-hero');
+    const statsEl = document.getElementById('landing-stats-band');
+
+    if (reduceMotion || typeof IntersectionObserver === 'undefined') {
+      revealEls.forEach(el => el.classList.add('is-visible'));
+      if (stickyBar) stickyBar.classList.add('is-visible');
+      this._landingStatsAnimated = true;
+      if (this._landingStats) this._paintLandingStats(false);
+      return;
+    }
+
+    const revealObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15, root: scrollRoot });
+    revealEls.forEach(el => revealObserver.observe(el));
+
+    if (heroEl && stickyBar) {
+      const heroObserver = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          stickyBar.classList.toggle('is-visible', !entry.isIntersecting);
+        });
+      }, { threshold: 0, root: scrollRoot });
+      heroObserver.observe(heroEl);
+    }
+
+    if (statsEl) {
+      const statsObserver = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && !this._landingStatsAnimated) {
+            this._landingStatsAnimated = true;
+            if (this._landingStats) this._paintLandingStats(true);
+            statsObserver.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.4, root: scrollRoot });
+      statsObserver.observe(statsEl);
+    }
   }
 
   // ===== INITIALIZATION =====
@@ -309,7 +482,13 @@ class KalyanMitra {
   }
 
   createLoginParticles() {
-    const container = document.getElementById('login-particles');
+    this._createParticles('login-particles');
+  }
+
+  // Shared by the login screen and the landing hero — same floating-particle
+  // effect, different container id, guarded against double-population.
+  _createParticles(containerId) {
+    const container = document.getElementById(containerId);
     if (!container || container.children.length > 0) return;
     for (let i = 0; i < 15; i++) {
       const particle = document.createElement('div');

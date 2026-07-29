@@ -11,12 +11,124 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=19">
+  <link rel="stylesheet" href="styles.css?v=20">
 </head>
-<body>
+<body class="landing-open">
+
+  <!-- ===== LANDING PAGE ===== -->
+  <div id="landing-screen">
+
+    <!-- HERO -->
+    <section class="landing-hero" id="landing-hero">
+      <div class="login-bg-glow"></div>
+      <div class="login-particles" id="landing-particles"></div>
+      <div class="landing-hero-content">
+        <div class="login-lotus">
+          <div class="lotus-petal p1"></div>
+          <div class="lotus-petal p2"></div>
+          <div class="lotus-petal p3"></div>
+          <div class="lotus-petal p4"></div>
+          <div class="lotus-petal p5"></div>
+          <div class="lotus-petal p6"></div>
+          <div class="lotus-petal p7"></div>
+          <div class="lotus-petal p8"></div>
+          <div class="lotus-center"></div>
+        </div>
+        <h1 class="landing-title">🙏 MyNiyam</h1>
+        <p class="landing-subtitle">Aapka Adhyatmik Saathi</p>
+        <p class="landing-tagline">Your daily companion for Jain sadhana — Navkarsi, Samayik, Pratikraman and Swadhyay, tracked and celebrated with your Sangh.</p>
+        <button class="landing-cta landing-cta-primary">🙏 Fill My Niyam</button>
+        <div class="landing-scroll-cue">↓ Discover MyNiyam</div>
+      </div>
+    </section>
+
+    <!-- LIVE STATS -->
+    <section class="landing-stats-band landing-reveal" id="landing-stats-band">
+      <div class="landing-stat">
+        <span class="landing-stat-value" id="landing-stat-users">—</span>
+        <span class="landing-stat-label">Sadhaks on MyNiyam</span>
+      </div>
+      <div class="landing-stat">
+        <span class="landing-stat-value" id="landing-stat-sanghs">—</span>
+        <span class="landing-stat-label">Sanghs &amp; Pathshalas</span>
+      </div>
+    </section>
+
+    <!-- WHY DAILY NIYAM MATTERS -->
+    <section class="landing-section landing-reveal">
+      <h2 class="landing-section-heading">नियम — Why Daily Niyam Matters</h2>
+      <p class="landing-section-intro">In Jain tradition, a niyam is a small daily vow — a promise kept not once, but every single day. It is in this daily repetition that true discipline is born.</p>
+      <div class="landing-cards">
+        <div class="landing-card">
+          <span class="landing-card-icon">🕉️</span>
+          <h3 class="landing-card-title">Discipline</h3>
+          <p class="landing-card-text">A niyam trains the mind before it trains the body — showing up daily, even when it's inconvenient.</p>
+        </div>
+        <div class="landing-card">
+          <span class="landing-card-icon">🔥</span>
+          <h3 class="landing-card-title">Consistency</h3>
+          <p class="landing-card-text">Spiritual growth isn't one grand gesture — it's the quiet, unbroken thread of daily practice.</p>
+        </div>
+        <div class="landing-card">
+          <span class="landing-card-icon">🌱</span>
+          <h3 class="landing-card-title">Small Vows Compound</h3>
+          <p class="landing-card-text">One Samayik, one Pratikraman, one day at a time — small acts of sadhana add up to a lifetime of merit.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="landing-section landing-reveal">
+      <h2 class="landing-section-heading">How MyNiyam Works</h2>
+      <div class="landing-steps">
+        <div class="landing-step">
+          <span class="landing-step-number">1</span>
+          <span class="landing-step-icon">🏛️</span>
+          <h3 class="landing-step-title">Join Your Sangh</h3>
+          <p class="landing-step-text">Sign in and connect with your Pathshala or Sangh.</p>
+        </div>
+        <div class="landing-step">
+          <span class="landing-step-number">2</span>
+          <span class="landing-step-icon">📿</span>
+          <h3 class="landing-step-title">Log Your Niyams Daily</h3>
+          <p class="landing-step-text">Mark your Navkarsi, Samayik, Pratikraman and more, each day.</p>
+        </div>
+        <div class="landing-step">
+          <span class="landing-step-number">3</span>
+          <span class="landing-step-icon">🔥</span>
+          <h3 class="landing-step-title">Build Your Streak</h3>
+          <p class="landing-step-text">Watch your discipline grow, day after day.</p>
+        </div>
+        <div class="landing-step">
+          <span class="landing-step-number">4</span>
+          <span class="landing-step-icon">🏆</span>
+          <h3 class="landing-step-title">Celebrate Together</h3>
+          <p class="landing-step-text">Your Sangh sees the leaderboard and celebrates every sadhak's progress.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHAT YOU CAN TRACK -->
+    <section class="landing-section landing-reveal">
+      <h2 class="landing-section-heading">What You Can Track</h2>
+      <div class="landing-niyam-grid" id="landing-niyam-grid"><!-- Populated by JS: _renderLandingNiyamGrid() --></div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="landing-footer landing-reveal">
+      <button class="landing-cta landing-cta-primary">🙏 Fill My Niyam</button>
+      <p class="landing-footer-url">🌐 myniyam.vercel.app</p>
+      <p class="landing-footer-credit">Developed by Heer Sena</p>
+    </footer>
+
+    <!-- STICKY CTA BAR -->
+    <div class="landing-sticky-cta" id="landing-sticky-cta">
+      <button class="landing-cta">🙏 Fill My Niyam</button>
+    </div>
+  </div>
 
   <!-- ===== LOGIN SCREEN ===== -->
-  <div id="login-screen">
+  <div id="login-screen" class="hidden">
     <div class="login-bg-glow"></div>
     <div class="login-particles" id="login-particles"></div>
     <div class="login-card">
@@ -912,8 +1024,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=31"></script>
-  <script src="auth.js?v=31"></script>
-  <script src="app.js?v=31"></script>
+  <script src="data.js?v=32"></script>
+  <script src="auth.js?v=32"></script>
+  <script src="app.js?v=32"></script>
 </body>
 </html>
