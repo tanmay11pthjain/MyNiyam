@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=18">
+  <link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body>
 
@@ -537,6 +537,7 @@
         <p class="admin-desc">Click a user to view their detailed progress.</p>
         <div class="export-bar">
           <button class="btn-export" id="btn-open-export">📊 Export to Excel</button>
+          <button class="btn-export" id="btn-open-poster">📸 Generate Poster</button>
         </div>
         <div id="admin-leaderboard-list" class="leaderboard-list">
           <!-- Populated by JS -->
@@ -845,6 +846,29 @@
     </div>
   </div>
 
+  <!-- Leaderboard Poster -->
+  <div id="poster-overlay" class="overlay hidden">
+    <div class="overlay-content poster-overlay-content">
+      <button class="btn-close-overlay" id="btn-close-poster">✕</button>
+      <h2 class="summary-title">📸 Generate Poster</h2>
+      <div class="history-nav">
+        <button id="btn-poster-prev" class="btn-history-nav">← Prev</button>
+        <span id="poster-month-label" class="history-month-label">July 2026</span>
+        <button id="btn-poster-next" class="btn-history-nav">Next →</button>
+      </div>
+      <div class="poster-canvas-wrap">
+        <canvas id="poster-canvas" width="1080" height="1350"></canvas>
+      </div>
+      <p class="register-error hidden" id="poster-error"></p>
+      <div class="overlay-actions hidden" id="poster-actions">
+        <button class="btn-cancel" id="btn-download-poster">⬇️ Download</button>
+        <button class="btn-continue" id="btn-share-poster">
+          <span>📤 Share</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Monthly Niyam Stats (admin + user, shared) -->
   <div id="niyam-stats-overlay" class="overlay hidden">
     <div class="overlay-content niyam-stats-content">
@@ -888,8 +912,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=30"></script>
-  <script src="auth.js?v=30"></script>
-  <script src="app.js?v=30"></script>
+  <script src="data.js?v=31"></script>
+  <script src="auth.js?v=31"></script>
+  <script src="app.js?v=31"></script>
 </body>
 </html>

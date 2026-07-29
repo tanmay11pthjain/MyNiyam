@@ -669,7 +669,9 @@ class KalyanMitra {
   // Resolves each sangh code to "Name (CODE)", using knownNames where available
   // and falling back to Auth.fetchSanghs() (memoized) only for the codes it can't
   // already resolve.
-  async _resolveSanghLabels(codes, knownNames = {}) {
+  // `bare: true` drops the "(CODE)" suffix — used by the poster, where a
+  // raw sangh code reads as a rendering glitch rather than useful context.
+  async _resolveSanghLabels(codes, knownNames = {}, bare = false) {
     if (!codes || codes.length === 0) return [];
 
     const needsLookup = codes.some(code => !knownNames[code]);
@@ -684,6 +686,7 @@ class KalyanMitra {
 
     return codes.map(code => {
       const name = knownNames[code] || (sanghsList.find(s => s.code === code) || {}).name;
+      if (bare) return name || code;
       return name ? `${name} (${code})` : code;
     });
   }
@@ -948,6 +951,24 @@ class KalyanMitra {
         <span class="admin-act-status ${a.count > 0 ? 'done' : ''}">${a.count}/${totalUsers}</span>
       </div>
     `).join('');
+  }
+
+  // Shared authorization + basic-shape filter — the same rules
+  // _renderLeaderboardFromSnap() (below) and _collectExportRows() already
+  // apply independently: admin role excluded, only uids in
+  // this._adminUserUids kept, and the node must look like a real user
+  // (has a role of 'user'/none, or at least a profile). Used by the
+  // poster so it can never include a user outside the admin's own
+  // sangh(s) or a malformed/orphaned node.
+  _eligibleSanghUsers(allUsers) {
+    const uids = this._adminUserUids || [];
+    return Object.entries(allUsers || {})
+      .filter(([uid, data]) => {
+        if (!data || data.role === 'admin') return false;
+        if (!uids.includes(uid)) return false;
+        return !data.role || data.role === 'user' || data.profile;
+      })
+      .map(([uid, data]) => ({ uid, data }));
   }
 
   _renderLeaderboardFromSnap(snap) {
@@ -1440,6 +1461,20 @@ class KalyanMitra {
     if (cancelExportBtn) cancelExportBtn.addEventListener('click', () => this.closeExportDialog());
     const runExportBtn = document.getElementById('btn-run-export');
     if (runExportBtn) runExportBtn.addEventListener('click', () => this.runExport());
+
+    // Leaderboard poster
+    const openPosterBtn = document.getElementById('btn-open-poster');
+    if (openPosterBtn) openPosterBtn.addEventListener('click', () => this.openPosterOverlay());
+    const closePosterBtn = document.getElementById('btn-close-poster');
+    if (closePosterBtn) closePosterBtn.addEventListener('click', () => this.closePosterOverlay());
+    const posterPrevBtn = document.getElementById('btn-poster-prev');
+    if (posterPrevBtn) posterPrevBtn.addEventListener('click', () => this._changePosterMonth(-1));
+    const posterNextBtn = document.getElementById('btn-poster-next');
+    if (posterNextBtn) posterNextBtn.addEventListener('click', () => this._changePosterMonth(1));
+    const downloadPosterBtn = document.getElementById('btn-download-poster');
+    if (downloadPosterBtn) downloadPosterBtn.addEventListener('click', () => this._downloadPoster());
+    const sharePosterBtn = document.getElementById('btn-share-poster');
+    if (sharePosterBtn) sharePosterBtn.addEventListener('click', () => this._sharePoster());
   }
 
   // ===== FIREBASE SYNC & REALTIME LISTENERS =====
@@ -3215,6 +3250,21 @@ class KalyanMitra {
     return { stats, daysLogged, perfectDays, totalAP };
   }
 
+  // Pure — the [fromKey, toKey] bounds for a calendar month, capped at
+  // today so a partial (current) month never counts unhappened days. For a
+  // future month this makes toKey < fromKey, which _computeNiyamRange()
+  // naturally resolves to zero matches. Shared by _computeNiyamStats() and
+  // the poster's monthly-AP ranking, so the two can never disagree on what
+  // "this month" means.
+  _monthKeyBounds(year, month) {
+    const today = this.getTodayKey();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const fromKey = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const lastDayKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+    const toKey = lastDayKey < today ? lastDayKey : today;
+    return { fromKey, toKey };
+  }
+
   _computeNiyamStats(logs, year, month) {
     const today = this.getTodayKey();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -3230,17 +3280,438 @@ class KalyanMitra {
       daysElapsed++;
     }
 
-    const fromKey = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-    const lastDayKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
-    // Cap at today so a partial (current) month never counts unhappened
-    // days; for a future month this makes toKey < fromKey, which
-    // _computeNiyamRange() naturally resolves to zero matches.
-    const toKey = lastDayKey < today ? lastDayKey : today;
-
+    const { fromKey, toKey } = this._monthKeyBounds(year, month);
     const { stats, daysLogged, perfectDays } =
       this._computeNiyamRange(logs, fromKey, toKey, this.settings, false);
 
     return { stats, daysElapsed, daysRecorded: daysLogged, perfectDays };
+  }
+
+  // ===== LEADERBOARD POSTER =====
+
+  // Always resets to the current month on open — matches openNiyamStats()'s
+  // reasoning, so a stale month from a previous session never lingers.
+  openPosterOverlay() {
+    const now = new Date();
+    this._posterMonth = now.getMonth();
+    this._posterYear = now.getFullYear();
+    const overlay = document.getElementById('poster-overlay');
+    if (overlay) { overlay.classList.remove('hidden'); overlay.classList.add('show'); }
+    this._renderPoster();
+  }
+
+  closePosterOverlay() {
+    const overlay = document.getElementById('poster-overlay');
+    if (overlay) { overlay.classList.remove('show'); overlay.classList.add('hidden'); }
+  }
+
+  _changePosterMonth(delta) {
+    const now = new Date();
+    let newMonth = this._posterMonth + delta;
+    let newYear = this._posterYear;
+    if (newMonth > 11) { newMonth = 0; newYear++; }
+    if (newMonth < 0) { newMonth = 11; newYear--; }
+    // Never advance past the current calendar month — there is no "this
+    // month" data for a month that hasn't happened yet.
+    if (newYear > now.getFullYear() || (newYear === now.getFullYear() && newMonth > now.getMonth())) return;
+    this._posterMonth = newMonth;
+    this._posterYear = newYear;
+    this._renderPoster();
+  }
+
+  // Pure data step beyond the one `users` read — ranks this sangh's
+  // eligible users (_eligibleSanghUsers()) by the selected month's AP via
+  // _computeNiyamRange(), the same "total AP" definition the export and
+  // lifetime stats grid already use, so the poster can never disagree with
+  // the rest of the app. Zero-AP users are dropped — a poster crediting
+  // someone with 0 AP is worse than not showing them.
+  async _computePosterWinners(year, month) {
+    const snap = await db.ref('users').once('value');
+    const allUsers = snap.val() || {};
+    const eligible = this._eligibleSanghUsers(allUsers);
+    const s = this.settings || DEFAULT_SETTINGS;
+    const { fromKey, toKey } = this._monthKeyBounds(year, month);
+
+    return eligible
+      .map(({ uid, data }) => {
+        const logs = data.daily_logs || {};
+        const { totalAP } = this._computeNiyamRange(logs, fromKey, toKey, s, true);
+        return { uid, name: data.name || uid, ap: totalAP };
+      })
+      .filter(u => u.ap > 0)
+      .sort((a, b) => b.ap - a.ap)
+      .slice(0, 3);
+  }
+
+  // Resolves to an Image on success, or null on ANY failure (missing src,
+  // network error, corrupt data) — the poster must never fail to render
+  // just because one winner's photo didn't load; _drawAvatar() falls back
+  // to an initials circle whenever this resolves null.
+  _loadImage(src) {
+    return new Promise(resolve => {
+      if (!src) { resolve(null); return; }
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+  }
+
+  // Canvas silently falls back to a system font if a webfont isn't loaded
+  // yet at draw time — there is no visible error, just a wrong-looking
+  // poster. Explicitly loading every face/weight/size used, then awaiting
+  // document.fonts.ready, guarantees Outfit/Inter are actually painted.
+  async _ensurePosterFonts() {
+    if (!document.fonts) return; // very old browser — draws with a system fallback, non-fatal
+    try {
+      await Promise.all([
+        document.fonts.load("800 66px 'Outfit'"),
+        document.fonts.load("700 40px 'Outfit'"),
+        document.fonts.load("600 34px 'Outfit'"),
+        document.fonts.load("500 24px 'Inter'"),
+      ]);
+      await document.fonts.ready;
+    } catch (e) {
+      console.warn('Poster font preload failed — falling back to system font:', e);
+    }
+  }
+
+  // Shrinks the font until `text` fits within maxWidth (down to a floor),
+  // then ellipsizes as a last resort. Returns the resolved size AND text —
+  // caller owns setting ctx.font before measuring/drawing with either. Long
+  // Gujarati/Hindi names must never bleed off a pedestal.
+  _fitText(ctx, text, maxWidth, startSize, weight, family) {
+    const safe = text || '';
+    let size = startSize;
+    const minSize = Math.max(14, Math.floor(startSize * 0.5));
+    ctx.font = `${weight} ${size}px ${family}`;
+    while (ctx.measureText(safe).width > maxWidth && size > minSize) {
+      size -= 2;
+      ctx.font = `${weight} ${size}px ${family}`;
+    }
+    let finalText = safe;
+    if (ctx.measureText(finalText).width > maxWidth) {
+      while (finalText.length > 1 && ctx.measureText(finalText + '…').width > maxWidth) {
+        finalText = finalText.slice(0, -1);
+      }
+      finalText = finalText.length > 0 ? finalText + '…' : '…';
+    }
+    return { size, text: finalText };
+  }
+
+  _roundRectPath(ctx, x, y, w, h, r) {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + w - radius, y);
+    ctx.arcTo(x + w, y, x + w, y + radius, radius);
+    ctx.lineTo(x + w, y + h - radius);
+    ctx.arcTo(x + w, y + h, x + w - radius, y + h, radius);
+    ctx.lineTo(x + radius, y + h);
+    ctx.arcTo(x, y + h, x, y + h - radius, radius);
+    ctx.lineTo(x, y + radius);
+    ctx.arcTo(x, y, x + radius, y, radius);
+    ctx.closePath();
+  }
+
+  // Draws a circular photo (centre-cropped like _resizeImageToDataUrl(),
+  // app.js:2773) at (cx, cy) with radius r and a coloured ring; draws a
+  // coloured initial circle instead when img is null (no photo, or
+  // fetchPhoto failed) — the poster always shows a complete podium.
+  _drawAvatar(ctx, img, cx, cy, r, ringColor, fallbackLetter) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
+    ctx.fillStyle = ringColor;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+
+    if (img) {
+      const side = Math.min(img.width, img.height);
+      const sx = (img.width - side) / 2;
+      const sy = (img.height - side) / 2;
+      ctx.drawImage(img, sx, sy, side, side, cx - r, cy - r, r * 2, r * 2);
+    } else {
+      ctx.fillStyle = '#F4A261';
+      ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `800 ${Math.floor(r * 1.1)}px 'Outfit', sans-serif`;
+      ctx.fillText(fallbackLetter || '?', cx, cy + Math.floor(r * 0.08));
+    }
+    ctx.restore();
+  }
+
+  // Pure draw against a fixed 1080×1350 canvas — no DOM reads beyond `ctx`
+  // and `model`, so the output is identical regardless of the admin's
+  // screen size. `model.winners` is rank-ordered (index 0 = rank 1) and may
+  // have 1–3 entries; only the ranks that exist are drawn, and the layout
+  // re-centres itself for 1 or 2 winners rather than leaving a gap where a
+  // missing 3rd place would have been.
+  _drawPoster(ctx, model) {
+    const W = 1080, H = 1350;
+    const CX = W / 2;
+
+    // ---- Background ----
+    const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+    bgGrad.addColorStop(0, '#F4A261');
+    bgGrad.addColorStop(0.42, '#E8722A');
+    bgGrad.addColorStop(1, '#C45E1F');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    const glow = ctx.createRadialGradient(CX, 260, 40, CX, 260, 640);
+    glow.addColorStop(0, 'rgba(255,255,255,0.30)');
+    glow.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.arc(CX, 430, 300 + i * 80, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    [[110, 140], [970, 180], [80, 540], [1000, 580], [140, 1060], [940, 1090], [540, 1330]].forEach(([x, y]) => {
+      ctx.beginPath();
+      ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // ---- Header ----
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+
+    ctx.shadowColor = 'rgba(0,0,0,0.25)';
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = "800 66px 'Outfit', sans-serif";
+    ctx.fillText('🙏 MyNiyam', CX, 118);
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    const sanghFit = this._fitText(ctx, model.sanghName || 'MyNiyam Sangh', W - 160, 34, '600', "'Outfit', sans-serif");
+    ctx.font = `600 ${sanghFit.size}px 'Outfit', sans-serif`;
+    ctx.fillText(sanghFit.text, CX, 166);
+
+    const pillLabel = `${(model.monthLabel || '').toUpperCase()} CHAMPIONS`;
+    ctx.font = "700 30px 'Outfit', sans-serif";
+    const pillW = ctx.measureText(pillLabel).width + 84;
+    const pillH = 60;
+    const pillX = CX - pillW / 2;
+    const pillY = 202;
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    this._roundRectPath(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(pillLabel, CX, pillY + pillH / 2 + 10);
+
+    // ---- Podium ----
+    const groundY = 1120;
+    const pedestalHalfWidth = 130;
+    // Per-rank x-offset from centre, keyed by how many winners exist — a
+    // 1- or 2-place podium re-centres itself instead of reusing the 3-place
+    // offsets and leaving a lopsided gap where the missing place would be.
+    const dxLayouts = {
+      1: { 1: 0 },
+      2: { 1: -170, 2: 170 },
+      3: { 1: 0, 2: -320, 3: 320 },
+    };
+    const dxByRank = dxLayouts[model.winners.length] || dxLayouts[3];
+
+    const slotSpecs = [
+      { rank: 1, height: 300, radius: 116, ring: '#FFD700', medal: '🥇' },
+      { rank: 2, height: 220, radius: 94, ring: '#E2E2E2', medal: '🥈' },
+      { rank: 3, height: 160, radius: 94, ring: '#E3A971', medal: '🥉' },
+    ];
+
+    slotSpecs.forEach(slot => {
+      const winner = model.winners[slot.rank - 1];
+      if (!winner) return;
+
+      const cx = CX + (dxByRank[slot.rank] || 0);
+      const pedestalTopY = groundY - slot.height;
+
+      // Pedestal box
+      ctx.fillStyle = 'rgba(255,255,255,0.20)';
+      this._roundRectPath(ctx, cx - pedestalHalfWidth, pedestalTopY, pedestalHalfWidth * 2, slot.height, 18);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 2;
+      this._roundRectPath(ctx, cx - pedestalHalfWidth, pedestalTopY, pedestalHalfWidth * 2, slot.height, 18);
+      ctx.stroke();
+
+      // Medal + AP inside the pedestal
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '44px sans-serif';
+      ctx.fillText(slot.medal, cx, pedestalTopY + 66);
+      ctx.font = "800 36px 'Outfit', sans-serif";
+      ctx.fillText(`${winner.ap} AP`, cx, pedestalTopY + slot.height - 34);
+
+      // Name — sits just above the pedestal; font may shrink for a long name
+      const nameFit = this._fitText(ctx, winner.name, pedestalHalfWidth * 2 - 20, 36, '700', "'Outfit', sans-serif");
+      const nameBaselineY = pedestalTopY - 14;
+      ctx.font = `700 ${nameFit.size}px 'Outfit', sans-serif`;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(nameFit.text, cx, nameBaselineY);
+
+      // Photo — sits above the name with a fixed gap, computed from the
+      // name's ACTUAL rendered size so a shrunk name can never collide with it
+      const nameTopY = nameBaselineY - nameFit.size * 0.8;
+      const photoCenterY = nameTopY - 16 - slot.radius;
+      const fallbackLetter = (winner.name || '').trim().charAt(0).toUpperCase() || '?';
+      // _drawAvatar() wraps its own state changes in save()/restore(), so
+      // ctx.textAlign/textBaseline/fillStyle are back to this function's
+      // values (center/alphabetic) immediately after it returns.
+      this._drawAvatar(ctx, winner.img, cx, photoCenterY, slot.radius, slot.ring, fallbackLetter);
+
+      // Crown for rank 1 — sits above the photo
+      if (slot.rank === 1) {
+        const photoTopY = photoCenterY - slot.radius;
+        ctx.font = '60px sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('👑', cx, photoTopY - 26);
+      }
+    });
+
+    // ---- Footer ----
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = "700 30px 'Outfit', sans-serif";
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fillText('🌐 myniyam.vercel.app', CX, 1250);
+    ctx.font = "500 24px 'Inter', sans-serif";
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillText('Developed by Heer Sena', CX, 1290);
+  }
+
+  _posterFileName() {
+    return `MyNiyam_Champions_${this._posterYear}-${String(this._posterMonth + 1).padStart(2, '0')}.png`;
+  }
+
+  _triggerDownloadFromBlob(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  _downloadPoster() {
+    const canvas = document.getElementById('poster-canvas');
+    if (!canvas) return;
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      this._triggerDownloadFromBlob(blob, this._posterFileName());
+    }, 'image/png');
+  }
+
+  _sharePoster() {
+    const canvas = document.getElementById('poster-canvas');
+    if (!canvas) return;
+
+    canvas.toBlob(async blob => {
+      if (!blob) return;
+      const fileName = this._posterFileName();
+      const file = new File([blob], fileName, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'MyNiyam Champions' });
+          return;
+        } catch (e) {
+          // A user-cancelled share rejects with AbortError — not a real
+          // failure, so it must not fall through to an unrequested download.
+          if (e && e.name === 'AbortError') return;
+          console.warn('Share failed, falling back to download:', e);
+        }
+      }
+      this._triggerDownloadFromBlob(blob, fileName);
+    }, 'image/png');
+  }
+
+  // Orchestrates one poster render: ranks the selected month's winners,
+  // fetches their photos (never fails the whole poster — see _loadImage()),
+  // waits for webfonts to actually be ready, then draws. The "nobody
+  // scored" case and any error both leave the canvas blank with inline
+  // messaging rather than a half-drawn poster.
+  async _renderPoster() {
+    const canvas = document.getElementById('poster-canvas');
+    const labelEl = document.getElementById('poster-month-label');
+    const errorEl = document.getElementById('poster-error');
+    const actionsEl = document.getElementById('poster-actions');
+    const nextBtn = document.getElementById('btn-poster-next');
+    if (!canvas) return;
+
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const monthLabel = `${monthNames[this._posterMonth]} ${this._posterYear}`;
+    if (labelEl) labelEl.textContent = monthLabel;
+    if (errorEl) errorEl.classList.add('hidden');
+    if (actionsEl) actionsEl.classList.add('hidden');
+
+    if (nextBtn) {
+      const now = new Date();
+      const atCurrent = this._posterYear === now.getFullYear() && this._posterMonth === now.getMonth();
+      nextBtn.disabled = atCurrent;
+    }
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#795548';
+    ctx.font = "500 28px 'Inter', sans-serif";
+    ctx.fillText('Loading…', canvas.width / 2, canvas.height / 2);
+
+    try {
+      const winners = await this._computePosterWinners(this._posterYear, this._posterMonth);
+
+      if (winners.length === 0) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (errorEl) {
+          errorEl.textContent = 'No one in your sangh earned AP this month yet.';
+          errorEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      const [images, sanghLabels] = await Promise.all([
+        Promise.all(winners.map(w => Auth.fetchPhoto(w.uid).then(photo => this._loadImage(photo)))),
+        this._resolveSanghLabels(this._adminSanghCodes || [], {}, true),
+        this._ensurePosterFonts(),
+      ]);
+
+      const model = {
+        sanghName: (sanghLabels && sanghLabels.length > 0) ? sanghLabels.join(' • ') : 'MyNiyam Sangh',
+        monthLabel,
+        winners: winners.map((w, i) => ({ name: w.name, ap: w.ap, img: images[i] })),
+      };
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      this._drawPoster(ctx, model);
+      if (actionsEl) actionsEl.classList.remove('hidden');
+    } catch (e) {
+      console.error('Poster generation failed:', e);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (errorEl) {
+        errorEl.textContent = 'Failed to generate the poster. Please try again.';
+        errorEl.classList.remove('hidden');
+      }
+    }
   }
 
   // Always resets to the current month on open — deliberate, so admin
