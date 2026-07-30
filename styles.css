@@ -547,6 +547,14 @@ body.landing-open {
 .landing-cta:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(232, 114, 42, 0.5); }
 .landing-cta:active { transform: scale(0.97); }
 
+/* Waiting on auth to reach a terminal state — see dismissLanding() */
+.landing-cta:disabled {
+  opacity: 0.75;
+  cursor: progress;
+  transform: none;
+  box-shadow: 0 4px 14px rgba(232, 114, 42, 0.25);
+}
+
 .landing-scroll-cue {
   margin-top: 28px;
   font-size: 0.8rem;
