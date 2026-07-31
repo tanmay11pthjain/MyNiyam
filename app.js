@@ -227,19 +227,33 @@ class KalyanMitra {
     this.location = null; // resolved in fetchGeolocationAndPanchang(); falls back to DEFAULT_LOCATION until then
     this._landingStats = null;
     this._landingStatsAnimated = false;
-    this._initLanding();
+    // init() is the critical path (auth) and must start first, unconditionally.
+    // _initLanding() is purely decorative — wrapped so any exception in it can
+    // never prevent auth from running.
     this.init();
+    try {
+      this._initLanding();
+    } catch (e) {
+      console.error('Landing page setup failed (non-fatal):', e);
+    }
   }
 
   // ===== LANDING PAGE =====
   // A pure overlay on top of the existing flow — position:fixed above
   // #login-screen, dismissed by simply hiding it. init()'s auth state
-  // machine (below) is never touched. Only signed-out visitors ever see
-  // this (index.html hides it immediately, before paint, when a cached
-  // session exists), and for them showLoginScreen() has already run
+  // machine is never touched. Only signed-out visitors ever see this
+  // (index.html hides #landing-screen immediately, before paint, when a
+  // cached session exists), and for them showLoginScreen() has already run
   // synchronously during construction — so by the time a tap is possible,
   // the login card is already there to reveal.
   _initLanding() {
+    const landingEl = document.getElementById('landing-screen');
+    // Already hidden for a returning signed-in visitor (the inline script in
+    // index.html). Nothing to set up for a page nobody will see — and
+    // skipping this also means Auth.fetchStats() never fires concurrently
+    // with the critical google_login Sheets request on that path.
+    if (!landingEl || landingEl.classList.contains('hidden')) return;
+
     document.querySelectorAll('.landing-cta').forEach(btn => {
       btn.addEventListener('click', () => this.dismissLanding());
     });
@@ -406,10 +420,10 @@ class KalyanMitra {
         this.uid = user.uid;
         this.currentRole = user.role;
         this._currentAuthUser = user;
-        document.getElementById('login-screen').classList.add('hidden');
 
         if (user.role === 'admin') {
           // Admin skips registration
+          document.getElementById('login-screen').classList.add('hidden');
           if (!this._adminInitDone) {
             this._adminInitDone = true;
             db.ref(`users/${user.uid}/name`).set(user.name || user.uid);
@@ -421,9 +435,16 @@ class KalyanMitra {
           // user.registered is: true (registered), false (not registered),
           // or undefined (cached session — wait for fresh Sheet response)
           if (user.registered === undefined) {
-            // Cached session — don't decide yet, wait for fresh Sheet response
+            // Cached session — the fresh Sheet response hasn't arrived yet.
+            // Deliberately leave #login-screen showing (its lotus/branding
+            // already reads as a loading state) rather than hiding it with
+            // nothing yet to replace it: #app is still app-hidden
+            // (opacity:0) and #admin-panel is still display:none until this
+            // round-trip resolves, so hiding login here is what caused the
+            // blank-screen bug on every reload of an existing session.
             return;
           }
+          document.getElementById('login-screen').classList.add('hidden');
           if (user.registered) {
             if (!this._userInitDone) {
               this._userInitDone = true;
