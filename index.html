@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=21">
+  <link rel="stylesheet" href="styles.css?v=22">
 </head>
 <body class="landing-open">
 
@@ -126,9 +126,23 @@
       <button class="landing-cta">🙏 Fill My Niyam</button>
     </div>
   </div>
+  <script>
+    // Skip the landing entirely for a returning signed-in visitor — runs
+    // synchronously during parse, before the landing can paint, so there is
+    // no flash of it. 'myniyam_session' is the exact key Auth.init() reads
+    // (auth.js) to restore a cached session, so this agrees with what auth
+    // is about to do. Wrapped in try/catch: if storage is blocked, the
+    // landing simply shows, which is harmless.
+    try {
+      if (localStorage.getItem('myniyam_session')) {
+        document.getElementById('landing-screen').classList.add('hidden');
+        document.body.classList.remove('landing-open');
+      }
+    } catch (e) { /* localStorage unavailable — show the landing */ }
+  </script>
 
   <!-- ===== LOGIN SCREEN ===== -->
-  <div id="login-screen" class="hidden">
+  <div id="login-screen">
     <div class="login-bg-glow"></div>
     <div class="login-particles" id="login-particles"></div>
     <div class="login-card">
@@ -1024,8 +1038,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=33"></script>
-  <script src="auth.js?v=33"></script>
-  <script src="app.js?v=33"></script>
+  <script src="data.js?v=34"></script>
+  <script src="auth.js?v=34"></script>
+  <script src="app.js?v=34"></script>
 </body>
 </html>

@@ -227,13 +227,6 @@ class KalyanMitra {
     this.location = null; // resolved in fetchGeolocationAndPanchang(); falls back to DEFAULT_LOCATION until then
     this._landingStats = null;
     this._landingStatsAnimated = false;
-    // True once auth has reached a terminal state and something is actually
-    // on screen. Must be initialised before _initLanding()/init() below,
-    // since either can reach dismissLanding()/_markAppReady().
-    this._appReady = false;
-    this._landingDismissPending = false;
-    this._landingFallbackTimer = null;
-    this._landingCtaButtons = [];
     this._initLanding();
     this.init();
   }
@@ -241,73 +234,26 @@ class KalyanMitra {
   // ===== LANDING PAGE =====
   // A pure overlay on top of the existing flow — position:fixed above
   // #login-screen, dismissed by simply hiding it. init()'s auth state
-  // machine (below) is never touched: it resolves normally underneath while
-  // the visitor reads, so whichever screen belongs there (login,
-  // registration, dashboard, admin panel) is already correct by the time
-  // they dismiss the landing.
+  // machine (below) is never touched. Only signed-out visitors ever see
+  // this (index.html hides it immediately, before paint, when a cached
+  // session exists), and for them showLoginScreen() has already run
+  // synchronously during construction — so by the time a tap is possible,
+  // the login card is already there to reveal.
   _initLanding() {
-    this._landingCtaButtons = Array.from(document.querySelectorAll('.landing-cta'));
-    this._landingCtaButtons.forEach(btn => {
+    document.querySelectorAll('.landing-cta').forEach(btn => {
       btn.addEventListener('click', () => this.dismissLanding());
     });
 
     this._createParticles('landing-particles');
     this._renderLandingNiyamGrid();
-    // Kick off stats before wiring scroll effects — its synchronous prefix
-    // (the cache read) completes before this yields, so _setupLandingScrollEffects()
-    // (in particular its reduced-motion branch) can rely on this._landingStats
-    // already reflecting any cached value.
     this._loadLandingStats();
     this._setupLandingScrollEffects();
   }
 
-  // Only reveals what's underneath once auth has actually reached a terminal
-  // state. This matters because the auth callback can hide #login-screen and
-  // then return early while it waits on the Sheet for a cached session
-  // (init(), "user.registered === undefined") — at that moment login is
-  // hidden, #app is still opacity:0 and #admin-panel is hidden, so revealing
-  // would show a blank screen. Dismissal is latched instead, and
-  // _markAppReady() finishes it the moment a real screen exists.
   dismissLanding() {
-    if (this._appReady) { this._hideLanding(); return; }
-
-    this._landingDismissPending = true;
-    (this._landingCtaButtons || []).forEach(btn => {
-      btn.disabled = true;
-      btn.textContent = '⏳ Opening your niyams…';
-    });
-
-    // Last-resort safety net: if auth never resolves (Sheets/Firebase
-    // unreachable), fall back to the login screen rather than leaving the
-    // visitor stuck. showLoginScreen() calls _markAppReady(), which then
-    // completes this pending dismissal.
-    if (!this._landingFallbackTimer) {
-      this._landingFallbackTimer = setTimeout(() => {
-        this._landingFallbackTimer = null;
-        if (this._appReady) return;
-        console.warn('Auth did not resolve in time — falling back to the login screen.');
-        this.showLoginScreen();
-      }, 10000);
-    }
-  }
-
-  _hideLanding() {
-    this._landingDismissPending = false;
-    if (this._landingFallbackTimer) {
-      clearTimeout(this._landingFallbackTimer);
-      this._landingFallbackTimer = null;
-    }
     const el = document.getElementById('landing-screen');
     if (el) el.classList.add('hidden');
     document.body.classList.remove('landing-open');
-  }
-
-  // Called from every terminal auth state — the login screen, the
-  // registration form, the user dashboard, and the admin panel — i.e. every
-  // path that leaves something visible on screen. Idempotent.
-  _markAppReady() {
-    this._appReady = true;
-    if (this._landingDismissPending) this._hideLanding();
   }
 
   // Populates the "What you can track" grid from NIYAM_STATS — the single
@@ -502,7 +448,6 @@ class KalyanMitra {
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('app').classList.remove('app-visible');
     document.getElementById('admin-panel').classList.add('hidden');
-    this._markAppReady(); // the login card is now on screen
 
     // Create particles
     this.createLoginParticles();
@@ -560,7 +505,6 @@ class KalyanMitra {
     document.getElementById('register-screen').classList.remove('hidden');
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('admin-panel').classList.add('hidden');
-    this._markAppReady(); // the registration form is now on screen
 
     // Pre-fill name from Google account
     const nameInput = document.getElementById('reg-name');
@@ -823,7 +767,6 @@ class KalyanMitra {
     document.getElementById('app').classList.remove('app-hidden');
     document.getElementById('app').classList.add('app-visible');
     document.getElementById('admin-panel').classList.add('hidden');
-    this._markAppReady(); // the dashboard is now on screen
 
     // Sheet is the master: sync every load (piggybacked on the login response
     // already fetched — no extra network call), so an edit made in the Sheet
@@ -1074,7 +1017,6 @@ class KalyanMitra {
     document.getElementById('admin-panel').classList.remove('hidden');
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('app').classList.remove('app-visible');
-    this._markAppReady(); // the admin panel is now on screen
 
     // Setup Admin Event Listeners (Tabs, Logout, etc.)
     this.setupAdminEventListeners();
