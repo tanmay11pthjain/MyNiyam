@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "settings": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "users": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "sangh_users": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}

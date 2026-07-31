@@ -423,11 +423,10 @@ class KalyanMitra {
 
         if (user.role === 'admin') {
           // Admin skips registration
-          document.getElementById('login-screen').classList.add('hidden');
           if (!this._adminInitDone) {
             this._adminInitDone = true;
-            db.ref(`users/${user.uid}/name`).set(user.name || user.uid);
-            db.ref(`users/${user.uid}/role`).set(user.role);
+            db.ref(`users/${user.uid}/name`).set(user.name || user.uid).catch(e => console.warn('Failed to write admin name:', e));
+            db.ref(`users/${user.uid}/role`).set(user.role).catch(e => console.warn('Failed to write admin role:', e));
             this.initAdmin();
           }
         } else {
@@ -436,19 +435,18 @@ class KalyanMitra {
           // or undefined (cached session — wait for fresh Sheet response)
           if (user.registered === undefined) {
             // Cached session — the fresh Sheet response hasn't arrived yet.
-            // Deliberately leave #login-screen showing (its lotus/branding
-            // already reads as a loading state) rather than hiding it with
-            // nothing yet to replace it: #app is still app-hidden
-            // (opacity:0) and #admin-panel is still display:none until this
-            // round-trip resolves, so hiding login here is what caused the
-            // blank-screen bug on every reload of an existing session.
+            // #login-screen is deliberately left showing here — see
+            // initUser() / initAdmin() / showRegistrationForm(), which are
+            // now the ONLY places that ever hide it, each doing so in the
+            // same breath as revealing their own screen. That makes a blank
+            // gap between "login gone" and "something visible" structurally
+            // impossible, no matter how long any awaited call takes.
             return;
           }
-          document.getElementById('login-screen').classList.add('hidden');
           if (user.registered) {
             if (!this._userInitDone) {
               this._userInitDone = true;
-              db.ref(`users/${user.uid}/role`).set(user.role);
+              db.ref(`users/${user.uid}/role`).set(user.role).catch(e => console.warn('Failed to write user role:', e));
               this.initUser();
             }
           } else {
@@ -779,15 +777,45 @@ class KalyanMitra {
     }
   }
 
+  // Persistent, non-fatal warning shown when one or more realtime listeners
+  // failed to ever fire (denied Firebase rules, unreachable database, etc.)
+  // — the screen is still revealed either way; this just tells the visitor
+  // their data may not be syncing rather than failing silently.
+  _showDbErrorBanner(failedPaths) {
+    if (!failedPaths || failedPaths.length === 0) return;
+    console.error('Realtime sync failed for:', failedPaths);
+    const banner = document.getElementById('db-error-banner');
+    if (banner) {
+      banner.textContent = "⚠️ Can't reach the database — your niyams may not save right now. Please contact your sangh admin.";
+      banner.classList.remove('hidden');
+    }
+  }
+
   // ===== USER INITIALIZATION =====
   async initUser() {
     this.initializing = true;
-    await this.setupRealtimeSync();
+    const failedPaths = await this.setupRealtimeSync();
     this.initializing = false;
 
+    // Safety net for any listener that never fired (see listenToRef()'s
+    // error handling) — every render call below needs a real object to
+    // work with, whether or not that specific listener succeeded. Only
+    // fills in what's still unset, so listeners that DID succeed keep
+    // their real data.
+    this.settings = this.settings || { ...DEFAULT_SETTINGS };
+    this.profile = this.profile || { ...DEFAULT_PROFILE };
+    this.dailyLog = this.dailyLog || { ...DEFAULT_DAILY_LOG, date: this.getTodayKey() };
+
+    // Reveal the dashboard unconditionally — even a partially-populated one
+    // is vastly better than a blank page. This is also the only place
+    // #login-screen is hidden on this path (see init()'s callback), so a
+    // gap between "login gone" and "dashboard visible" can't open up no
+    // matter how long any of the above awaited.
+    document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('app-hidden');
     document.getElementById('app').classList.add('app-visible');
     document.getElementById('admin-panel').classList.add('hidden');
+    this._showDbErrorBanner(failedPaths);
 
     // Sheet is the master: sync every load (piggybacked on the login response
     // already fetched — no extra network call), so an edit made in the Sheet
@@ -1035,6 +1063,10 @@ class KalyanMitra {
     this._adminUserUids = []; // UIDs this admin manages
     this.renderAdminHeaderBrand();
 
+    // The only place #login-screen is hidden on this path (see init()'s
+    // callback) — done in the same breath as revealing the admin panel so
+    // there is never a gap where neither is visible.
+    document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('admin-panel').classList.remove('hidden');
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('app').classList.remove('app-visible');
@@ -1047,6 +1079,12 @@ class KalyanMitra {
     this._settingsListener = this._settingsRef.on('value', snap => {
       this.settings = snap.val() ? { ...DEFAULT_SETTINGS, ...snap.val() } : { ...DEFAULT_SETTINGS };
       this.loadAdminSettingsUI();
+    }, err => {
+      // this.settings already defaulted a few lines up, so a denied read
+      // here just means Settings won't reflect the sangh's saved values —
+      // never a crash, and the admin panel is already visible either way.
+      console.error('Firebase read failed for "settings":', err);
+      this._showDbErrorBanner(['settings']);
     });
 
     // Fetch user UIDs from all assigned sanghs
@@ -1677,14 +1715,25 @@ class KalyanMitra {
   // ===== FIREBASE SYNC & REALTIME LISTENERS =====
   listenToRef(path, callback) {
     if (!this._activeListeners) this._activeListeners = [];
-    return new Promise(resolve => {
-      let first = true;
+    return new Promise((resolve, reject) => {
+      let settled = false;
       const ref = db.ref(path);
       const listener = ref.on('value', snap => {
         callback(snap.val());
-        if (first) {
-          first = false;
+        if (!settled) {
+          settled = true;
           resolve();
+        }
+      }, err => {
+        // Firebase's error callback — fires on permission_denied or a ref
+        // that can never be read. Without this, a denied/unreachable ref
+        // never calls back at all, so the promise this method returns would
+        // hang forever, stalling setupRealtimeSync()'s Promise.all
+        // indefinitely and leaving the app on a permanently blank screen.
+        console.error(`Firebase read failed for "${path}":`, err);
+        if (!settled) {
+          settled = true;
+          reject(err);
         }
       });
       this._activeListeners.push({ ref, listener });
@@ -1745,9 +1794,12 @@ class KalyanMitra {
     // relied on this; users now need it too, for monthly AP in the header
     // and the lifetime stats grid (Badges tab) — neither is derivable from
     // the single per-day counters in profile. Deliberately not part of the
-    // awaited Promise.all below (see _resetAdminUserState()'s comment on
+    // awaited settle below (see _resetAdminUserState()'s comment on
     // _cachedDailyLogs) — both roles render an initial frame without it,
-    // then refresh the instant this first resolves.
+    // then refresh the instant this first resolves. Needs its own .catch()
+    // since listenToRef() can now reject (see its error callback) — without
+    // one, a denied read here would be an unhandled rejection instead of a
+    // logged error.
     this.listenToRef(`${userPath}/daily_logs`, val => {
       this._cachedDailyLogs = val || {};
       if (!this.initializing) {
@@ -1760,7 +1812,7 @@ class KalyanMitra {
           this.renderAchievements();
         }
       }
-    });
+    }).catch(e => console.error('daily_logs (all) listener failed:', e));
 
     const p4 = this.listenToRef(`${userPath}/lock_status/${todayKey}`, val => {
       this.currentDayLocked = !!val;
@@ -1771,7 +1823,15 @@ class KalyanMitra {
       }
     });
 
-    await Promise.all([p1, p2, p3, p4]);
+    // allSettled (not all) so one denied/unreachable ref can never hang
+    // initialisation — every caller gets to reveal *something* regardless
+    // of what Firebase's rules allow. Returns the paths that failed so the
+    // caller can tell the user their data may not be syncing.
+    const labeledPaths = ['settings', `${userPath}/profile`, `${userPath}/daily_logs/${todayKey}`, `${userPath}/lock_status/${todayKey}`];
+    const results = await Promise.allSettled([p1, p2, p3, p4]);
+    return results
+      .map((r, i) => (r.status === 'rejected' ? labeledPaths[i] : null))
+      .filter(Boolean);
   }
 
   saveSettings() { db.ref('settings').set(this.settings); }

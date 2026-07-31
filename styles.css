@@ -466,6 +466,29 @@ body {
 }
 
 /* ============================================================
+   DATABASE ERROR BANNER — see _showDbErrorBanner() in app.js
+   ============================================================ */
+
+#db-error-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1090;
+  padding: 12px 20px;
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  background: #FDECEA;
+  color: #C0392B;
+  border-bottom: 2px solid #E74C3C;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-align: center;
+  line-height: 1.4;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
+/* ============================================================
    LANDING PAGE — first-look marketing overlay
    ============================================================ */
 
