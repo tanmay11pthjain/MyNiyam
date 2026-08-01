@@ -3745,10 +3745,15 @@ class KalyanMitra {
     }
 
     const { fromKey, toKey } = this._monthKeyBounds(year, month);
-    const { stats, daysLogged, perfectDays } =
+    // totalAP is a full computeRawDayPoints() sum per day — independent of
+    // the `includePenalties: false` filter above, which only decides which
+    // per-niyam rows come back. So this is the month's complete points
+    // total (Ashta and the screen-time penalty included), matching what the
+    // History day cards add up to.
+    const { stats, daysLogged, perfectDays, totalAP } =
       this._computeNiyamRange(logs, fromKey, toKey, this.settings, false);
 
-    return { stats, daysElapsed, daysRecorded: daysLogged, perfectDays };
+    return { stats, daysElapsed, daysRecorded: daysLogged, perfectDays, totalAP };
   }
 
   // ===== LEADERBOARD POSTER =====
@@ -4216,24 +4221,31 @@ class KalyanMitra {
 
     const listEl = document.getElementById('niyam-stats-list');
     const summaryEl = document.getElementById('niyam-stats-summary');
+    const totalEl = document.getElementById('niyam-stats-total');
     if (!listEl) return;
 
     let logs = this._cachedDailyLogs;
     if (logs == null) {
       listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#795548;">Loading...</div>';
       if (summaryEl) summaryEl.textContent = '';
+      if (totalEl) totalEl.textContent = '';
       try {
         const snap = await db.ref(`users/${this.uid}/daily_logs`).once('value');
         logs = snap.val() || {};
         this._cachedDailyLogs = logs;
       } catch (e) {
         listEl.innerHTML = '<div style="text-align:center; color:red;">Failed to load stats.</div>';
+        if (totalEl) totalEl.textContent = '';
         return;
       }
     }
 
-    const { stats, daysElapsed, daysRecorded, perfectDays } =
+    const { stats, daysElapsed, daysRecorded, perfectDays, totalAP } =
       this._computeNiyamStats(logs, this._niyamStatsYear, this._niyamStatsMonth);
+
+    if (totalEl) {
+      totalEl.textContent = `⭐ ${(totalAP || 0).toLocaleString()} AP this month`;
+    }
 
     if (summaryEl) {
       summaryEl.textContent = daysElapsed > 0

@@ -3624,6 +3624,23 @@ body.landing-open {
   overflow-y: auto;
 }
 
+/* Month's total points — the headline figure above the per-niyam breakdown */
+.niyam-stats-total {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 1.15rem;
+  color: var(--primary);
+  background: #fff3e0;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin: 12px 0 0;
+  text-align: center;
+}
+
+.niyam-stats-total:empty {
+  display: none;
+}
+
 .niyam-stats-summary {
   font-size: 0.8rem;
   color: var(--text-secondary);
