@@ -2221,28 +2221,18 @@ class KalyanMitra {
     this.renderActivities();
   }
 
-  // This calendar month's AP: every OTHER day this month from the cached
-  // logs, plus today's live kpEarned from `this.dailyLog` — which updates
-  // instantly on every toggle, ahead of the daily_logs listener's round
-  // trip, so the header never lags a fresh toggle. Sums the stored
-  // `kpEarned` per day (not a recompute) so this always matches exactly
-  // what each day's History card shows. Falls back to just today's value
-  // when the cache hasn't arrived yet (e.g. the very first render after login).
-  _computeMonthlyAP() {
-    const todayKey = this.getTodayKey();
-    const monthPrefix = todayKey.slice(0, 7); // 'YYYY-MM'
-    const logs = this._cachedDailyLogs || {};
-    let total = this.dailyLog ? (this.dailyLog.kpEarned || 0) : 0;
-    Object.entries(logs).forEach(([dateKey, log]) => {
-      if (dateKey === todayKey) return; // today comes from this.dailyLog above
-      if (!log || !dateKey.startsWith(monthPrefix)) return;
-      total += log.kpEarned || 0;
-    });
-    return total;
+  // Today's AP, read straight from `this.dailyLog` — the live in-memory log
+  // that every activity handler mutates, so the header updates instantly on
+  // each toggle rather than waiting on the daily_logs listener's round trip.
+  // Uses the stored `kpEarned` (not a recompute) so it always matches what
+  // today's History card shows. Null-safe for the very first render, before
+  // the listener has assigned a log.
+  _computeDailyAP() {
+    return (this.dailyLog && this.dailyLog.kpEarned) || 0;
   }
 
   renderHeader() {
-    document.getElementById('karma-points').textContent = `${this._computeMonthlyAP()} AP`;
+    document.getElementById('karma-points').textContent = `${this._computeDailyAP()} AP`;
 
     document.getElementById('streak-count').textContent = this.profile.currentStreak;
     const flame = document.getElementById('streak-flame');
