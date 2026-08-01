@@ -11,6 +11,10 @@
     "sangh_users": {
       ".read": "auth != null",
       ".write": "auth != null"
+    },
+    "account_profiles": {
+      ".read": "auth != null",
+      ".write": "auth != null"
     }
   }
 }

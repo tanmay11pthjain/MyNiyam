@@ -7,6 +7,93 @@ const Auth = (() => {
   let authListeners = [];
   let _unsubFirebase = null;
 
+  // ===== MULTI-PROFILE IDENTITY =====
+  // One Google account can have up to MAX_PROFILES separate MyNiyam members
+  // (e.g. a parent + children). The Google UID is the "base" account; a
+  // profile's app-facing "uid" — the SAME key every Firebase path and Sheet
+  // row already uses — is either the bare base uid (the primary/slot 1) or
+  // "{baseUid}__pN" (slot 2-5). Keeping the primary's id unchanged is what
+  // makes this feature need zero migration: every existing user's data is
+  // already keyed by their bare uid. Must stay in sync with
+  // handleGetProfiles() in apps-script-additions.gs.
+  const PROFILE_SEP = '__p';
+  const MAX_PROFILES = 5;
+
+  function _activeProfileStorageKey(baseUid) {
+    return `myniyam_active_profile_${baseUid}`;
+  }
+
+  // Recovers the base (Google) uid from any profile id, primary or not.
+  function baseUidOf(profileId) {
+    const idx = String(profileId || '').indexOf(PROFILE_SEP);
+    return idx === -1 ? profileId : profileId.slice(0, idx);
+  }
+
+  // Purely local/synchronous — no network round-trip — so resolving which
+  // profile is active never slows down the login critical path. Can point
+  // at a profile that no longer exists in the Sheet (e.g. an admin removed
+  // it, or an "Add Profile" attempt was abandoned before registering);
+  // app.js's _loadAccountProfiles() detects that once the real list arrives
+  // and self-heals by falling back to the primary and reloading once.
+  function getActiveProfileId(baseUid) {
+    try {
+      const stored = localStorage.getItem(_activeProfileStorageKey(baseUid));
+      if (stored) return stored;
+    } catch (e) { /* localStorage unavailable — default to primary */ }
+    return baseUid;
+  }
+
+  function setActiveProfile(baseUid, profileId) {
+    try {
+      localStorage.setItem(_activeProfileStorageKey(baseUid), profileId);
+    } catch (e) { /* unavailable — non-fatal, next load just defaults to primary */ }
+  }
+
+  // Returns the lowest free profile slot id for this account (up to
+  // MAX_PROFILES), or null once all slots are taken. The one place the
+  // slot->id mapping is computed, so it can never drift from baseUidOf()/
+  // the primary-vs-added distinction used everywhere else.
+  function getNextProfileId(baseUid, existingProfiles) {
+    const taken = new Set((existingProfiles || []).map(p => p.profileId));
+    for (let slot = 1; slot <= MAX_PROFILES; slot++) {
+      const id = slot === 1 ? baseUid : `${baseUid}${PROFILE_SEP}${slot}`;
+      if (!taken.has(id)) return id;
+    }
+    return null;
+  }
+
+  // Lists every profile under one Google account — Sheet is master (see
+  // handleGetProfiles in apps-script-additions.gs). Always returns at least
+  // a primary placeholder, even when the Sheet call fails or the primary
+  // hasn't registered yet (a brand-new account has no Sheet row at all), so
+  // the switcher/add-profile flow never has zero profiles to work with.
+  async function fetchProfiles(baseUid) {
+    const fallback = [{ profileId: baseUid, name: '', sanghCode: '', registered: false }];
+    try {
+      const text = await _sheetsRequest({ action: "get_profiles", baseUid });
+      console.log("Profiles response:", text);
+      try {
+        const result = JSON.parse(text);
+        if (result.success && Array.isArray(result.profiles)) {
+          const profiles = result.profiles
+            .map(p => ({
+              profileId: String(p.profileId || '').trim(),
+              name: String(p.name || '').trim(),
+              sanghCode: String(p.sanghCode || '').trim(),
+              registered: !!p.registered
+            }))
+            .filter(p => p.profileId);
+          if (profiles.length > 0) return profiles;
+        }
+      } catch (parseErr) {
+        console.error("Failed to parse profiles response:", text);
+      }
+    } catch (e) {
+      console.error("Fetch profiles failed:", e);
+    }
+    return fallback;
+  }
+
   // ===== SHEETS TRANSPORT (fetch, with a JSONP fallback for CORS failures) =====
   // Apps Script only sends Access-Control-Allow-Origin when the deployment's
   // "Who has access" is set to Anyone; any stricter setting makes every fetch()
@@ -139,6 +226,15 @@ const Auth = (() => {
       if (saved) {
         const parsed = JSON.parse(saved);
         delete parsed.registered; // force re-check from Sheet
+        // Re-resolve which profile is active — the cached session can
+        // predate a profile switch (setActiveProfile() writes BEFORE the
+        // reload that re-runs this init()), so without this the brief
+        // "instant UI" cache could flash the profile just switched away
+        // from. A pre-multi-profile cached session has no baseUid at all,
+        // so this is a no-op for it — fully backward compatible.
+        if (parsed.baseUid) {
+          parsed.uid = getActiveProfileId(parsed.baseUid);
+        }
         currentUser = parsed;
         _notifyListeners();
       }
@@ -147,17 +243,30 @@ const Auth = (() => {
     // Firebase auth state listener
     _unsubFirebase = firebase.auth().onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
+        const baseUid = firebaseUser.uid;
+        // Resolved locally, no network round-trip — see getActiveProfileId().
+        const activeProfileId = getActiveProfileId(baseUid);
+
         // User is signed in — fetch role and registration status from Sheets (master)
         const { role, sanghCodes, registered, profile } = await _fetchRoleFromSheets(
-          firebaseUser.uid,
+          activeProfileId,
           firebaseUser.email,
           firebaseUser.displayName || firebaseUser.email.split('@')[0]
         );
 
         currentUser = {
-          uid: firebaseUser.uid,
+          uid: activeProfileId,
+          baseUid: baseUid,
           role: role,
-          name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
+          // Prefer the Sheet's registered name for the active profile. Only
+          // fall back to the Google account's own display name for the
+          // PRIMARY profile before it has registered — exactly the
+          // single-profile behavior this app always had. A not-yet-
+          // registered ADDED profile must never borrow the Google
+          // account's (i.e. the parent's) display name.
+          name: (profile && profile.name) || (activeProfileId === baseUid
+            ? (firebaseUser.displayName || firebaseUser.email.split('@')[0])
+            : ''),
           email: firebaseUser.email,
           photoURL: firebaseUser.photoURL,
           sanghCodes: sanghCodes,
@@ -420,6 +529,13 @@ const Auth = (() => {
     fetchProfile,
     updateProfile,
     fetchPhoto,
-    updatePhoto
+    updatePhoto,
+    // Multi-profile identity
+    baseUidOf,
+    getActiveProfileId,
+    setActiveProfile,
+    getNextProfileId,
+    fetchProfiles,
+    MAX_PROFILES
   };
 })();

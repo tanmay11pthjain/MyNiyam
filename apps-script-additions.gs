@@ -156,9 +156,17 @@ function _findUserRow_(sheet, colMap, uid, email) {
     if (colMap.uid !== undefined && wantUid &&
         String(rows[i][colMap.uid]).trim() === wantUid) return i + 2;
   }
-  // Fall back to email so a row created before the UID was known still matches.
+  // Fall back to email, but ONLY for a row whose UID cell is still blank —
+  // i.e. a row created before the UID was known. Multiple profiles under one
+  // Google account (uid, uid__p2, uid__p3, ...) share the same email, so
+  // matching by email alone here would silently return a DIFFERENT
+  // profile's row (e.g. looking up "uid__p2" would fall through and hit
+  // profile 1's row), and a subsequent register/update would overwrite the
+  // wrong profile's data.
   if (wantEmail && colMap.email !== undefined) {
     for (let i = 0; i < rows.length; i++) {
+      const rowUid = colMap.uid !== undefined ? String(rows[i][colMap.uid] || '').trim() : '';
+      if (rowUid) continue; // already has a UID — never match this row by email
       if (String(rows[i][colMap.email]).trim().toLowerCase() === wantEmail) return i + 2;
     }
   }
@@ -377,6 +385,45 @@ function handleGetSanghUsers(params) {
   return { success: true, users: users };
 }
 
+// ---- ACTION: get_profiles ----
+// Lists every profile (the primary plus any added ones) under one Google
+// account, so the app's profile switcher always reflects the Sheet — the
+// master — rather than drifting from whatever Firebase happens to cache.
+// A profile's row UID is either the bare Google UID (primary) or
+// "{googleUid}__pN" (2nd-5th) — this must stay in sync with PROFILE_SEP in
+// auth.js.
+function handleGetProfiles(params) {
+  params = params || {}; // tolerate being run bare from the editor
+  const baseUid = String(params.baseUid || '').trim();
+  if (!baseUid) return { success: false, error: 'missing_base_uid' };
+
+  const sheet = _usersSheet_();
+  if (!sheet) return { success: false, error: 'users_sheet_not_found' };
+
+  const colMap = _headerMap_(sheet, USER_COLUMNS);
+  if (colMap.uid === undefined) return { success: true, profiles: [] };
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { success: true, profiles: [] };
+
+  const prefix = baseUid + '__p';
+  const rows = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const profiles = [];
+  rows.forEach(function (r) {
+    const rowUid = String(r[colMap.uid] || '').trim();
+    if (!rowUid) return;
+    if (rowUid !== baseUid && rowUid.indexOf(prefix) !== 0) return;
+    const sanghCode = colMap.sanghCode !== undefined ? String(r[colMap.sanghCode] || '').trim() : '';
+    profiles.push({
+      profileId: rowUid,
+      name: colMap.name !== undefined ? String(r[colMap.name] || '').trim() : '',
+      sanghCode: sanghCode,
+      registered: !!sanghCode
+    });
+  });
+  return { success: true, profiles: profiles };
+}
+
 // ---- ACTION: get_profile ----
 function handleGetProfile(params) {
   params = params || {}; // tolerate being run bare from the editor
@@ -481,6 +528,7 @@ function routeAction(params) {
     case 'get_stats':       return handleGetStats();
     case 'register':        return handleRegister(params);
     case 'get_sangh_users': return handleGetSanghUsers(params);
+    case 'get_profiles':    return handleGetProfiles(params);
     case 'get_profile':     return handleGetProfile(params);
     case 'update_profile':  return handleUpdateProfile(params);
     case 'get_photo':       return handleGetPhoto(params);

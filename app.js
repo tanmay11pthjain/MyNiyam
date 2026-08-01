@@ -525,9 +525,23 @@ class KalyanMitra {
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('admin-panel').classList.add('hidden');
 
-    // Pre-fill name from Google account
+    // Pre-fill name from Google account. For an added (non-primary) profile
+    // that hasn't registered yet, auth.js deliberately leaves user.name ''
+    // rather than borrowing the Google account's (the parent's) display
+    // name, so this naturally skips prefilling in that case.
     const nameInput = document.getElementById('reg-name');
     if (nameInput && user.name) nameInput.value = user.name;
+
+    // "Cancel" only makes sense when registering an ADDED profile reached
+    // via "Add Profile" — there's somewhere to go back to. A brand-new
+    // user's very first-ever registration has no previous profile to
+    // revert to, so the button stays hidden there.
+    const cancelBtn = document.getElementById('btn-cancel-registration');
+    if (cancelBtn) {
+      const isAddedProfile = !!(user.baseUid && user.uid !== user.baseUid);
+      cancelBtn.classList.toggle('hidden', !isAddedProfile);
+      cancelBtn.onclick = () => this.cancelAddProfile();
+    }
 
     // Photo picker — required before registration can be submitted (see the
     // check in handleRegistration()). Reset on every visit to this screen so
@@ -844,6 +858,11 @@ class KalyanMitra {
     // Not awaited: a one-time check (guarded by localStorage) for
     // already-registered users with no profile photo yet.
     this._maybePromptForPhoto();
+    // Not awaited: paints the header avatar from cache immediately (inside
+    // the function itself) and reconciles the profile-switcher list in the
+    // background — never blocks the dashboard on a Sheet round-trip.
+    this._loadHeaderAvatar();
+    this._loadAccountProfiles();
   }
 
   // One-time migration to raw-points-only scoring. Recomputes every day's
@@ -1002,6 +1021,170 @@ class KalyanMitra {
   closeSanghTransferNotice() {
     const overlay = document.getElementById('sangh-transfer-overlay');
     if (overlay) { overlay.classList.remove('show'); overlay.classList.add('hidden'); }
+  }
+
+  // ===== MULTI-PROFILE (multiple members under one Google account) =====
+
+  // Loads the list of profiles under this Google account — paints instantly
+  // from the Firebase index (account_profiles/{baseUid}) if cached, then
+  // reconciles from Auth.fetchProfiles() (the Sheet, master) and mirrors the
+  // result back to Firebase. Identical instant-then-reconcile shape as
+  // _syncFromSheetProfile()/_mirrorProfileToFirebase() — same "Sheet is
+  // master" pattern, reused deliberately so there's one way this app does it.
+  //
+  // Also self-heals a stale active profile: if the profile this session is
+  // showing no longer exists in the Sheet (an admin removed it, or an "Add
+  // Profile" attempt was abandoned before ever registering), falls back to
+  // the primary and reloads once — the same "reload on switch" guarantee as
+  // switchProfile(), so nothing here has to reconcile in-flight listeners
+  // or caches for the wrong identity.
+  async _loadAccountProfiles() {
+    const baseUid = this._currentAuthUser && this._currentAuthUser.baseUid;
+    if (!baseUid) return; // pre-multi-profile session shape — nothing to load
+
+    try {
+      const snap = await db.ref(`account_profiles/${baseUid}`).once('value');
+      const cached = snap.val();
+      if (cached && typeof cached === 'object') {
+        this._accountProfiles = Object.values(cached);
+      }
+    } catch (e) {
+      console.warn('Failed to load cached account profiles:', e);
+    }
+
+    let fresh;
+    try {
+      fresh = await Auth.fetchProfiles(baseUid);
+    } catch (e) {
+      console.warn('Failed to fetch account profiles from Sheet:', e);
+      return; // keep whatever was cached (or nothing) — never worse than before
+    }
+
+    this._accountProfiles = fresh;
+
+    // Mirror back to Firebase, keyed by profileId. Firebase keys can't
+    // contain '.', '#', '$', '[', ']', '/' — profile ids never do, since
+    // they're either a Firebase-Auth uid or that uid + '__pN'.
+    try {
+      const byId = {};
+      fresh.forEach(p => { byId[p.profileId] = p; });
+      await db.ref(`account_profiles/${baseUid}`).set(byId);
+    } catch (e) {
+      console.warn('Failed to mirror account profiles to Firebase:', e);
+    }
+
+    const stillExists = fresh.some(p => p.profileId === this.uid);
+    if (!stillExists) {
+      console.warn(`Active profile "${this.uid}" no longer exists — falling back to primary.`);
+      Auth.setActiveProfile(baseUid, baseUid);
+      location.reload();
+    }
+  }
+
+  // Renders the switcher's profile list from this._accountProfiles — paints
+  // with cached photos immediately, then upgrades each from Auth.fetchPhoto()
+  // in the background (mirrors _loadAvatarInto()'s cache-then-fetch shape,
+  // just for N profiles instead of one).
+  _renderProfileSwitcher() {
+    const listEl = document.getElementById('profile-switcher-list');
+    const addBtn = document.getElementById('btn-add-profile');
+    if (!listEl) return;
+
+    const profiles = this._accountProfiles || [];
+    if (profiles.length === 0) {
+      listEl.innerHTML = '<div class="profile-switcher-loading">Loading profiles…</div>';
+      if (addBtn) addBtn.classList.add('hidden');
+      return;
+    }
+
+    const activeId = this.uid;
+    listEl.innerHTML = profiles.map(p => {
+      let cachedPhoto = null;
+      try { cachedPhoto = localStorage.getItem(`myniyam_photo_${p.profileId}`); } catch (e) { /* ignore */ }
+      const initial = (p.name || '?').trim().charAt(0).toUpperCase() || '?';
+      const isActive = p.profileId === activeId;
+      const label = p.name || (p.registered ? p.profileId : 'New Profile');
+      return `
+        <div class="profile-switcher-item${isActive ? ' is-active' : ''}" data-profile-id="${p.profileId}">
+          <div class="profile-switcher-avatar">
+            ${cachedPhoto ? `<img src="${cachedPhoto}" alt="">` : `<span class="profile-switcher-initial">${initial}</span>`}
+          </div>
+          <div class="profile-switcher-info">
+            <span class="profile-switcher-name">${label}</span>
+            <span class="profile-switcher-sangh">${p.sanghCode || (p.registered ? '' : 'Not registered yet')}</span>
+          </div>
+          ${isActive ? '<span class="profile-switcher-active-badge">✓ Active</span>' : ''}
+        </div>
+      `;
+    }).join('');
+
+    listEl.querySelectorAll('.profile-switcher-item').forEach(item => {
+      item.addEventListener('click', () => this.switchProfile(item.dataset.profileId));
+    });
+
+    if (addBtn) addBtn.classList.toggle('hidden', profiles.length >= Auth.MAX_PROFILES);
+
+    // Lazily fetch+correct each profile's photo — never blocks the initial
+    // render, and a failure for one profile can't affect the others.
+    profiles.forEach(p => {
+      Auth.fetchPhoto(p.profileId).then(photo => { // never throws; null on any failure or "no photo"
+        if (!photo) return;
+        try { localStorage.setItem(`myniyam_photo_${p.profileId}`, photo); } catch (e) { /* non-fatal */ }
+        const avatarWrap = listEl.querySelector(`.profile-switcher-item[data-profile-id="${p.profileId}"] .profile-switcher-avatar`);
+        if (avatarWrap) avatarWrap.innerHTML = `<img src="${photo}" alt="">`;
+      });
+    });
+  }
+
+  openProfileSwitcher() {
+    const overlay = document.getElementById('profile-switcher-overlay');
+    if (!overlay) return;
+    this._renderProfileSwitcher(); // instant paint from whatever's cached
+    overlay.classList.remove('hidden');
+    overlay.classList.add('show');
+    // Refresh from the Sheet (master) in the background and re-render if the
+    // list changed. Also self-heals (falls back + reloads) if the active
+    // profile vanished — see _loadAccountProfiles().
+    this._loadAccountProfiles().then(() => this._renderProfileSwitcher());
+  }
+
+  closeProfileSwitcher() {
+    const overlay = document.getElementById('profile-switcher-overlay');
+    if (overlay) { overlay.classList.remove('show'); overlay.classList.add('hidden'); }
+  }
+
+  // Reload is deliberate (see the plan's "reload on switch" decision) —
+  // every Firebase listener, cache and init-guard in this app is scoped to
+  // one profile id, so a reload guarantees a clean slate rather than
+  // requiring a live teardown/re-init of all of it.
+  switchProfile(profileId) {
+    const baseUid = this._currentAuthUser && this._currentAuthUser.baseUid;
+    if (!baseUid || !profileId) return;
+    if (profileId === this.uid) { this.closeProfileSwitcher(); return; } // already active
+    Auth.setActiveProfile(baseUid, profileId);
+    location.reload();
+  }
+
+  // Assigns the lowest free profile slot and reloads into it. That profile
+  // has no Sheet row yet, so the normal auth flow naturally lands on
+  // showRegistrationForm() — no separate registration path needed.
+  addProfile() {
+    const baseUid = this._currentAuthUser && this._currentAuthUser.baseUid;
+    if (!baseUid) return;
+    const nextId = Auth.getNextProfileId(baseUid, this._accountProfiles || []);
+    if (!nextId) return; // at the cap — button should already be hidden; safety net
+    Auth.setActiveProfile(baseUid, nextId);
+    location.reload();
+  }
+
+  // Bound to the registration screen's Cancel button (only shown when
+  // registering an ADDED profile — see showRegistrationForm()). Reverts to
+  // the primary profile and reloads, so a mistaken "Add Profile" tap is
+  // never a dead end.
+  cancelAddProfile() {
+    const baseUid = this._currentAuthUser && this._currentAuthUser.baseUid;
+    if (baseUid) Auth.setActiveProfile(baseUid, baseUid);
+    location.reload();
   }
 
   async fetchGeolocationAndPanchang() {
@@ -1586,6 +1769,17 @@ class KalyanMitra {
     const niyamStatsNext = document.getElementById('btn-niyam-stats-next');
     if (niyamStatsPrev) niyamStatsPrev.addEventListener('click', () => this._changeNiyamStatsMonth(-1));
     if (niyamStatsNext) niyamStatsNext.addEventListener('click', () => this._changeNiyamStatsMonth(1));
+
+    // Multi-profile switcher — two entry points (header avatar, Profile
+    // tab), one overlay.
+    const headerAvatarBtn = document.getElementById('header-avatar-btn');
+    if (headerAvatarBtn) headerAvatarBtn.addEventListener('click', () => this.openProfileSwitcher());
+    const btnSwitchProfile = document.getElementById('btn-switch-profile');
+    if (btnSwitchProfile) btnSwitchProfile.addEventListener('click', () => this.openProfileSwitcher());
+    const btnCloseProfileSwitcher = document.getElementById('btn-close-profile-switcher');
+    if (btnCloseProfileSwitcher) btnCloseProfileSwitcher.addEventListener('click', () => this.closeProfileSwitcher());
+    const btnAddProfile = document.getElementById('btn-add-profile');
+    if (btnAddProfile) btnAddProfile.addEventListener('click', () => this.addProfile());
 
     // Logout
     document.getElementById('btn-user-logout').addEventListener('click', () => this.logout());
@@ -3096,10 +3290,12 @@ class KalyanMitra {
 
   // Instant paint from cache/Google account photo, then a background refresh
   // from the Sheet (the master) — mirrors the pattern already used for the
-  // rest of the Profile tab's data.
-  async _loadProfilePhoto() {
-    const avatarEl = document.getElementById('profile-avatar');
-    const placeholderEl = document.getElementById('profile-avatar-placeholder');
+  // rest of the Profile tab's data. Shared by the Profile tab's own photo
+  // and the header avatar button (_loadHeaderAvatar()) — same cache-then-
+  // fetch shape, different target elements.
+  async _loadAvatarInto(imgId, placeholderId) {
+    const avatarEl = document.getElementById(imgId);
+    const placeholderEl = document.getElementById(placeholderId);
     if (!avatarEl) return;
 
     const cacheKey = `myniyam_photo_${this.uid}`;
@@ -3117,13 +3313,34 @@ class KalyanMitra {
       }
     };
 
-    applyPhoto(cached || (this._currentAuthUser && this._currentAuthUser.photoURL) || null);
+    // The Google account's own photo is only a sensible placeholder for the
+    // PRIMARY profile (it IS that Google identity). For an added profile —
+    // e.g. a child's — falling back to it would briefly show the parent's
+    // Google photo under the child's name until fetchPhoto() resolves.
+    const googlePlaceholder = this._isPrimaryProfile() ? (this._currentAuthUser && this._currentAuthUser.photoURL) : null;
+    applyPhoto(cached || googlePlaceholder || null);
 
     const photo = await Auth.fetchPhoto(this.uid); // never throws; null on any failure or "no photo"
     if (photo) {
       applyPhoto(photo);
       try { localStorage.setItem(cacheKey, photo); } catch (e) { /* storage full — non-fatal */ }
     }
+  }
+
+  // True for the primary profile (slot 1) — also true for a pre-multi-
+  // profile session shape (no baseUid field at all), which was always
+  // single-profile/primary by definition.
+  _isPrimaryProfile() {
+    const u = this._currentAuthUser;
+    return !!u && (!u.baseUid || u.uid === u.baseUid);
+  }
+
+  async _loadProfilePhoto() {
+    return this._loadAvatarInto('profile-avatar', 'profile-avatar-placeholder');
+  }
+
+  async _loadHeaderAvatar() {
+    return this._loadAvatarInto('header-avatar-img', 'header-avatar-placeholder');
   }
 
   // Bound to the Profile tab's "Change photo" file input.

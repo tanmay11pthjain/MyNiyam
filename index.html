@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=23">
+  <link rel="stylesheet" href="styles.css?v=24">
 </head>
 <body class="landing-open">
 
@@ -219,6 +219,11 @@
         <button type="button" class="btn-login" id="btn-register">
           <span>🙏 Join MyNiyam</span>
         </button>
+        <!-- Only shown when registering an ADDED (non-primary) profile — see
+             showRegistrationForm() in app.js. -->
+        <button type="button" class="btn-cancel-registration hidden" id="btn-cancel-registration">
+          Cancel
+        </button>
       </form>
     </div>
   </div>
@@ -239,6 +244,10 @@
           <span class="kp-period-label">Today</span>
         </div>
         <div class="header-right">
+          <button class="header-avatar-btn" id="header-avatar-btn" title="Switch Profile">
+            <img class="header-avatar-img hidden" id="header-avatar-img" src="" alt="">
+            <span class="header-avatar-placeholder" id="header-avatar-placeholder">👤</span>
+          </button>
           <div class="streak-section" id="streak-section">
             <div class="streak-flame" id="streak-flame">🕯️</div>
             <span class="streak-count" id="streak-count">0</span>
@@ -626,6 +635,12 @@
       </button>
       <div class="save-confirmation hidden" id="profile-save-confirmation">✅ Profile updated!</div>
 
+      <div class="profile-switch-section">
+        <h3 class="sub-heading">👥 Family Profiles</h3>
+        <p class="profile-switch-desc">Track niyams for other family members under this same Google account.</p>
+        <button type="button" class="btn-export" id="btn-switch-profile">🔄 Switch Profile</button>
+      </div>
+
       <div class="bottom-spacer"></div>
     </div>
 
@@ -954,6 +969,16 @@
     </div>
   </div>
 
+  <!-- Multi-Profile Switcher -->
+  <div id="profile-switcher-overlay" class="overlay hidden">
+    <div class="overlay-content profile-switcher-content">
+      <button class="btn-close-overlay" id="btn-close-profile-switcher">✕</button>
+      <h2 class="summary-title">👥 Switch Profile</h2>
+      <div class="profile-switcher-list" id="profile-switcher-list"><!-- Populated by JS --></div>
+      <button type="button" class="btn-export profile-switcher-add" id="btn-add-profile">➕ Add Profile</button>
+    </div>
+  </div>
+
   <!-- Export Leaderboard to Excel -->
   <div id="export-overlay" class="overlay hidden">
     <div class="overlay-content">
@@ -1043,8 +1068,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=36"></script>
-  <script src="auth.js?v=36"></script>
-  <script src="app.js?v=36"></script>
+  <script src="data.js?v=37"></script>
+  <script src="auth.js?v=37"></script>
+  <script src="app.js?v=37"></script>
 </body>
 </html>
