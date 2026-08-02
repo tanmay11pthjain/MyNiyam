@@ -227,6 +227,8 @@ class KalyanMitra {
     this.location = null; // resolved in fetchGeolocationAndPanchang(); falls back to DEFAULT_LOCATION until then
     this._landingStats = null;
     this._landingStatsAnimated = false;
+    this._landingReady = false; // set by _ensureLandingReady() — guards it against re-entry
+    this._loadingRetryTimer = null;
     // init() is the critical path (auth) and must start first, unconditionally.
     // _initLanding() is purely decorative — wrapped so any exception in it can
     // never prevent auth from running.
@@ -244,6 +246,17 @@ class KalyanMitra {
   }
 
   // ===== LOADING SCREEN =====
+  // Two entry points now show it: index.html's <head> script (pre-paint, for
+  // a returning session) sets the class directly before any JS runs, and
+  // showLoginScreen()'s sign-in handler calls this once Google auth succeeds.
+  // Either way, arming the retry timer here (rather than only once in the
+  // constructor) means a stalled Sheet lookup always gets a Retry button
+  // ~10s later, however the loading screen was triggered.
+  _showLoadingScreen() {
+    document.documentElement.classList.add('booting-session');
+    this._armLoadingRetryTimer();
+  }
+
   // Removing this one class atomically hides #loading-screen AND lifts the
   // CSS override that was forcing #login-screen/#landing-screen hidden (see
   // styles.css's `html.booting-session` rules) — so there's never a gap
@@ -251,13 +264,31 @@ class KalyanMitra {
   // auth states (login, registration, dashboard, admin panel) triggers it.
   _hideLoadingScreen() {
     document.documentElement.classList.remove('booting-session');
+    if (this._loadingRetryTimer) {
+      clearTimeout(this._loadingRetryTimer);
+      this._loadingRetryTimer = null;
+    }
+    const retryBtn = document.getElementById('btn-loading-retry');
+    if (retryBtn) retryBtn.classList.add('hidden');
   }
 
-  // If the loading screen (shown pre-paint by index.html's <head> script for
-  // a returning session) is STILL up ~10s after boot, reveals a Retry button
-  // rather than leaving a genuinely stuck session on a bare spinner forever.
-  // Harmless no-op if it was never shown or is already gone by then — it
-  // only ever reveals the button, it never hides anything itself.
+  // (Re-)arms the ~10s Retry-button timer. Re-entrant: signing in again after
+  // an earlier attempt (e.g. Cancel then retry) clears any timer already
+  // ticking rather than stacking a second one.
+  _armLoadingRetryTimer() {
+    if (this._loadingRetryTimer) clearTimeout(this._loadingRetryTimer);
+    this._loadingRetryTimer = setTimeout(() => {
+      this._loadingRetryTimer = null;
+      if (!document.documentElement.classList.contains('booting-session')) return;
+      const retryBtn = document.getElementById('btn-loading-retry');
+      if (retryBtn) retryBtn.classList.remove('hidden');
+    }, 10000);
+  }
+
+  // Binds the Retry button's click handler once, and arms the timer for the
+  // pre-paint boot case (a returning session already has `booting-session`
+  // set by the time this constructor code runs). The post-sign-in case arms
+  // its own timer via _showLoadingScreen() instead.
   _initLoadingScreenRetry() {
     const retryBtn = document.getElementById('btn-loading-retry');
     if (!retryBtn) return;
@@ -282,34 +313,45 @@ class KalyanMitra {
       }
     });
 
-    setTimeout(() => {
-      if (document.documentElement.classList.contains('booting-session')) {
-        retryBtn.classList.remove('hidden');
-      }
-    }, 10000);
+    if (document.documentElement.classList.contains('booting-session')) {
+      this._armLoadingRetryTimer();
+    }
   }
 
   // ===== LANDING PAGE =====
   // A pure overlay on top of the existing flow — position:fixed above
   // #login-screen, dismissed by simply hiding it. init()'s auth state
-  // machine is never touched. Only signed-out visitors ever see this
-  // (index.html hides #landing-screen immediately, before paint, when a
-  // cached session exists), and for them showLoginScreen() has already run
-  // synchronously during construction — so by the time a tap is possible,
-  // the login card is already there to reveal.
+  // machine is never touched.
+  //
+  // Two ways to reach it, so setup is split in two:
+  //  - A signed-out visitor's very first load sees it already un-hidden in
+  //    the markup — _initLanding() (constructor time) sets it up then.
+  //  - logout() re-opens it later for a session whose landing was hidden
+  //    pre-paint (index.html's <head> script) and therefore never set up —
+  //    showLanding() calls the same idempotent worker on demand.
   _initLanding() {
     const landingEl = document.getElementById('landing-screen');
-    // Already hidden for a returning signed-in visitor (the inline script in
-    // index.html). Nothing to set up for a page nobody will see — and
-    // skipping this also means Auth.fetchStats() never fires concurrently
-    // with the critical google_login Sheets request on that path.
+    // Hidden pre-paint for a returning signed-in visitor. Nothing to set up
+    // for a page nobody will see yet — and skipping this also means
+    // Auth.fetchStats() never fires concurrently with the critical
+    // google_login Sheets request on that path. logout() calls
+    // _ensureLandingReady() directly if this page is ever needed later.
     if (!landingEl || landingEl.classList.contains('hidden')) return;
+    this._ensureLandingReady();
+  }
+
+  // The actual one-time setup, split out of _initLanding() so logout() can
+  // trigger it for a session that skipped it at construction. Guarded by
+  // _landingReady so calling it again (e.g. a second logout) is a no-op.
+  _ensureLandingReady() {
+    if (this._landingReady) return;
+    this._landingReady = true;
 
     document.querySelectorAll('.landing-cta').forEach(btn => {
       btn.addEventListener('click', () => this.dismissLanding());
     });
 
-    this._createParticles('landing-particles');
+    this._createParticles('landing-particles'); // already double-population guarded
     this._renderLandingNiyamGrid();
     this._loadLandingStats();
     this._setupLandingScrollEffects();
@@ -319,6 +361,31 @@ class KalyanMitra {
     const el = document.getElementById('landing-screen');
     if (el) el.classList.add('hidden');
     document.body.classList.remove('landing-open');
+    // A session that reached the landing via showLanding() (post-logout) may
+    // never have had showLoginScreen() run for it at construction time (it
+    // booted straight past the login screen into the dashboard). Calling it
+    // here guarantees the card underneath is always actually set up — it's
+    // safely re-entrant (_createParticles() is double-population guarded,
+    // and the sign-in button's handler is a plain `onclick` re-assignment).
+    this.showLoginScreen();
+  }
+
+  // The mirror of dismissLanding() — reopens the landing page for a session
+  // that already resolved past it once (used by logout()).
+  showLanding() {
+    const el = document.getElementById('landing-screen');
+    if (!el) return;
+    el.classList.remove('hidden');
+    document.body.classList.add('landing-open');
+    el.scrollTop = 0; // it scrolls internally; a prior visit may have left it mid-page
+    // Driven by the hero IntersectionObserver, which only fires on scroll
+    // changes — reset explicitly so a stale visible state isn't left over
+    // from before.
+    const sticky = document.getElementById('landing-sticky-cta');
+    if (sticky) sticky.classList.remove('is-visible');
+    // After un-hiding, so IntersectionObservers created inside register
+    // against an element that's actually laid out and scrollable.
+    this._ensureLandingReady();
   }
 
   // Populates the "What you can track" grid from NIYAM_STATS — the single
@@ -549,7 +616,20 @@ class KalyanMitra {
 
         const result = await Auth.signInWithGoogle();
 
-        if (!result.success) {
+        if (result.success) {
+          // Google itself has authenticated them; the Sheet round-trip that
+          // decides dashboard vs. registration is still in flight (handled
+          // by init()'s auth listener from here). Guard on #login-screen
+          // still being the visible screen: signInWithPopup resolving and
+          // Firebase's onAuthStateChanged firing aren't ordered against each
+          // other, so if a terminal state somehow already won that race and
+          // hid #login-screen, showing the loading screen now would strand
+          // it on top of the real destination instead of replacing this card.
+          const loginEl = document.getElementById('login-screen');
+          if (loginEl && !loginEl.classList.contains('hidden')) {
+            this._showLoadingScreen();
+          }
+        } else {
           errorEl.textContent = result.error;
           errorEl.classList.remove('hidden');
           errorEl.classList.add('show');
@@ -4853,6 +4933,11 @@ class KalyanMitra {
     // Clear error
     const loginErr = document.getElementById('login-error');
     if (loginErr) loginErr.classList.add('hidden');
+
+    // End on the landing page rather than the login card directly — the
+    // login card is still prepared underneath (just un-hidden above), ready
+    // for whenever the visitor taps through via the landing's footer CTA.
+    this.showLanding();
   }
 
   resetProgress() {
