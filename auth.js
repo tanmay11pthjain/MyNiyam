@@ -63,12 +63,13 @@ const Auth = (() => {
   }
 
   // Lists every profile under one Google account — Sheet is master (see
-  // handleGetProfiles in apps-script-additions.gs). Always returns at least
-  // a primary placeholder, even when the Sheet call fails or the primary
-  // hasn't registered yet (a brand-new account has no Sheet row at all), so
-  // the switcher/add-profile flow never has zero profiles to work with.
+  // handleGetProfiles in apps-script-additions.gs). Returns null on ANY
+  // failure (transport error, parse error, or the Sheet reporting
+  // success:false) — callers must treat that as "unknown", never as "this
+  // account has just one profile". A brand-new account with zero Sheet rows
+  // is still a genuine, successful answer (not a failure), so THAT case
+  // gets a primary placeholder rather than null.
   async function fetchProfiles(baseUid) {
-    const fallback = [{ profileId: baseUid, name: '', sanghCode: '', registered: false }];
     try {
       const text = await _sheetsRequest({ action: "get_profiles", baseUid });
       console.log("Profiles response:", text);
@@ -83,7 +84,9 @@ const Auth = (() => {
               registered: !!p.registered
             }))
             .filter(p => p.profileId);
-          if (profiles.length > 0) return profiles;
+          return profiles.length > 0
+            ? profiles
+            : [{ profileId: baseUid, name: '', sanghCode: '', registered: false }];
         }
       } catch (parseErr) {
         console.error("Failed to parse profiles response:", text);
@@ -91,7 +94,12 @@ const Auth = (() => {
     } catch (e) {
       console.error("Fetch profiles failed:", e);
     }
-    return fallback;
+    // A genuine failure. Returning null (not a fabricated single-profile
+    // list) is what stops app.js's _loadAccountProfiles() from treating a
+    // failed request as authoritative — feeding it a fallback that looks
+    // identical to a real "just the primary" account is what silently
+    // bounced a newly added, not-yet-registered profile back to the primary.
+    return null;
   }
 
   // ===== SHEETS TRANSPORT (fetch, with a JSONP fallback for CORS failures) =====
@@ -190,7 +198,14 @@ const Auth = (() => {
     _notifyListeners();
   }
 
-  async function _fetchRoleFromSheets(uid, email, name) {
+  // Single attempt against the Sheet. Returns the parsed shape on a genuine
+  // answer, or null on ANY failure (transport error, parse error, or the
+  // Sheet itself reporting success:false) — callers must never treat null
+  // as "not registered". Conflating "the request failed" with "this person
+  // hasn't registered" was a real bug: it sent a fully-registered user (whose
+  // Sheet row is perfectly intact) to the registration form, which would
+  // have overwritten that row on submit.
+  async function _tryFetchRoleFromSheets(uid, email, name) {
     try {
       const text = await _sheetsRequest({ action: "google_login", uid, email, name });
       console.log("Sheets login response:", text);
@@ -214,7 +229,82 @@ const Auth = (() => {
     } catch (e) {
       console.error("Sheets role fetch failed:", e);
     }
-    return { role: "user", sanghCodes: [], registered: false, profile: null };
+    return null;
+  }
+
+  // Retries a few times with a short delay so a single cold-start/network
+  // blip self-heals instead of being mistaken for "not registered". If every
+  // attempt fails, resolves registered: undefined — NEVER false. init()
+  // already treats undefined as "don't decide yet, keep waiting" (it's what
+  // a cached session uses while the fresh check is in flight), so this
+  // leaves an inconclusive lookup on the loading screen with its retry
+  // affordance, rather than routing a real user into a destructive
+  // registration form. google_login is a pure read (plus an idempotent
+  // UID-backfill write it already does at most once), so retrying it is safe.
+  async function _fetchRoleFromSheets(uid, email, name) {
+    const ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 1200;
+    for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+      const result = await _tryFetchRoleFromSheets(uid, email, name);
+      if (result) return result;
+      if (attempt < ATTEMPTS) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      }
+    }
+    console.error(`Sheets role fetch failed after ${ATTEMPTS} attempts — leaving registration status undetermined.`);
+    return { role: "user", sanghCodes: [], registered: undefined, profile: null };
+  }
+
+  // Resolves the active profile's role/registration for a signed-in Firebase
+  // user and publishes it as currentUser. Shared by init()'s auth-state
+  // listener and retryRoleCheck() (the loading screen's Retry button), so
+  // the two can never disagree on how a Firebase user becomes a MyNiyam
+  // session.
+  async function _resolveAndPublishUser(firebaseUser) {
+    const baseUid = firebaseUser.uid;
+    // Resolved locally, no network round-trip — see getActiveProfileId().
+    const activeProfileId = getActiveProfileId(baseUid);
+
+    // Fetch role and registration status from Sheets (master)
+    const { role, sanghCodes, registered, profile } = await _fetchRoleFromSheets(
+      activeProfileId,
+      firebaseUser.email,
+      firebaseUser.displayName || firebaseUser.email.split('@')[0]
+    );
+
+    currentUser = {
+      uid: activeProfileId,
+      baseUid: baseUid,
+      role: role,
+      // Prefer the Sheet's registered name for the active profile. Only
+      // fall back to the Google account's own display name for the
+      // PRIMARY profile before it has registered — exactly the
+      // single-profile behavior this app always had. A not-yet-
+      // registered ADDED profile must never borrow the Google
+      // account's (i.e. the parent's) display name.
+      name: (profile && profile.name) || (activeProfileId === baseUid
+        ? (firebaseUser.displayName || firebaseUser.email.split('@')[0])
+        : ''),
+      email: firebaseUser.email,
+      photoURL: firebaseUser.photoURL,
+      sanghCodes: sanghCodes,
+      registered: registered,
+      profile: profile
+    };
+
+    localStorage.setItem('myniyam_session', JSON.stringify(currentUser));
+    _notifyListeners();
+  }
+
+  // Manually re-runs the Sheet role/registration check for whichever
+  // Firebase user is currently signed in. Bound to the loading screen's
+  // Retry button, which only appears if _fetchRoleFromSheets's own internal
+  // attempts all failed. No-op if nobody is signed in (shouldn't happen
+  // while the loading screen is up, but defensive regardless).
+  async function retryRoleCheck() {
+    const firebaseUser = firebase.auth().currentUser;
+    if (!firebaseUser) return;
+    await _resolveAndPublishUser(firebaseUser);
   }
 
   // ===== INIT — Start Firebase auth listener =====
@@ -243,39 +333,7 @@ const Auth = (() => {
     // Firebase auth state listener
     _unsubFirebase = firebase.auth().onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
-        const baseUid = firebaseUser.uid;
-        // Resolved locally, no network round-trip — see getActiveProfileId().
-        const activeProfileId = getActiveProfileId(baseUid);
-
-        // User is signed in — fetch role and registration status from Sheets (master)
-        const { role, sanghCodes, registered, profile } = await _fetchRoleFromSheets(
-          activeProfileId,
-          firebaseUser.email,
-          firebaseUser.displayName || firebaseUser.email.split('@')[0]
-        );
-
-        currentUser = {
-          uid: activeProfileId,
-          baseUid: baseUid,
-          role: role,
-          // Prefer the Sheet's registered name for the active profile. Only
-          // fall back to the Google account's own display name for the
-          // PRIMARY profile before it has registered — exactly the
-          // single-profile behavior this app always had. A not-yet-
-          // registered ADDED profile must never borrow the Google
-          // account's (i.e. the parent's) display name.
-          name: (profile && profile.name) || (activeProfileId === baseUid
-            ? (firebaseUser.displayName || firebaseUser.email.split('@')[0])
-            : ''),
-          email: firebaseUser.email,
-          photoURL: firebaseUser.photoURL,
-          sanghCodes: sanghCodes,
-          registered: registered,
-          profile: profile
-        };
-
-        localStorage.setItem('myniyam_session', JSON.stringify(currentUser));
-        _notifyListeners();
+        await _resolveAndPublishUser(firebaseUser);
       } else {
         // User signed out
         if (currentUser) {
@@ -536,6 +594,7 @@ const Auth = (() => {
     setActiveProfile,
     getNextProfileId,
     fetchProfiles,
-    MAX_PROFILES
+    MAX_PROFILES,
+    retryRoleCheck
   };
 })();

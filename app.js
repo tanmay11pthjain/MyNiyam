@@ -236,6 +236,59 @@ class KalyanMitra {
     } catch (e) {
       console.error('Landing page setup failed (non-fatal):', e);
     }
+    try {
+      this._initLoadingScreenRetry();
+    } catch (e) {
+      console.error('Loading screen retry setup failed (non-fatal):', e);
+    }
+  }
+
+  // ===== LOADING SCREEN =====
+  // Hides #loading-screen — used by every terminal auth state (login,
+  // registration, dashboard, admin panel) alongside their own existing
+  // #login-screen show/hide logic, so the loading screen can never outlive
+  // whichever real destination replaces it.
+  _hideLoadingScreen() {
+    const el = document.getElementById('loading-screen');
+    if (el) el.classList.add('hidden');
+  }
+
+  // If #loading-screen (shown pre-paint by index.html's inline script for a
+  // returning session) is STILL visible ~10s after boot, reveals a Retry
+  // button rather than leaving a genuinely stuck session on a bare spinner
+  // forever. Harmless no-op if the loading screen was never shown or is
+  // already gone by then — it only ever reveals the button, it never hides
+  // anything itself.
+  _initLoadingScreenRetry() {
+    const retryBtn = document.getElementById('btn-loading-retry');
+    if (!retryBtn) return;
+
+    retryBtn.addEventListener('click', async () => {
+      retryBtn.disabled = true;
+      retryBtn.textContent = 'Retrying…';
+      try {
+        await Auth.retryRoleCheck();
+      } catch (e) {
+        // _fetchRoleFromSheets itself never throws, but the localStorage
+        // write inside _resolveAndPublishUser can (quota exceeded, private
+        // browsing, etc.) — caught here so the button can never get stuck
+        // disabled forever on that edge case.
+        console.error('Retry failed:', e);
+      } finally {
+        // A successful retry ends in one of the 4 terminal states, which
+        // already hides #loading-screen; if it's still visible, nothing
+        // new resolved, so restore the button for another try.
+        retryBtn.disabled = false;
+        retryBtn.textContent = 'Retry';
+      }
+    });
+
+    setTimeout(() => {
+      const loadingEl = document.getElementById('loading-screen');
+      if (loadingEl && !loadingEl.classList.contains('hidden')) {
+        retryBtn.classList.remove('hidden');
+      }
+    }, 10000);
   }
 
   // ===== LANDING PAGE =====
@@ -462,6 +515,7 @@ class KalyanMitra {
   }
 
   showLoginScreen() {
+    this._hideLoadingScreen();
     document.getElementById('login-screen').classList.remove('hidden');
     document.getElementById('register-screen').classList.add('hidden');
     document.getElementById('app').classList.add('app-hidden');
@@ -520,6 +574,7 @@ class KalyanMitra {
 
   // ===== REGISTRATION =====
   async showRegistrationForm(user) {
+    this._hideLoadingScreen();
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('register-screen').classList.remove('hidden');
     document.getElementById('app').classList.add('app-hidden');
@@ -825,6 +880,7 @@ class KalyanMitra {
     // #login-screen is hidden on this path (see init()'s callback), so a
     // gap between "login gone" and "dashboard visible" can't open up no
     // matter how long any of the above awaited.
+    this._hideLoadingScreen();
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('app-hidden');
     document.getElementById('app').classList.add('app-visible');
@@ -1052,12 +1108,17 @@ class KalyanMitra {
       console.warn('Failed to load cached account profiles:', e);
     }
 
-    let fresh;
-    try {
-      fresh = await Auth.fetchProfiles(baseUid);
-    } catch (e) {
-      console.warn('Failed to fetch account profiles from Sheet:', e);
-      return; // keep whatever was cached (or nothing) — never worse than before
+    const fresh = await Auth.fetchProfiles(baseUid); // never throws; null on any failure
+
+    if (!fresh) {
+      // Inconclusive — keep whatever was cached (or nothing), and do NOT
+      // mirror to Firebase or run the stillExists self-heal below. Treating
+      // a failed request as authoritative is exactly what silently bounced
+      // a newly added, not-yet-registered profile back to the primary
+      // before this fix: a failure used to look identical to "this account
+      // has just one profile".
+      console.warn('Could not confirm the account profile list from the Sheet — keeping the cached list.');
+      return;
     }
 
     this._accountProfiles = fresh;
@@ -1249,6 +1310,7 @@ class KalyanMitra {
     // The only place #login-screen is hidden on this path (see init()'s
     // callback) — done in the same breath as revealing the admin panel so
     // there is never a gap where neither is visible.
+    this._hideLoadingScreen();
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('admin-panel').classList.remove('hidden');
     document.getElementById('app').classList.add('app-hidden');

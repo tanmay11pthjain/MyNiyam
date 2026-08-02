@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=25">
+  <link rel="stylesheet" href="styles.css?v=26">
 </head>
 <body class="landing-open">
 
@@ -126,19 +126,49 @@
       <!-- <button class="landing-cta">🙏 Fill My Niyam</button> -->
     </div>
   </div>
+  <!-- ===== LOADING SCREEN ===== -->
+  <!-- Shown (by the inline script below) instead of the login card while a
+       cached session's role/registration is being re-verified against the
+       Sheet — hidden again by whichever of initUser() / initAdmin() /
+       showRegistrationForm() / showLoginScreen() turns out to be the real
+       destination (see _hideLoadingScreen() in app.js). The Retry button
+       only appears if that check is still unresolved after ~10s. -->
+  <div id="loading-screen" class="hidden">
+    <div class="login-bg-glow"></div>
+    <div class="loading-content">
+      <div class="login-lotus">
+        <div class="lotus-petal p1"></div>
+        <div class="lotus-petal p2"></div>
+        <div class="lotus-petal p3"></div>
+        <div class="lotus-petal p4"></div>
+        <div class="lotus-petal p5"></div>
+        <div class="lotus-petal p6"></div>
+        <div class="lotus-petal p7"></div>
+        <div class="lotus-petal p8"></div>
+        <div class="lotus-center"></div>
+      </div>
+      <div class="loading-spinner"></div>
+      <p class="loading-text">Loading your niyams…</p>
+      <button type="button" class="loading-retry-btn hidden" id="btn-loading-retry">Retry</button>
+    </div>
+  </div>
+
   <script>
-    // Skip the landing entirely for a returning signed-in visitor — runs
-    // synchronously during parse, before the landing can paint, so there is
-    // no flash of it. 'myniyam_session' is the exact key Auth.init() reads
-    // (auth.js) to restore a cached session, so this agrees with what auth
-    // is about to do. Wrapped in try/catch: if storage is blocked, the
-    // landing simply shows, which is harmless.
+    // Skip the landing entirely for a returning signed-in visitor, and show
+    // the loading screen instead of the login card — runs synchronously
+    // during parse, before either can paint, so there is no flash of them.
+    // 'myniyam_session' is the exact key Auth.init() reads (auth.js) to
+    // restore a cached session, so this agrees with what auth is about to
+    // do. Wrapped in try/catch: if storage is blocked, the landing and
+    // login card simply show normally, which is harmless.
     try {
       if (localStorage.getItem('myniyam_session')) {
         document.getElementById('landing-screen').classList.add('hidden');
         document.body.classList.remove('landing-open');
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('loading-screen').classList.remove('hidden');
       }
-    } catch (e) { /* localStorage unavailable — show the landing */ }
+    } catch (e) { /* localStorage unavailable — show the landing/login normally */ }
   </script>
 
   <!-- Persistent database-error warning — see _showDbErrorBanner() in app.js.
@@ -1069,8 +1099,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=38"></script>
-  <script src="auth.js?v=38"></script>
-  <script src="app.js?v=38"></script>
+  <script src="data.js?v=39"></script>
+  <script src="auth.js?v=39"></script>
+  <script src="app.js?v=39"></script>
 </body>
 </html>
