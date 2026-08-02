@@ -471,7 +471,13 @@ body {
    and _hideLoadingScreen() in app.js
    ============================================================ */
 
+/* Hidden by default — only html.booting-session (set pre-paint by the
+   <head> script in index.html, cleared by _hideLoadingScreen() in app.js)
+   turns it on. This one class is the single source of truth for whether a
+   returning session is still resolving; #login-screen/#landing-screen have
+   no `hidden` class of their own to fight with it. */
 #loading-screen {
+  display: none;
   position: fixed;
   inset: 0;
   z-index: 1000;
@@ -479,10 +485,18 @@ body {
   background-image:
     radial-gradient(ellipse at 50% 40%, rgba(232, 114, 42, 0.08) 0%, transparent 60%),
     linear-gradient(165deg, #1a0f0a 0%, #2a1a10 40%, #1a0f0a 100%);
-  display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
+}
+
+html.booting-session #landing-screen,
+html.booting-session #login-screen {
+  display: none !important;
+}
+
+html.booting-session #loading-screen {
+  display: flex;
 }
 
 .loading-content {

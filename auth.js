@@ -6,6 +6,11 @@ const Auth = (() => {
   let currentUser = null;
   let authListeners = [];
   let _unsubFirebase = null;
+  // False until Firebase's onAuthStateChanged fires for the first time (it
+  // always fires at least once on load, with either a restored user or
+  // null). app.js uses this to tell "genuinely signed out" apart from
+  // "Firebase hasn't answered yet" while a returning session is booting.
+  let _firebaseAuthResolved = false;
 
   // ===== MULTI-PROFILE IDENTITY =====
   // One Google account can have up to MAX_PROFILES separate MyNiyam members
@@ -332,17 +337,28 @@ const Auth = (() => {
 
     // Firebase auth state listener
     _unsubFirebase = firebase.auth().onAuthStateChanged(async (firebaseUser) => {
+      _firebaseAuthResolved = true;
       if (firebaseUser) {
         await _resolveAndPublishUser(firebaseUser);
       } else {
-        // User signed out
-        if (currentUser) {
-          currentUser = null;
-          localStorage.removeItem('myniyam_session');
-          _notifyListeners();
-        }
+        // User signed out (or never was) — always notify, even if
+        // currentUser was already null. A boot with no cached session still
+        // needs this resolution to reach app.js so it can stop waiting and
+        // show the login card; silently doing nothing here (the old
+        // `if (currentUser)` guard) left a real signed-out visitor stuck
+        // once app.js started waiting for a definitive answer.
+        const wasSignedIn = !!currentUser;
+        currentUser = null;
+        if (wasSignedIn) localStorage.removeItem('myniyam_session');
+        _notifyListeners();
       }
     });
+  }
+
+  // True once Firebase's onAuthStateChanged has fired at least once — see
+  // _firebaseAuthResolved above.
+  function isAuthResolved() {
+    return _firebaseAuthResolved;
   }
 
   // ===== AUTH STATE LISTENER =====
@@ -579,6 +595,7 @@ const Auth = (() => {
     signInWithGoogle,
     signOut,
     onAuthStateChanged,
+    isAuthResolved,
     getCurrentUser,
     sendRegistration,
     fetchSanghs,

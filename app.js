@@ -244,21 +244,20 @@ class KalyanMitra {
   }
 
   // ===== LOADING SCREEN =====
-  // Hides #loading-screen — used by every terminal auth state (login,
-  // registration, dashboard, admin panel) alongside their own existing
-  // #login-screen show/hide logic, so the loading screen can never outlive
-  // whichever real destination replaces it.
+  // Removing this one class atomically hides #loading-screen AND lifts the
+  // CSS override that was forcing #login-screen/#landing-screen hidden (see
+  // styles.css's `html.booting-session` rules) — so there's never a gap
+  // where none of the three are visible, no matter which of the 4 terminal
+  // auth states (login, registration, dashboard, admin panel) triggers it.
   _hideLoadingScreen() {
-    const el = document.getElementById('loading-screen');
-    if (el) el.classList.add('hidden');
+    document.documentElement.classList.remove('booting-session');
   }
 
-  // If #loading-screen (shown pre-paint by index.html's inline script for a
-  // returning session) is STILL visible ~10s after boot, reveals a Retry
-  // button rather than leaving a genuinely stuck session on a bare spinner
-  // forever. Harmless no-op if the loading screen was never shown or is
-  // already gone by then — it only ever reveals the button, it never hides
-  // anything itself.
+  // If the loading screen (shown pre-paint by index.html's <head> script for
+  // a returning session) is STILL up ~10s after boot, reveals a Retry button
+  // rather than leaving a genuinely stuck session on a bare spinner forever.
+  // Harmless no-op if it was never shown or is already gone by then — it
+  // only ever reveals the button, it never hides anything itself.
   _initLoadingScreenRetry() {
     const retryBtn = document.getElementById('btn-loading-retry');
     if (!retryBtn) return;
@@ -276,16 +275,15 @@ class KalyanMitra {
         console.error('Retry failed:', e);
       } finally {
         // A successful retry ends in one of the 4 terminal states, which
-        // already hides #loading-screen; if it's still visible, nothing
-        // new resolved, so restore the button for another try.
+        // already hides the loading screen; if it's still up, nothing new
+        // resolved, so restore the button for another try.
         retryBtn.disabled = false;
         retryBtn.textContent = 'Retry';
       }
     });
 
     setTimeout(() => {
-      const loadingEl = document.getElementById('loading-screen');
-      if (loadingEl && !loadingEl.classList.contains('hidden')) {
+      if (document.documentElement.classList.contains('booting-session')) {
         retryBtn.classList.remove('hidden');
       }
     }, 10000);
@@ -488,12 +486,13 @@ class KalyanMitra {
           // or undefined (cached session — wait for fresh Sheet response)
           if (user.registered === undefined) {
             // Cached session — the fresh Sheet response hasn't arrived yet.
-            // #login-screen is deliberately left showing here — see
+            // The loading screen is deliberately left showing here — see
             // initUser() / initAdmin() / showRegistrationForm(), which are
-            // now the ONLY places that ever hide it, each doing so in the
-            // same breath as revealing their own screen. That makes a blank
-            // gap between "login gone" and "something visible" structurally
-            // impossible, no matter how long any awaited call takes.
+            // now the ONLY places that ever call _hideLoadingScreen(), each
+            // doing so in the same breath as revealing their own screen.
+            // That makes a blank gap between "loading gone" and "something
+            // visible" structurally impossible, no matter how long any
+            // awaited call takes.
             return;
           }
           if (user.registered) {
@@ -509,6 +508,20 @@ class KalyanMitra {
       } else {
         this._userInitDone = false;
         this._adminInitDone = false;
+        // `user` is null both for a genuinely signed-out visitor AND for a
+        // returning session before Firebase's own onAuthStateChanged has
+        // fired for the first time (auth.js registers this callback and
+        // invokes it immediately with whatever currentUser already is,
+        // which for a Firebase-only session — no cached myniyam_session —
+        // is still null at that instant). Only wait in the latter case: a
+        // brand-new visitor (booting-session never set) must still get
+        // showLoginScreen() synchronously here, since _initLanding() (see
+        // below) relies on it having already run by the time a landing tap
+        // is possible.
+        if (!Auth.isAuthResolved() &&
+            document.documentElement.classList.contains('booting-session')) {
+          return;
+        }
         this.showLoginScreen();
       }
     });
@@ -4831,6 +4844,7 @@ class KalyanMitra {
     }
 
     // Reset UI
+    this._hideLoadingScreen(); // no-op if it wasn't showing — cheap guarantee
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('app').classList.remove('app-visible');
     document.getElementById('admin-panel').classList.add('hidden');
