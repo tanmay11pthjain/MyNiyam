@@ -998,12 +998,26 @@ class KalyanMitra {
     // dashboard on a geolocation prompt or a network round-trip.
     this.fetchGeolocationAndPanchang();
     this.grantDailyLogin();
-    this.renderDashboard();
-    this.renderAchievements();
+
+    // Interactive setup first — never gated on a render succeeding.
+    // setupUserEventListeners() only touches static markup that exists from
+    // page load and is already individually null-guarded, and
+    // startAutoLockCheck() just registers an interval — neither depends on
+    // any render having run.
     this.setupUserEventListeners();
     this.startAutoLockCheck();
-    this.checkStreakWarning();
-    this.renderUserHeaderBrand();
+
+    // Rendering is best-effort from here: one failure (e.g. a stray null
+    // reference) must never take the rest of the dashboard — or the
+    // listeners just bound above — down with it.
+    try {
+      this.renderDashboard();
+      this.renderAchievements();
+      this.checkStreakWarning();
+      this.renderUserHeaderBrand();
+    } catch (e) {
+      console.error('Dashboard render failed (UI stays interactive):', e);
+    }
     // Not awaited: a one-time check (guarded by localStorage) for
     // already-registered users with no profile photo yet.
     this._maybePromptForPhoto();
@@ -2581,16 +2595,26 @@ class KalyanMitra {
   }
 
   renderHeader() {
-    document.getElementById('karma-points').textContent = `${this._computeDailyAP()} AP`;
+    const kpEl = document.getElementById('karma-points');
+    if (kpEl) kpEl.textContent = `${this._computeDailyAP()} AP`;
 
-    document.getElementById('streak-count').textContent = this.profile.currentStreak;
-    const flame = document.getElementById('streak-flame');
-    const s = this.profile.currentStreak;
-    if (s >= 30) flame.textContent = '✨🔥✨';
-    else if (s >= 14) flame.textContent = '🔥🔥🔥';
-    else if (s >= 7) flame.textContent = '🔥🔥';
-    else if (s >= 3) flame.textContent = '🔥';
-    else flame.textContent = '🕯️';
+    // The streak display is currently commented out of index.html, so these
+    // are null. Every write must stay guarded: unguarded, this threw and
+    // aborted renderDashboard() → initUser() before setupUserEventListeners()
+    // ever ran, which is why not a single dashboard button responded.
+    const countEl = document.getElementById('streak-count');
+    const flameEl = document.getElementById('streak-flame');
+    if (!countEl && !flameEl) return;
+
+    const s = (this.profile && this.profile.currentStreak) || 0;
+    if (countEl) countEl.textContent = s;
+    if (flameEl) {
+      if (s >= 30) flameEl.textContent = '✨🔥✨';
+      else if (s >= 14) flameEl.textContent = '🔥🔥🔥';
+      else if (s >= 7) flameEl.textContent = '🔥🔥';
+      else if (s >= 3) flameEl.textContent = '🔥';
+      else flameEl.textContent = '🕯️';
+    }
   }
 
   renderActivities() {

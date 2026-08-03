@@ -1023,18 +1023,22 @@ body.landing-open {
   margin: 0 auto;
   position: relative;
   min-height: 100dvh;
-  transition: opacity 0.5s ease, transform 0.5s ease;
+  transition: opacity 0.5s ease;
 }
 
+/* No `transform` here (even translateY(0) counts) — ANY transform value on
+   #app makes it the containing block for #bottom-nav's `position: fixed`,
+   pinning the nav to the bottom of #app's own (possibly page-length) box
+   instead of the viewport. That was the bug: the nav only appeared after
+   scrolling all the way down. Opacity alone still gives a fade transition
+   with none of that side effect. */
 .app-hidden {
   opacity: 0;
-  transform: translateY(20px);
   pointer-events: none;
 }
 
 .app-visible {
   opacity: 1 !important;
-  transform: translateY(0) !important;
   pointer-events: auto !important;
 }
 
