@@ -214,6 +214,35 @@ function registerNiyams() {
 }
 registerNiyams();
 
+// ===== ANDROID BACK BUTTON — overlay-close + tab-step navigation =====
+// Every overlay id this app has, mapped to its dedicated close method (see
+// each overlay's own open*/close* pair, e.g. openDayDetail()/closeDayDetail()
+// near line 4900). The back button and Escape both route through this map so
+// they always run the SAME cleanup a ✕ click would (clearing
+// _openDayDetailKey, chaining to the next badge, etc.) — never just a bare
+// hide. An id missing here, or whose method no longer exists, falls back to
+// a direct hide in _navCloseOverlayById() rather than throwing.
+const OVERLAY_CLOSERS = {
+  'day-detail-overlay': 'closeDayDetail',
+  'day-edit-overlay': 'closeDayEdit',
+  'badge-unlock-overlay': 'closeBadgeUnlock',
+  'submit-confirm-overlay': 'closeSubmitConfirm',
+  'sangh-transfer-overlay': 'closeSanghTransferNotice',
+  'photo-prompt-overlay': 'closePhotoPromptOverlay',
+  'profile-switcher-overlay': 'closeProfileSwitcher',
+  'export-overlay': 'closeExportDialog',
+  'poster-overlay': 'closePosterOverlay',
+  'niyam-stats-overlay': 'closeNiyamStats',
+  'evening-summary-overlay': 'closeEveningSummary',
+};
+
+// The only tab names switchTab()/switchAdminTab() may ever act on — a
+// history entry's `tab` field could in principle be anything (a stale entry
+// from a future version, a foreign one), so back-driven tab switching
+// (_navSwitchToTab()) checks against these before touching the DOM at all.
+const USER_TABS = ['home', 'history', 'achievements', 'profile'];
+const ADMIN_TABS = ['admin-leaderboard', 'admin-settings', 'admin-progress', 'admin-lock'];
+
 // ===== SUN TIMES — pure NOAA/Meeus solar calculation =====
 // No DOM, no network, no class state — takes lat/lng/elevation/date/timezone
 // and returns real Date objects (UTC instants). Returning Date rather than a
@@ -321,6 +350,8 @@ class KalyanMitra {
     this._landingStatsAnimated = false;
     this._landingReady = false; // set by _ensureLandingReady() — guards it against re-entry
     this._loadingRetryTimer = null;
+    this._openOverlayStack = []; // overlay ids currently open, most-recently-opened last
+    this._navHandlingPop = false; // true only while _navOnPopState() itself is running
     // init() is the critical path (auth) and must start first, unconditionally.
     // _initLanding() is purely decorative — wrapped so any exception in it can
     // never prevent auth from running.
@@ -335,6 +366,152 @@ class KalyanMitra {
     } catch (e) {
       console.error('Loading screen retry setup failed (non-fatal):', e);
     }
+    try {
+      this._initNavHistory();
+    } catch (e) {
+      console.error('Back-button navigation setup failed (non-fatal):', e);
+    }
+  }
+
+  // ===== ANDROID BACK BUTTON / BROWSER HISTORY =====
+  // Makes the phone's back button (and Escape, for free) close the topmost
+  // open overlay, and once nothing is open, step back through the bottom-nav
+  // tabs before finally leaving the app. See OVERLAY_CLOSERS above for the
+  // full list this covers.
+  //
+  // Deliberately watches the DOM instead of editing any of the 11 existing
+  // open*/close* pairs: a MutationObserver on each .overlay's `class`
+  // attribute is the single place that decides "did an overlay just open or
+  // close", so every overlay — including any added later — is covered
+  // automatically and none of their current logic is touched.
+  //
+  // The one thing this design has to get right is that history.back() is
+  // ASYNCHRONOUS — its popstate arrives later, not in the same call stack.
+  // _navHandlingPop is what keeps the two directions from fighting each
+  // other:
+  //   - Back press: _navOnPopState() sets the flag, closes the overlay
+  //     (mutating its class), then clears the flag on a setTimeout(0) —
+  //     after the MutationObserver's own microtask has already run and seen
+  //     the flag still set, so it knows this close's history entry was
+  //     already consumed by the pop and does NOT call history.back() again.
+  //   - ✕ / Cancel / programmatic close: the flag is clear when the
+  //     MutationObserver sees it, so it calls history.back() itself to
+  //     consume the entry that opening the overlay had pushed — keeping
+  //     history and the UI in step either way.
+  _initNavHistory() {
+    const overlayEls = document.querySelectorAll('.overlay');
+    if (overlayEls.length === 0) return;
+
+    const observer = new MutationObserver(mutations => {
+      mutations.forEach(m => this._navHandleOverlayMutation(m.target));
+    });
+    overlayEls.forEach(el => {
+      if (el.id) observer.observe(el, { attributes: true, attributeFilter: ['class'] });
+    });
+    this._overlayObserver = observer;
+
+    window.addEventListener('popstate', e => this._navOnPopState(e));
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') this._navCloseTopOverlay();
+    });
+  }
+
+  // The single MutationObserver callback — decides whether an overlay just
+  // opened or closed by diffing against _openOverlayStack (not by re-reading
+  // the class list, which by now only reflects the NEW state).
+  _navHandleOverlayMutation(el) {
+    const id = el && el.id;
+    if (!id) return;
+    const isOpen = el.classList.contains('show');
+    const stackIdx = this._openOverlayStack.indexOf(id);
+    const wasOpen = stackIdx !== -1;
+    if (isOpen === wasOpen) return; // no real open/close transition (e.g. an unrelated class toggled)
+
+    if (isOpen) {
+      this._openOverlayStack.push(id);
+      if (!this._navHandlingPop) {
+        history.pushState({ tab: this._navCurrentTab(), overlay: id }, '');
+      }
+    } else {
+      this._openOverlayStack.splice(stackIdx, 1);
+      if (!this._navHandlingPop) {
+        // Consumes the entry this overlay's open pushed, so a ✕/Cancel/
+        // programmatic close leaves history exactly where a real back press
+        // would have. Never fires from inside _navOnPopState() itself
+        // (_navHandlingPop is true there), which is what stops this from
+        // recursing into another pop.
+        history.back();
+      }
+    }
+  }
+
+  // The sole popstate handler: close the topmost overlay if one is open,
+  // otherwise step to whichever tab the entry we just landed on names.
+  _navOnPopState(e) {
+    this._navHandlingPop = true;
+    try {
+      if (this._openOverlayStack.length > 0) {
+        const topId = this._openOverlayStack[this._openOverlayStack.length - 1];
+        this._navCloseOverlayById(topId);
+      } else {
+        const tab = e.state && typeof e.state.tab === 'string' ? e.state.tab : null;
+        if (tab) this._navSwitchToTab(tab);
+      }
+    } finally {
+      // Cleared on the next macrotask — after the MutationObserver's
+      // microtask (queued by the classList change _navCloseOverlayById()
+      // just made) has already run and read the flag as still true.
+      setTimeout(() => { this._navHandlingPop = false; }, 0);
+    }
+  }
+
+  // Runs an overlay's real close method (so its own cleanup — clearing
+  // _openDayDetailKey, chaining to the next badge, etc. — always happens),
+  // falling back to a direct hide if the id isn't registered or its method
+  // is missing, so back can never throw even for a future overlay someone
+  // forgets to add to OVERLAY_CLOSERS.
+  _navCloseOverlayById(id) {
+    const methodName = OVERLAY_CLOSERS[id];
+    const method = methodName ? this[methodName] : null;
+    if (typeof method === 'function') {
+      method.call(this);
+    } else {
+      const el = document.getElementById(id);
+      if (el) { el.classList.remove('show'); el.classList.add('hidden'); }
+    }
+  }
+
+  // Escape's handler — same effect as clicking that overlay's own ✕, so it
+  // goes through the ordinary (non-pop) close path and lets the
+  // MutationObserver consume the history entry itself.
+  _navCloseTopOverlay() {
+    if (this._openOverlayStack.length === 0) return;
+    this._navCloseOverlayById(this._openOverlayStack[this._openOverlayStack.length - 1]);
+  }
+
+  // Only ever called with a name already checked against USER_TABS/ADMIN_TABS
+  // — still re-validated here (not just at the call site) so this can never
+  // be the one place that regresses if it's ever called from somewhere else
+  // later. switchTab()/switchAdminTab() have their own null guards besides.
+  _navSwitchToTab(tab) {
+    if (USER_TABS.includes(tab)) this.switchTab(tab);
+    else if (ADMIN_TABS.includes(tab)) this.switchAdminTab(tab);
+  }
+
+  // Identifies the currently-visible tab so an overlay opened from it pushes
+  // a history entry that returns here — mirrors the exact id scheme
+  // switchTab()/switchAdminTab() already use (`tab-<name>` /
+  // `admin-tab-<name minus its "admin-" prefix>`). Falls back to 'home' if
+  // neither tab set has an .active element yet (e.g. an overlay somehow
+  // opens before the dashboard has revealed).
+  _navCurrentTab() {
+    const userActive = document.querySelector('#app .tab-content.active');
+    if (userActive && userActive.id.startsWith('tab-')) return userActive.id.slice(4);
+    const adminActive = document.querySelector('.admin-tab-content.active');
+    if (adminActive && adminActive.id.startsWith('admin-tab-')) {
+      return 'admin-' + adminActive.id.slice('admin-tab-'.length);
+    }
+    return 'home';
   }
 
   // ===== LOADING SCREEN =====
@@ -1070,6 +1247,11 @@ class KalyanMitra {
     document.getElementById('app').classList.remove('app-hidden');
     document.getElementById('app').classList.add('app-visible');
     document.getElementById('admin-panel').classList.add('hidden');
+    // Establishes the root history entry (see _initNavHistory()) — the
+    // dashboard's default tab, matching the "active" class index.html
+    // already ships tab-home with. Back from here leaves the app, exactly
+    // like today, rather than being trapped inside history navigation.
+    history.replaceState({ tab: 'home', overlay: null }, '');
     this._showDbErrorBanner(failedPaths);
 
     // Sheet is the master: sync every load (piggybacked on the login response
@@ -1527,6 +1709,10 @@ class KalyanMitra {
     document.getElementById('admin-panel').classList.remove('hidden');
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('app').classList.remove('app-visible');
+    // Establishes the root history entry (see _initNavHistory()) — matches
+    // the "active" class index.html already ships admin-tab-leaderboard
+    // with. Back from here leaves the app rather than being trapped.
+    history.replaceState({ tab: 'admin-leaderboard', overlay: null }, '');
 
     // Setup Admin Event Listeners (Tabs, Logout, etc.)
     this.setupAdminEventListeners();
@@ -2264,7 +2450,14 @@ class KalyanMitra {
 
     // Navigation
     document.querySelectorAll('#bottom-nav .nav-item').forEach(btn => {
-      btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
+      btn.addEventListener('click', () => {
+        this.switchTab(btn.dataset.tab);
+        // A genuine tab-nav click is back-navigable — unlike switchTab()'s
+        // own replaceState (which just keeps history.state.tab truthful for
+        // every OTHER caller), this adds a real entry so the back button can
+        // step through tabs (see _navOnPopState()).
+        history.pushState({ tab: btn.dataset.tab, overlay: null }, '');
+      });
     });
 
     // History month navigation
@@ -2349,7 +2542,10 @@ class KalyanMitra {
   setupAdminEventListeners() {
     // Admin nav
     document.querySelectorAll('#admin-bottom-nav .nav-item').forEach(btn => {
-      btn.addEventListener('click', () => this.switchAdminTab(btn.dataset.tab));
+      btn.addEventListener('click', () => {
+        this.switchAdminTab(btn.dataset.tab);
+        history.pushState({ tab: btn.dataset.tab, overlay: null }, '');
+      });
     });
 
     // Save settings
@@ -5167,24 +5363,40 @@ class KalyanMitra {
   }
 
   // ===== NAVIGATION =====
+  // Guarded against an unrecognized tabName (e.g. a stale/foreign back-
+  // button history entry routed through _navSwitchToTab()) — never throws,
+  // just leaves the current tab showing.
   switchTab(tabName) {
+    const tabEl = document.getElementById(`tab-${tabName}`);
+    const navEl = document.querySelector(`#bottom-nav .nav-item[data-tab="${tabName}"]`);
+    if (!tabEl || !navEl) return;
     document.querySelectorAll('#app .tab-content').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('#bottom-nav .nav-item').forEach(n => n.classList.remove('active'));
-    document.getElementById(`tab-${tabName}`).classList.add('active');
-    document.querySelector(`#bottom-nav .nav-item[data-tab="${tabName}"]`).classList.add('active');
+    tabEl.classList.add('active');
+    navEl.classList.add('active');
     if (tabName === 'achievements') this.renderAchievements();
     if (tabName === 'history') this.renderHistory();
     if (tabName === 'profile') this.renderProfile();
+    // Keeps history.state.tab truthful for every caller that isn't a nav
+    // button click (that path pushes its own entry — see
+    // setupUserEventListeners()) — e.g. goToProfileFromPhotoPrompt() — so
+    // back-driven tab switching (_navSwitchToTab()) never reads a stale tab.
+    // A plain in-place update, never a new entry.
+    history.replaceState({ tab: tabName, overlay: null }, '');
   }
 
   switchAdminTab(tabName) {
+    const tabEl = document.getElementById(`admin-tab-${tabName.replace('admin-', '')}`);
+    const navEl = document.querySelector(`#admin-bottom-nav .nav-item[data-tab="${tabName}"]`);
+    if (!tabEl || !navEl) return;
     document.querySelectorAll('.admin-tab-content').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('#admin-bottom-nav .nav-item').forEach(n => n.classList.remove('active'));
-    document.getElementById(`admin-tab-${tabName.replace('admin-', '')}`).classList.add('active');
-    document.querySelector(`#admin-bottom-nav .nav-item[data-tab="${tabName}"]`).classList.add('active');
+    tabEl.classList.add('active');
+    navEl.classList.add('active');
     if (tabName === 'admin-progress') this.renderAdminProgress();
     if (tabName === 'admin-lock') this.renderAdminLock();
     if (tabName === 'admin-leaderboard') this.renderAdminLeaderboard();
+    history.replaceState({ tab: tabName, overlay: null }, '');
   }
 
   // ===== ADMIN FUNCTIONS =====
