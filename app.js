@@ -30,7 +30,7 @@ const RAW_POINT_RULES = [
   { label: 'Wake < 7AM', points: log => log.wakeUpDone ? POINTS.wakeUpEarly : 0 },
   { label: 'Sleep < 12AM', points: log => log.sleepDone ? POINTS.sleepEarly : 0 },
   { label: 'Pranam', points: log => log.pranamDone ? POINTS.pranam : 0 },
-  { label: 'Pooja', points: log => log.poojaDone ? POINTS.pooja : 0 },
+  { label: 'Jin Pooja', points: log => log.poojaDone ? POINTS.pooja : 0 },
   { label: 'Samayik', points: log => (log.samayikDone || 0) * POINTS.samayik },
   { label: 'Devasiya', points: log => log.devasiyaDone ? POINTS.devasiya : 0 },
   { label: 'Raysiya', points: log => log.raysiyaDone ? POINTS.raysiya : 0 },
@@ -59,7 +59,7 @@ const DAY_EDIT_FIELDS = [
   { key: 'enableWakeup', prop: 'wakeUpDone', icon: '⏰', label: 'Wake < 7AM', type: 'toggle' },
   { key: 'enableSleep', prop: 'sleepDone', icon: '🌙', label: 'Sleep < 12AM', type: 'toggle' },
   { key: 'enablePranam', prop: 'pranamDone', icon: '🙇', label: 'Pranam', type: 'toggle' },
-  { key: 'enablePooja', prop: 'poojaDone', icon: '🪔', label: 'Pooja', type: 'toggle' },
+  { key: 'enablePooja', prop: 'poojaDone', icon: '🪔', label: 'Jin Pooja', type: 'toggle' },
   { key: 'enablePooja', prop: 'ashtaPrakariDone', icon: '🍽️', label: 'Ashta Prakari', type: 'toggle', dependsOn: 'poojaDone' },
   { key: 'enableSamayik', prop: 'samayikDone', icon: '🧘', label: 'Samayik', type: 'counter', step: 1 },
   { key: 'enablePratikraman', prop: 'devasiyaDone', icon: '🌅', label: 'Devasiya', type: 'toggle' },
@@ -88,7 +88,7 @@ const NIYAM_STATS = [
   { flag: 'enableWakeup', icon: '⏰', label: 'Wake < 7AM', countsDay: log => !!log.wakeUpDone },
   { flag: 'enableSleep', icon: '🌙', label: 'Sleep < 12AM', countsDay: log => !!log.sleepDone },
   { flag: 'enablePranam', icon: '🙇', label: 'Pranam', countsDay: log => !!log.pranamDone },
-  { flag: 'enablePooja', icon: '🪔', label: 'Pooja', countsDay: log => !!log.poojaDone },
+  { flag: 'enablePooja', icon: '🪔', label: 'Jin Pooja', countsDay: log => !!log.poojaDone },
   {
     flag: 'enableSamayik', icon: '🧘', label: 'Samayik', exportUnit: 'times',
     countsDay: (log, s) => (log.samayikDone || 0) >= parseInt((s && s.samayikTarget) || 1, 10),
@@ -121,6 +121,98 @@ const NIYAM_STATS = [
     }
   },
 ];
+
+// ===== NIYAM REGISTRY — derive every wiring from NIYAM_REGISTRY (data.js) =====
+// Registering a niyam there makes it participate in scoring (RAW_POINT_RULES),
+// the streak-saver day-edit overlay (DAY_EDIT_FIELDS), and Monthly Niyam
+// Stats / the lifetime grid / the Excel export (NIYAM_STATS) — all three
+// consumers already iterate these arrays generically, so pushing an ordinary
+// entry into each is enough; none of those consumers need to change. This
+// function ONLY derives into module-level data; it never touches the DOM —
+// card rendering is _renderRegistryCards() (KalyanMitra.prototype), a
+// separate step run once per dashboard load.
+//
+// Validation is strict and non-fatal: a malformed entry is logged and
+// skipped rather than thrown. A single typo'd registry entry silently taking
+// down the whole dashboard is exactly the outage class this guards against
+// (see renderHeader()'s history with the removed streak markup) — every
+// entry here is independently either fully wired or fully ignored.
+function registerNiyams() {
+  const usedIds = new Set();
+  const usedProps = new Set(Object.keys(DEFAULT_DAILY_LOG));
+  const ID_RE = /^[a-zA-Z][a-zA-Z0-9]*$/;
+  const PROP_RE = /^[a-zA-Z][a-zA-Z0-9]*Done$/;
+  const LAYOUTS = ['simple', 'dual', 'dependent', 'exclusive'];
+  const SECTIONS = ['bhakti', 'aachar'];
+
+  (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
+    try {
+      if (!entry || typeof entry !== 'object') throw new Error('entry is not an object');
+      if (!ID_RE.test(entry.id || '')) throw new Error(`invalid id "${entry.id}"`);
+      if (usedIds.has(entry.id)) throw new Error(`duplicate id "${entry.id}"`);
+      if (!SECTIONS.includes(entry.section)) throw new Error(`invalid section "${entry.section}"`);
+      if (!LAYOUTS.includes(entry.layout)) throw new Error(`invalid layout "${entry.layout}"`);
+      if (!Array.isArray(entry.items) || entry.items.length === 0) throw new Error('items must be a non-empty array');
+      if ((entry.layout === 'dual' || entry.layout === 'exclusive' || entry.layout === 'dependent') && entry.items.length !== 2) {
+        throw new Error(`layout "${entry.layout}" requires exactly 2 items`);
+      }
+      if (entry.layout === 'simple' && entry.items.length !== 1) {
+        throw new Error('layout "simple" requires exactly 1 item');
+      }
+
+      const seenPropsThisEntry = new Set();
+      entry.items.forEach(item => {
+        if (!item || typeof item !== 'object') throw new Error('item is not an object');
+        if (!PROP_RE.test(item.prop || '')) throw new Error(`invalid prop "${item.prop}"`);
+        if (usedProps.has(item.prop)) throw new Error(`duplicate/reserved prop "${item.prop}"`);
+        if (!item.label) throw new Error(`missing label for "${item.prop}"`);
+        if (!Number.isFinite(item.points) || item.points <= 0) throw new Error(`invalid points for "${item.prop}"`);
+        seenPropsThisEntry.add(item.prop);
+      });
+      if (entry.layout === 'dependent') {
+        const child = entry.items[1];
+        if (!child.dependsOn || child.dependsOn !== entry.items[0].prop) {
+          throw new Error(`layout "dependent" requires items[1].dependsOn === items[0].prop`);
+        }
+      }
+
+      // All validated — commit this entry's derived wiring. Nothing above
+      // this line has mutated shared state, so a thrown entry leaves no
+      // partial trace in any catalog.
+      usedIds.add(entry.id);
+      seenPropsThisEntry.forEach(p => usedProps.add(p));
+      entry.flag = 'enable' + entry.id.charAt(0).toUpperCase() + entry.id.slice(1);
+
+      entry.items.forEach(item => {
+        DEFAULT_DAILY_LOG[item.prop] = false;
+
+        RAW_POINT_RULES.push({
+          label: item.label,
+          points: log => {
+            if (!log[item.prop]) return 0;
+            if (item.dependsOn && !log[item.dependsOn]) return 0;
+            return item.points;
+          }
+        });
+
+        DAY_EDIT_FIELDS.push({
+          key: entry.flag, prop: item.prop, icon: item.icon || entry.icon,
+          label: item.label, type: 'toggle', dependsOn: item.dependsOn
+        });
+
+        NIYAM_STATS.push({
+          flag: entry.flag, icon: item.icon || entry.icon, label: item.label,
+          countsDay: log => !!log[item.prop] && (!item.dependsOn || !!log[item.dependsOn])
+        });
+      });
+
+      DEFAULT_SETTINGS[entry.flag] = false; // off by default — admin opts in from Settings
+    } catch (e) {
+      console.error(`Skipping invalid NIYAM_REGISTRY entry (id: ${entry && entry.id}):`, e.message);
+    }
+  });
+}
+registerNiyams();
 
 // ===== SUN TIMES — pure NOAA/Meeus solar calculation =====
 // No DOM, no network, no class state — takes lat/lng/elevation/date/timezone
@@ -999,6 +1091,19 @@ class KalyanMitra {
     this.fetchGeolocationAndPanchang();
     this.grantDailyLogin();
 
+    // Registry card shells (data.js's NIYAM_REGISTRY) must exist in the DOM
+    // BEFORE setupUserEventListeners() runs, or their buttons would have
+    // nothing to bind to — mirroring how the built-in cards are already
+    // static markup by the time listeners bind. Wrapped separately (rather
+    // than relying on the try/catch below) because it runs before listener
+    // binding: a throw here must never be allowed to also take
+    // setupUserEventListeners() down with it.
+    try {
+      this._renderRegistryCards();
+    } catch (e) {
+      console.error('Registry niyam card rendering failed (dashboard stays interactive):', e);
+    }
+
     // Interactive setup first — never gated on a render succeeding.
     // setupUserEventListeners() only touches static markup that exists from
     // page load and is already individually null-guarded, and
@@ -1492,7 +1597,7 @@ class KalyanMitra {
       wakeup: { icon: '⏰', name: 'Wake < 7AM', count: 0 },
       sleep: { icon: '🌙', name: 'Sleep < 12AM', count: 0 },
       pranam: { icon: '🙇', name: 'Pranam', count: 0 },
-      pooja: { icon: '🪔', name: 'Pooja', count: 0 },
+      pooja: { icon: '🪔', name: 'Jin Pooja', count: 0 },
       samayik: { icon: '🧘', name: 'Samayik', count: 0 },
       devasiya: { icon: '🌅', name: 'Devasiya', count: 0 },
       raysiya: { icon: '🌙', name: 'Raysiya', count: 0 },
@@ -1871,6 +1976,244 @@ class KalyanMitra {
     this.renderAdminHistory();
   }
 
+  // ===== NIYAM REGISTRY — CARD RENDERING =====
+  // Builds one dashboard card per NIYAM_REGISTRY entry (data.js) into the two
+  // new Home sections, reusing the exact same CSS classes as the built-in
+  // cards so no new styles are needed. Called once per dashboard load,
+  // before setupUserEventListeners() — see initUser(). renderActivities()
+  // only ever updates these cards' state afterwards (show/hide, .completed,
+  // text); it never rebuilds them, so the listeners bound below are never
+  // lost. entries that failed registerNiyams()'s validation have no `.flag`
+  // and are silently skipped here too — already logged once, no need to
+  // repeat the warning on every render.
+  _renderRegistryCards() {
+    const containers = {
+      bhakti: document.getElementById('cat-bhakti'),
+      aachar: document.getElementById('cat-aachar'),
+    };
+    if (!containers.bhakti && !containers.aachar) return;
+
+    (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
+      if (!entry.flag) return;
+      const container = containers[entry.section];
+      if (!container) return;
+      const html = this._buildRegistryCardHtml(entry);
+      if (html) container.insertAdjacentHTML('beforeend', html);
+    });
+  }
+
+  _buildRegistryCardHtml(entry) {
+    switch (entry.layout) {
+      case 'simple': return this._buildRegistrySimpleCardHtml(entry);
+      case 'dependent': return this._buildRegistryDependentCardHtml(entry);
+      case 'dual': return this._buildRegistrySlotCardHtml(entry, false);
+      case 'exclusive': return this._buildRegistrySlotCardHtml(entry, true);
+      default: return '';
+    }
+  }
+
+  // Mirrors the built-in .activity-compact cards (e.g. Kandmool Tyag) exactly
+  // — same ids the generic toggleSimpleActivity()/updateSimpleCard() already
+  // expect, so both are reused as-is for these cards.
+  _buildRegistrySimpleCardHtml(entry) {
+    const item = entry.items[0];
+    const icon = item.icon || entry.icon || '';
+    return `
+      <div class="activity-compact" id="${entry.id}-card">
+        <div class="lock-indicator hidden" id="${entry.id}-lock">🔒</div>
+        <div class="compact-left">
+          <span class="card-icon">${icon}</span>
+          <div class="compact-info">
+            <span class="card-title">${item.label}</span>
+            <span class="card-title-hindi">${item.labelHindi || ''}</span>
+          </div>
+        </div>
+        <div class="compact-actions">
+          <button class="btn-complete-small" id="btn-${entry.id}">+${item.points} AP</button>
+          <button class="btn-undo-small hidden" id="btn-${entry.id}-undo">Undo</button>
+        </div>
+      </div>`;
+  }
+
+  // Mirrors the built-in Pooja + Ashta Prakari card exactly (parent
+  // complete/undo button, child checkbox that only scores while the parent
+  // is done).
+  _buildRegistryDependentCardHtml(entry) {
+    const [parent, child] = entry.items;
+    const icon = parent.icon || entry.icon || '';
+    return `
+      <div class="activity-compact" id="${entry.id}-card">
+        <div class="lock-indicator hidden" id="${entry.id}-lock">🔒</div>
+        <div class="compact-left">
+          <span class="card-icon">${icon}</span>
+          <div class="compact-info">
+            <span class="card-title">${parent.label}</span>
+            <span class="card-title-hindi">${parent.labelHindi || ''}</span>
+          </div>
+        </div>
+        <div class="compact-actions pooja-complex-actions">
+          <label class="ashta-toggle">
+            <input type="checkbox" id="${entry.id}-child-checkbox">
+            <span>${child.label} (+${child.points})</span>
+          </label>
+          <button class="btn-complete-small" id="btn-${entry.id}">+${parent.points} AP</button>
+          <button class="btn-undo-small hidden" id="btn-${entry.id}-undo">Undo</button>
+        </div>
+      </div>`;
+  }
+
+  // Shared by 'dual' (two independent toggles, like the built-in Pratikraman
+  // card) and 'exclusive' (pick one or neither) — same two-slot-button
+  // markup either way; only the click semantics differ (bound separately in
+  // _bindRegistryCardEvents()). When both items share the same points value
+  // it's shown once in the card header ("+10 each"); otherwise each slot
+  // shows its own points, since a single shared header would be misleading.
+  _buildRegistrySlotCardHtml(entry, isExclusive) {
+    const [a, b] = entry.items;
+    const samePoints = a.points === b.points;
+    const kpHeader = samePoints ? `<span class="card-kp">+${a.points} each</span>` : '';
+    const slotLabel = item => samePoints ? item.label : `${item.label} (+${item.points})`;
+    const slotHtml = (item, idx) => `
+      <button class="slot-btn" id="${entry.id}-opt${idx}" type="button">
+        <span class="slot-icon">${item.icon || entry.icon || ''}</span>
+        <span class="slot-label">${slotLabel(item)}</span>
+        <span class="slot-check" id="${entry.id}-opt${idx}-check">○</span>
+      </button>`;
+    const statusText = isExclusive ? 'None selected' : `0/${entry.items.length} completed`;
+    return `
+      <div class="activity-card" id="${entry.id}-card">
+        <div class="lock-indicator hidden" id="${entry.id}-lock">🔒</div>
+        <div class="card-header">
+          <div class="card-title-area">
+            <span class="card-icon">${entry.icon || ''}</span>
+            <span class="card-title">${entry.label}</span>
+            <span class="card-title-hindi">${entry.labelHindi || ''}</span>
+          </div>
+          ${kpHeader}
+        </div>
+        <div class="card-body">
+          <div class="pratikraman-slots">
+            ${slotHtml(a, 0)}
+            ${slotHtml(b, 1)}
+          </div>
+          <div class="card-status" id="${entry.id}-status">${statusText}</div>
+        </div>
+      </div>`;
+  }
+
+  // Binds every registry card's buttons — called once from
+  // setupUserEventListeners(), after _renderRegistryCards() has built the
+  // shells (see initUser()). 'simple' reuses toggleSimpleActivity() directly,
+  // exactly like the built-in cards' bindSimple().
+  _bindRegistryCardEvents() {
+    (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
+      if (!entry.flag) return;
+
+      if (entry.layout === 'simple') {
+        const item = entry.items[0];
+        const btn = document.getElementById(`btn-${entry.id}`);
+        const btnUndo = document.getElementById(`btn-${entry.id}-undo`);
+        if (btn) btn.addEventListener('click', () => this.toggleSimpleActivity(entry.id, item.prop, true, item.points));
+        if (btnUndo) btnUndo.addEventListener('click', () => this.toggleSimpleActivity(entry.id, item.prop, false, item.points));
+      } else if (entry.layout === 'dependent') {
+        const btn = document.getElementById(`btn-${entry.id}`);
+        const btnUndo = document.getElementById(`btn-${entry.id}-undo`);
+        const checkbox = document.getElementById(`${entry.id}-child-checkbox`);
+        if (btn) btn.addEventListener('click', () => this._toggleRegistryDependentParent(entry, true));
+        if (btnUndo) btnUndo.addEventListener('click', () => this._toggleRegistryDependentParent(entry, false));
+        if (checkbox) checkbox.addEventListener('change', () => this._toggleRegistryDependentChild(entry));
+      } else if (entry.layout === 'dual') {
+        entry.items.forEach((item, idx) => {
+          const slotBtn = document.getElementById(`${entry.id}-opt${idx}`);
+          if (slotBtn) slotBtn.addEventListener('click', () => this._toggleRegistrySlot(entry, item));
+        });
+      } else if (entry.layout === 'exclusive') {
+        entry.items.forEach((item, idx) => {
+          const slotBtn = document.getElementById(`${entry.id}-opt${idx}`);
+          if (slotBtn) slotBtn.addEventListener('click', () => this._selectRegistryExclusive(entry, item));
+        });
+      }
+    });
+  }
+
+  // ----- 'dependent' layout handlers — generalize completePooja()/undoPooja()/
+  // toggleAshtaPrakari() (parent gates the child's score, undoing the parent
+  // does not clear the child's own flag — matching that exact precedent) but
+  // route both through afterActivity() so the header/badges/Perfect Day stay
+  // in sync on every toggle, including the child's. -----
+  _toggleRegistryDependentParent(entry, isDone) {
+    if (this.isDayLocked()) return;
+    const [parent, child] = entry.items;
+    if (this.dailyLog[parent.prop] === isDone) return;
+    this.dailyLog[parent.prop] = isDone;
+    let points = parent.points;
+    if (this.dailyLog[child.prop]) points += child.points;
+    if (isDone) {
+      this.addKarmaPoints(points, entry.id);
+      this.showCompletionBurst(document.getElementById(`${entry.id}-card`));
+      this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
+    } else {
+      this.deductKarmaPoints(points);
+      if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) this.dailyLog.perfectDay = false;
+    }
+    this.afterActivity();
+  }
+
+  _toggleRegistryDependentChild(entry) {
+    if (this.isDayLocked()) return;
+    const [parent, child] = entry.items;
+    const checkbox = document.getElementById(`${entry.id}-child-checkbox`);
+    if (!checkbox) return;
+    this.dailyLog[child.prop] = checkbox.checked;
+    if (this.dailyLog[parent.prop]) {
+      if (this.dailyLog[child.prop]) this.addKarmaPoints(child.points, entry.id);
+      else this.deductKarmaPoints(child.points);
+    }
+    this.afterActivity();
+  }
+
+  // ----- 'dual' layout handler — generalizes completePratikraman(): each
+  // slot toggles independently, both required for the card to read complete. -----
+  _toggleRegistrySlot(entry, item) {
+    if (this.isDayLocked()) return;
+    const wasDone = !!this.dailyLog[item.prop];
+    this.dailyLog[item.prop] = !wasDone;
+    if (!wasDone) {
+      this.addKarmaPoints(item.points, entry.id);
+      this.showCompletionBurst(document.getElementById(`${entry.id}-card`));
+      this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
+    } else {
+      this.deductKarmaPoints(item.points);
+      if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) this.dailyLog.perfectDay = false;
+    }
+    this.afterActivity();
+  }
+
+  // ----- 'exclusive' layout handler — any one of the two items, or neither,
+  // but never both: selecting one clears the other first. -----
+  _selectRegistryExclusive(entry, chosenItem) {
+    if (this.isDayLocked()) return;
+    const otherItem = entry.items.find(i => i.prop !== chosenItem.prop);
+    const wasChosen = !!this.dailyLog[chosenItem.prop];
+
+    if (wasChosen) {
+      // Clicking the already-selected option again clears it → back to "none".
+      this.dailyLog[chosenItem.prop] = false;
+      this.deductKarmaPoints(chosenItem.points);
+    } else {
+      if (otherItem && this.dailyLog[otherItem.prop]) {
+        this.dailyLog[otherItem.prop] = false;
+        this.deductKarmaPoints(otherItem.points);
+      }
+      this.dailyLog[chosenItem.prop] = true;
+      this.addKarmaPoints(chosenItem.points, entry.id);
+      this.showCompletionBurst(document.getElementById(`${entry.id}-card`));
+      this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
+    }
+    if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) this.dailyLog.perfectDay = false;
+    this.afterActivity();
+  }
+
   // ===== EVENT LISTENERS =====
   setupUserEventListeners() {
     const bindSimple = (id, prop, points, elId = id) => {
@@ -1887,6 +2230,9 @@ class KalyanMitra {
     bindSimple('ratribhojan', 'ratriBhojanDone', POINTS.ratriBhojan);
     bindSimple('kandmool', 'kandmoolDone', POINTS.kandmool);
     bindSimple('niyam', 'dailyNiyamDone', POINTS.dailyNiyam);
+
+    // Registry niyams (data.js's NIYAM_REGISTRY) — see _bindRegistryCardEvents()
+    this._bindRegistryCardEvents();
 
     // Pratikraman uses inline onclick="app.completePratikraman('morning'|'evening')" — no binding needed here
 
@@ -2319,7 +2665,8 @@ class KalyanMitra {
     const lockIds = [
       'navkarsi', 'wakeup', 'sleep', 'pranam',
       'pooja', 'samayik', 'pratikraman', 'book',
-      'ratribhojan', 'kandmool', 'screentime', 'niyam'
+      'ratribhojan', 'kandmool', 'screentime', 'niyam',
+      ...(typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY.filter(e => e.flag).map(e => e.id) : []),
     ];
 
     if (locked) {
@@ -2641,6 +2988,9 @@ class KalyanMitra {
     checkCat('cat-morning', [s.enableNavkarsi, s.enableWakeup, s.enableSleep, s.enablePranam]);
     checkCat('cat-sadhana', [s.enablePooja, s.enableSamayik, s.enablePratikraman, s.enableBookReading]);
     checkCat('cat-tyag', [s.enableRatriBhojan, s.enableKandmool, s.enableScreenTime, s.enableDailyNiyam]);
+    const REGISTRY = typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : [];
+    checkCat('cat-bhakti', REGISTRY.filter(e => e.flag && e.section === 'bhakti').map(e => s[e.flag]));
+    checkCat('cat-aachar', REGISTRY.filter(e => e.flag && e.section === 'aachar').map(e => s[e.flag]));
 
     const updateSimpleCard = (id, isDone) => {
       const card = document.getElementById(`${id}-card`);
@@ -2735,6 +3085,103 @@ class KalyanMitra {
 
     // Niyam
     updateSimpleCard('niyam', d.dailyNiyamDone);
+
+    // ----- Registry niyams (data.js's NIYAM_REGISTRY) -----
+    // Only ever updates state on the shells _renderRegistryCards() already
+    // built (see initUser()) — never rebuilds them, so the listeners bound
+    // in _bindRegistryCardEvents() are never lost. Reuses updateSimpleCard()
+    // above by closure for 'simple' and the parent half of 'dependent',
+    // exactly like the built-in cards.
+    REGISTRY.forEach(entry => {
+      if (!entry.flag) return;
+      const card = document.getElementById(`${entry.id}-card`);
+      if (!card) return;
+      const enabled = !!s[entry.flag];
+      card.style.display = enabled ? (entry.layout === 'simple' || entry.layout === 'dependent' ? 'flex' : 'block') : 'none';
+      if (!enabled) return;
+
+      if (entry.layout === 'simple') {
+        updateSimpleCard(entry.id, !!d[entry.items[0].prop]);
+      } else if (entry.layout === 'dependent') {
+        const [parent, child] = entry.items;
+        updateSimpleCard(entry.id, !!d[parent.prop]);
+        const checkbox = document.getElementById(`${entry.id}-child-checkbox`);
+        if (checkbox) {
+          checkbox.checked = !!d[child.prop];
+          checkbox.disabled = locked;
+        }
+      } else {
+        // 'dual' and 'exclusive' — two independent slot buttons
+        let doneCount = 0;
+        let doneItem = null;
+        entry.items.forEach((item, idx) => {
+          const isDone = !!d[item.prop];
+          if (isDone) { doneCount++; doneItem = item; }
+          const slotBtn = document.getElementById(`${entry.id}-opt${idx}`);
+          if (slotBtn) {
+            slotBtn.classList.toggle('done', isDone);
+            slotBtn.disabled = locked;
+          }
+          const check = document.getElementById(`${entry.id}-opt${idx}-check`);
+          if (check) check.textContent = isDone ? '●' : '○';
+        });
+        const statusEl = document.getElementById(`${entry.id}-status`);
+        if (statusEl) {
+          statusEl.textContent = entry.layout === 'exclusive'
+            ? (doneItem ? `${doneItem.label} selected` : 'None selected')
+            : `${doneCount}/${entry.items.length} completed`;
+        }
+        card.classList.toggle('completed', doneCount > 0);
+      }
+    });
+  }
+
+  // Single source of truth for how much registry niyams (data.js's
+  // NIYAM_REGISTRY) contribute to "total tasks" / "completed tasks" for a
+  // given log — shared by getTotalTasksCount(), getCompletedCount(),
+  // _isLogComplete() and the History tab's per-day cards, so all four can
+  // never disagree about what counts. A 'dependent' layout's child (e.g.
+  // Chaitya Vandan) never gates completion on its own, exactly like the
+  // built-in Ashta Prakari never has — only the parent counts. An
+  // 'exclusive' pair (e.g. Guru Vandan) counts as a single task, satisfied
+  // by either option.
+  _registryProgress(log, settings) {
+    const s = settings || DEFAULT_SETTINGS, d = log || {};
+    let total = 0, completed = 0;
+    (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
+      if (!entry.flag || !s[entry.flag]) return;
+      if (entry.layout === 'exclusive') {
+        total++;
+        if (entry.items.some(item => !!d[item.prop])) completed++;
+        return;
+      }
+      entry.items.forEach(item => {
+        if (item.dependsOn) return;
+        total++;
+        if (d[item.prop]) completed++;
+      });
+    });
+    return { total, completed };
+  }
+
+  // Icons for whichever registry niyams were actually done on a given log —
+  // used by the History tab's per-day icon summary. Mirrors
+  // _registryProgress()'s dependency guard (a 'dependent' child only shows
+  // its icon while its parent is also done) but, unlike that total/completed
+  // count, every done item gets an icon here, including 'exclusive' options
+  // and 'dependent' children — this is a "what happened" summary, not a
+  // completion gate.
+  _registryIcons(log, settings) {
+    const s = settings || DEFAULT_SETTINGS, d = log || {};
+    const icons = [];
+    (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
+      if (!entry.flag || !s[entry.flag]) return;
+      entry.items.forEach(item => {
+        if (item.dependsOn && !d[item.dependsOn]) return;
+        if (d[item.prop]) icons.push(item.icon || entry.icon || '');
+      });
+    });
+    return icons;
   }
 
   getTotalTasksCount() {
@@ -2751,7 +3198,7 @@ class KalyanMitra {
     if (s.enableRatriBhojan) total++;
     if (s.enableKandmool) total++;
     if (s.enableDailyNiyam) total++;
-    return total;
+    return total + this._registryProgress(this.dailyLog, s).total;
   }
 
   renderDailyProgress() {
@@ -3107,6 +3554,8 @@ class KalyanMitra {
     if (s.enableRatriBhojan && !d.ratriBhojanDone) return false;
     if (s.enableKandmool && !d.kandmoolDone) return false;
     if (s.enableDailyNiyam && !d.dailyNiyamDone) return false;
+    const rp = this._registryProgress(d, s);
+    if (rp.completed < rp.total) return false;
     return true;
   }
 
@@ -3125,7 +3574,7 @@ class KalyanMitra {
     if (s.enableRatriBhojan && d.ratriBhojanDone) c++;
     if (s.enableKandmool && d.kandmoolDone) c++;
     if (s.enableDailyNiyam && d.dailyNiyamDone) c++;
-    return c;
+    return c + this._registryProgress(d, s).completed;
   }
 
   checkBadges() {
@@ -3791,6 +4240,8 @@ class KalyanMitra {
         { enabled: s.enableDailyNiyam, val: log.dailyNiyamDone },
       ];
       checks.forEach(c => { if (c.enabled) { total++; if (c.val) done++; } });
+      const rp = this._registryProgress(log, s);
+      total += rp.total; done += rp.completed;
 
       const pct = total > 0 ? Math.round((done / total) * 100) : 0;
       const kp = log.kpEarned || 0;
@@ -3808,6 +4259,7 @@ class KalyanMitra {
       if (s.enableRatriBhojan && log.ratriBhojanDone) icons.push('🍽️');
       if (s.enableKandmool && log.kandmoolDone) icons.push('🌱');
       if (s.enableDailyNiyam && log.dailyNiyamDone) icons.push('✨');
+      icons.push(...this._registryIcons(log, s));
 
       html += `<div class="history-day ${statusClass}" ${clickAttr}>
         <div class="history-date">${this._formatHistoryDate(dateKey)}${isPerfect ? ' ⭐' : ''}</div>
@@ -4478,7 +4930,7 @@ class KalyanMitra {
       { key: 'enableWakeup', icon: '⏰', name: 'Wake < 7AM', done: !!log.wakeUpDone },
       { key: 'enableSleep', icon: '🌙', name: 'Sleep < 12AM', done: !!log.sleepDone },
       { key: 'enablePranam', icon: '🙇', name: 'Pranam', done: !!log.pranamDone },
-      { key: 'enablePooja', icon: '🪔', name: 'Pooja', done: !!log.poojaDone, extra: log.ashtaPrakariDone ? '+Ashta' : '' },
+      { key: 'enablePooja', icon: '🪔', name: 'Jin Pooja', done: !!log.poojaDone, extra: log.ashtaPrakariDone ? '+Ashta' : '' },
       { key: 'enableSamayik', icon: '🧘', name: 'Samayik', done: (log.samayikDone || 0) > 0, val: `${log.samayikDone || 0}` },
       { key: 'enablePratikraman', icon: '🌅', name: 'Devasiya', done: !!log.devasiyaDone },
       { key: 'enablePratikraman', icon: '🌙', name: 'Raysiya', done: !!log.raysiyaDone },
@@ -4488,6 +4940,12 @@ class KalyanMitra {
       { key: 'enableScreenTime', icon: '📱', name: 'Screen Time', done: false, val: `${log.screenTimeHours || 0}h ${log.screenTimeMins || 0}m` },
       { key: 'enableDailyNiyam', icon: '✨', name: 'Daily Niyam', done: !!log.dailyNiyamDone },
     ];
+    (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
+      if (!entry.flag) return;
+      entry.items.forEach(item => {
+        activities.push({ key: entry.flag, icon: item.icon || entry.icon || '', name: item.label, done: !!log[item.prop] });
+      });
+    });
 
     gridEl.innerHTML = activities
       .filter(a => s[a.key])
@@ -4730,6 +5188,38 @@ class KalyanMitra {
   }
 
   // ===== ADMIN FUNCTIONS =====
+  // Generates one checkbox per NIYAM_REGISTRY entry into #admin-registry-niyams,
+  // grouped by section, matching the existing .settings-group/.setting-item
+  // markup exactly. Idempotent (checks a data-built marker) so repeated
+  // loadAdminSettingsUI() calls (tab switches, selecting a different user)
+  // never rebuild it — that would drop whatever the admin was mid-editing.
+  _renderAdminRegistryToggles() {
+    const container = document.getElementById('admin-registry-niyams');
+    if (!container || container.dataset.built === '1') return;
+    container.dataset.built = '1';
+
+    const REGISTRY = typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : [];
+    const sections = [
+      { key: 'bhakti', title: '🙏 Dev-Guru Bhakti' },
+      { key: 'aachar', title: '⭐ Aachar' },
+    ];
+    let html = '';
+    sections.forEach(sec => {
+      const entries = REGISTRY.filter(e => e.flag && e.section === sec.key);
+      if (entries.length === 0) return;
+      html += `<div class="settings-group"><h3 class="settings-group-title">${sec.title}</h3>`;
+      entries.forEach(entry => {
+        html += `
+          <div class="setting-item">
+            <label for="admin-toggle-${entry.id}">${entry.label}</label>
+            <input type="checkbox" id="admin-toggle-${entry.id}">
+          </div>`;
+      });
+      html += `</div>`;
+    });
+    container.innerHTML = html;
+  }
+
   loadAdminSettingsUI() {
     const s = this.settings;
     document.getElementById('admin-toggle-navkarsi').checked = s.enableNavkarsi;
@@ -4744,6 +5234,13 @@ class KalyanMitra {
     document.getElementById('admin-toggle-kandmool').checked = s.enableKandmool;
     document.getElementById('admin-toggle-screentime').checked = s.enableScreenTime;
     document.getElementById('admin-toggle-niyam').checked = s.enableDailyNiyam;
+
+    this._renderAdminRegistryToggles();
+    (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
+      if (!entry.flag) return;
+      const el = document.getElementById(`admin-toggle-${entry.id}`);
+      if (el) el.checked = !!s[entry.flag];
+    });
 
     const niyamSelect = document.getElementById('admin-select-niyam');
     niyamSelect.innerHTML = '';
@@ -4773,6 +5270,12 @@ class KalyanMitra {
     s.enableScreenTime = document.getElementById('admin-toggle-screentime').checked;
     s.enableDailyNiyam = document.getElementById('admin-toggle-niyam').checked;
     s.currentDailyNiyamId = parseInt(document.getElementById('admin-select-niyam').value);
+
+    (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
+      if (!entry.flag) return;
+      const el = document.getElementById(`admin-toggle-${entry.id}`);
+      if (el) s[entry.flag] = el.checked;
+    });
 
     // Location removed from admin UI - fetched via Geolocation
     this.saveSettings();
@@ -4864,7 +5367,7 @@ class KalyanMitra {
       s.enableWakeup ? `<div class="lock-preview-item"><span>🌅 Wake < 7AM:</span> <strong>${d.wakeUpDone ? '✓' : '✗'}</strong></div>` : '',
       s.enableSleep ? `<div class="lock-preview-item"><span>🌙 Sleep < 12AM:</span> <strong>${d.sleepDone ? '✓' : '✗'}</strong></div>` : '',
       s.enablePranam ? `<div class="lock-preview-item"><span>🙇 Pranam:</span> <strong>${d.pranamDone ? '✓' : '✗'}</strong></div>` : '',
-      s.enablePooja ? `<div class="lock-preview-item"><span>🪔 Pooja:</span> <strong>${d.poojaDone ? 'Done' : 'Not done'}${d.ashtaPrakariDone ? ' +Ashta' : ''}</strong></div>` : '',
+      s.enablePooja ? `<div class="lock-preview-item"><span>🪔 Jin Pooja:</span> <strong>${d.poojaDone ? 'Done' : 'Not done'}${d.ashtaPrakariDone ? ' +Ashta' : ''}</strong></div>` : '',
       s.enableSamayik ? `<div class="lock-preview-item"><span>🧘 Samayik:</span> <strong>${d.samayikDone || 0}</strong></div>` : '',
       s.enablePratikraman ? `<div class="lock-preview-item"><span>🌅 Devasiya:</span> <strong>${d.devasiyaDone ? '✓' : '✗'}</strong></div>` : '',
       s.enablePratikraman ? `<div class="lock-preview-item"><span>🌙 Raysiya:</span> <strong>${d.raysiyaDone ? '✓' : '✗'}</strong></div>` : '',
@@ -4874,6 +5377,13 @@ class KalyanMitra {
       s.enableScreenTime ? `<div class="lock-preview-item"><span>📱 Screen:</span> <strong>${d.screenTimeHours || 0}h ${d.screenTimeMins || 0}m</strong></div>` : '',
       s.enableDailyNiyam ? `<div class="lock-preview-item"><span>✨ Niyam:</span> <strong>${d.dailyNiyamDone ? '✓' : '✗'}</strong></div>` : '',
     ];
+    (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
+      if (!entry.flag || !s[entry.flag]) return;
+      entry.items.forEach(item => {
+        const icon = item.icon || entry.icon || '';
+        items.push(`<div class="lock-preview-item"><span>${icon} ${item.label}:</span> <strong>${d[item.prop] ? '✓' : '✗'}</strong></div>`);
+      });
+    });
     if (preview) preview.innerHTML = items.filter(Boolean).join('');
   }
 

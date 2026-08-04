@@ -232,8 +232,8 @@ const DEFAULT_DAILY_LOG = {
 
 // ===== POINT VALUES =====
 const POINTS = {
-  pooja: 20,
-  ashtaPrakari: 10,
+  pooja: 10,        // "Jin Pooja" — repointed from 20; see index.html's Pooja card relabel
+  ashtaPrakari: 50, // repointed from 10, alongside the Jin Pooja relabel above
   samayik: 20, // per samayik
   navkarsi: 10,
   pranam: 20,
@@ -249,6 +249,115 @@ const POINTS = {
   perfectDay: 50,
   dailyLogin: 10,
 };
+
+// ===== NIYAM REGISTRY — declarative extra niyams =====
+// Each entry becomes one dashboard card. registerNiyams() (app.js) derives
+// scoring, the day-edit overlay, Monthly Niyam Stats, the lifetime grid and
+// the Excel export from this automatically — see registerNiyams()'s own
+// comment for exactly what each field does and how it's validated.
+// Ships with every enable<Id> flag OFF (registerNiyams() seeds
+// DEFAULT_SETTINGS), so adding entries here is safe for existing users —
+// nothing changes until a sangh admin opts a card in from Settings.
+//
+//   id       unique, letters/digits only, first char a letter (becomes
+//            enable<Id> in settings and <id>-card / btn-<id> in the DOM —
+//            never rename one after users have logged against it)
+//   section  'bhakti' | 'aachar' — which of the two new Home sections
+//   layout   'simple'    one done/undo button, one prop
+//            'dual'      two independent toggle slots in one card (like
+//                        the existing Pratikraman card)
+//            'dependent' a toggle + a child toggle that only scores while
+//                        the parent is done (like the existing Pooja +
+//                        Ashta Prakari checkbox)
+//            'exclusive' two toggle slots where picking one clears the
+//                        other — any one, or neither, but never both
+//   items    one entry per toggle: { prop, label, labelHindi, icon,
+//            points, dependsOn? } — prop must end in "Done" and be
+//            globally unique. `dependsOn` (dependent layout's child only)
+//            names the sibling item's prop.
+const NIYAM_REGISTRY = [
+  // ----- 🙏 Dev-Guru Bhakti -----
+  {
+    id: 'navkarJaap', label: 'Navkar Jaap', labelHindi: 'नवकार जाप', icon: '📿',
+    section: 'bhakti', layout: 'dual',
+    items: [
+      { prop: 'navkarJaapMorningDone', label: 'Morning', labelHindi: 'सुबह', icon: '🌅', points: 10 },
+      { prop: 'navkarJaapNightDone', label: 'Night', labelHindi: 'रात', icon: '🌙', points: 10 },
+    ]
+  },
+  {
+    id: 'devDarshan', label: 'Dev Darshan', labelHindi: 'देव दर्शन', icon: '🛕',
+    section: 'bhakti', layout: 'dependent',
+    items: [
+      { prop: 'devDarshanDone', label: 'Dev Darshan', labelHindi: 'देव दर्शन', icon: '🛕', points: 10 },
+      { prop: 'chaityaVandanDone', label: 'Vidhi Sahit Chaitya Vandan', labelHindi: 'विधि सहित चैत्य वंदन', icon: '🙏', points: 20, dependsOn: 'devDarshanDone' },
+    ]
+  },
+  {
+    id: 'guruVandan', label: 'Guru Vandan', labelHindi: 'गुरु वंदन', icon: '🙇',
+    section: 'bhakti', layout: 'exclusive',
+    items: [
+      { prop: 'guruVandanHajirDone', label: 'Hajir', labelHindi: 'हाज़िर होकर', icon: '🙇', points: 20 },
+      { prop: 'guruVandanMurtiDone', label: 'Murti/Photo', labelHindi: 'मूर्ति/फोटो द्वारा', icon: '🖼️', points: 10 },
+    ]
+  },
+  {
+    id: 'shaamAarti', label: 'Shaam Aarti', labelHindi: 'शाम आरती', icon: '🪔',
+    section: 'bhakti', layout: 'simple',
+    items: [{ prop: 'shaamAartiDone', label: 'Shaam Aarti', labelHindi: 'शाम आरती', icon: '🪔', points: 20 }]
+  },
+  {
+    id: 'khamasmne', label: 'Gyaan ke 5 Khamasmne', labelHindi: 'ज्ञान के ५ खमासमणा', icon: '🙌',
+    section: 'bhakti', layout: 'simple',
+    items: [{ prop: 'khamasmneDone', label: 'Gyaan ke 5 Khamasmne', labelHindi: 'ज्ञान के ५ खमासमणा', icon: '🙌', points: 10 }]
+  },
+  // ----- ⭐ Aachar -----
+  {
+    id: 'katasna', label: 'Katasna & Thavni', labelHindi: 'कटासना व ठवणी', icon: '🪵',
+    section: 'aachar', layout: 'simple',
+    items: [{ prop: 'katasnaDone', label: 'Katasna & Thavni', labelHindi: 'कटासना व ठवणी', icon: '🪵', points: 10 }]
+  },
+  {
+    id: 'supatraDaan', label: 'Supatra Daan', labelHindi: 'सुपात्र दान', icon: '🤲',
+    section: 'aachar', layout: 'simple',
+    items: [{ prop: 'supatraDaanDone', label: 'Supatra Daan', labelHindi: 'सुपात्र दान', icon: '🤲', points: 10 }]
+  },
+  {
+    id: 'aksharTyag', label: 'Akshar Kapde / Paper Tyag', labelHindi: 'अक्षरवाले कपड़े व पेपर त्याग', icon: '👕',
+    section: 'aachar', layout: 'simple',
+    items: [{ prop: 'aksharTyagDone', label: 'Akshar Kapde / Paper Tyag', labelHindi: 'अक्षरवाले कपड़े व पेपर त्याग', icon: '👕', points: 10 }]
+  },
+  {
+    id: 'bhojanVivek', label: 'Bina TV/Mobile Bhojan', labelHindi: 'बिना टीवी/मोबाइल भोजन', icon: '🍽️',
+    section: 'aachar', layout: 'simple',
+    items: [{ prop: 'bhojanVivekDone', label: 'Bina TV/Mobile Bhojan', labelHindi: 'बिना टीवी/मोबाइल भोजन', icon: '🍽️', points: 20 }]
+  },
+  {
+    id: 'thaliDhona', label: 'Thali Katori Dhokar Peena', labelHindi: 'थाली कटोरी धोकर पीना', icon: '🥣',
+    section: 'aachar', layout: 'simple',
+    items: [{ prop: 'thaliDhonaDone', label: 'Thali Katori Dhokar Peena', labelHindi: 'थाली कटोरी धोकर पीना', icon: '🥣', points: 20 }]
+  },
+  {
+    id: 'dharmikKahani', label: 'Dharmik Kahani (15 min)', labelHindi: 'परिवार के साथ धार्मिक कहानी', icon: '👪',
+    section: 'aachar', layout: 'simple',
+    items: [{ prop: 'dharmikKahaniDone', label: 'Dharmik Kahani (15 min)', labelHindi: 'परिवार के साथ धार्मिक कहानी', icon: '👪', points: 20 }]
+  },
+  {
+    id: 'packagedTyag', label: 'Bread/Pizza/Cheese Tyag', labelHindi: 'ब्रेड-पाव-पिज़्ज़ा-चीज़ त्याग', icon: '🍕',
+    section: 'aachar', layout: 'simple',
+    items: [{ prop: 'packagedTyagDone', label: 'Bread/Pizza/Cheese Tyag', labelHindi: 'ब्रेड-पाव-पिज़्ज़ा-चीज़ त्याग', icon: '🍕', points: 20 }]
+  },
+  {
+    id: 'vyavastha', label: 'Cheezein Sahi Jagah', labelHindi: 'चीज़ें सही जगह रखना', icon: '🧹',
+    section: 'aachar', layout: 'simple',
+    items: [{ prop: 'vyavasthaDone', label: 'Cheezein Sahi Jagah', labelHindi: 'चीज़ें सही जगह रखना', icon: '🧹', points: 10 }]
+  },
+  {
+    id: 'badoKiSeva', label: 'Bado ki Seva (15 min)', labelHindi: 'बड़ों की सेवा', icon: '👵',
+    section: 'aachar', layout: 'simple',
+    items: [{ prop: 'badoKiSevaDone', label: 'Bado ki Seva (15 min)', labelHindi: 'बड़ों की सेवा', icon: '👵', points: 20 }]
+  },
+];
 
 // ===== STREAK SAVER =====
 const STREAK_SAVERS_PER_MONTH = 3;
