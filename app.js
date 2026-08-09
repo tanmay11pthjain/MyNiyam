@@ -231,6 +231,7 @@ const OVERLAY_CLOSERS = {
   'photo-prompt-overlay': 'closePhotoPromptOverlay',
   'profile-switcher-overlay': 'closeProfileSwitcher',
   'export-overlay': 'closeExportDialog',
+  'attendance-export-overlay': 'closeAttendanceExportDialog',
   'poster-overlay': 'closePosterOverlay',
   'niyam-stats-overlay': 'closeNiyamStats',
   'evening-summary-overlay': 'closeEveningSummary',
@@ -242,7 +243,7 @@ const OVERLAY_CLOSERS = {
 // from a future version, a foreign one), so back-driven tab switching
 // (_navSwitchToTab()) checks against these before touching the DOM at all.
 const USER_TABS = ['home', 'history', 'achievements', 'profile'];
-const ADMIN_TABS = ['admin-leaderboard', 'admin-settings', 'admin-progress', 'admin-lock'];
+const ADMIN_TABS = ['admin-leaderboard', 'admin-settings', 'admin-progress', 'admin-attendance'];
 
 // ===== SUN TIMES — pure NOAA/Meeus solar calculation =====
 // No DOM, no network, no class state — takes lat/lng/elevation/date/timezone
@@ -2013,6 +2014,81 @@ class KalyanMitra {
       .map(([uid, data]) => ({ uid, data }));
   }
 
+  // Self-healing photo migration. users/{uid}/photo has been mandatory at
+  // registration since v4.790, so this only ever matters for members who
+  // registered before the Firebase switchover — their photo still lives
+  // only in the Sheet (see migrate-to-firebase.js, the one-time DevTools
+  // script this replaces). Fetches missing photos a few at a time (Apps
+  // Script concurrency-limits), writes them all back in ONE multi-path
+  // update, and lets the leaderboard listener's own re-fire repaint the
+  // rows — no manual DOM patch needed. A uid confirmed to have no Sheet
+  // photo either is remembered in localStorage so it's never re-fetched on
+  // a later session; nothing photo-sized is ever cached to localStorage
+  // itself (see the leaderboard's own comment about the 5MB origin quota).
+  _backfillMissingPhotos(allUsers) {
+    if (this._photoBackfillRunning) return;
+
+    let noSheetPhoto;
+    try {
+      noSheetPhoto = new Set(JSON.parse(localStorage.getItem('myniyam_nosheetphoto') || '[]'));
+    } catch (e) {
+      noSheetPhoto = new Set();
+    }
+    if (!this._photoBackfillAttempted) this._photoBackfillAttempted = new Set();
+
+    const candidates = Object.entries(allUsers || {})
+      .filter(([uid, data]) => {
+        if (!data || data.role === 'admin') return false;
+        if (!this._adminUserUids.includes(uid)) return false;
+        if (data.photo) return false;
+        if (noSheetPhoto.has(uid)) return false;
+        if (this._photoBackfillAttempted.has(uid)) return false;
+        return true;
+      })
+      .map(([uid]) => uid);
+
+    if (candidates.length === 0) return;
+    this._photoBackfillRunning = true;
+    // Marked BEFORE the async work starts so a second render firing while
+    // this batch is in flight (e.g. from an unrelated write elsewhere)
+    // can't queue a duplicate fetch for the same uids.
+    candidates.forEach(uid => this._photoBackfillAttempted.add(uid));
+
+    (async () => {
+      const updates = {};
+      const confirmedNone = [];
+      const BATCH = 3;
+      for (let i = 0; i < candidates.length; i += BATCH) {
+        const batch = candidates.slice(i, i + BATCH);
+        await Promise.all(batch.map(async uid => {
+          let photo = null;
+          try {
+            photo = await Auth.fetchPhotoFromSheetLegacy(uid); // never throws in practice; defensive try/catch regardless
+          } catch (e) { /* treated as "no photo" below */ }
+          if (photo) updates[`${uid}/photo`] = photo;
+          else confirmedNone.push(uid);
+        }));
+      }
+
+      if (confirmedNone.length > 0) {
+        try {
+          const merged = new Set([...noSheetPhoto, ...confirmedNone]);
+          localStorage.setItem('myniyam_nosheetphoto', JSON.stringify([...merged]));
+        } catch (e) { /* storage unavailable — non-fatal, just re-checks next session */ }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        try {
+          await db.ref('users').update(updates);
+        } catch (e) {
+          console.warn('Photo backfill write failed (non-fatal):', e);
+        }
+      }
+
+      this._photoBackfillRunning = false;
+    })();
+  }
+
   _renderLeaderboardFromSnap(snap) {
     const listEl = document.getElementById('admin-leaderboard-list');
     if (!listEl) return;
@@ -2040,6 +2116,12 @@ class KalyanMitra {
         this._adminUserRecords[uid] = data;
       }
     });
+
+    // Not awaited: legacy members (registered before the Firebase photo
+    // migration) have a photo only in the Sheet — this self-heals them into
+    // Firebase in the background, a few at a time, so the leaderboard never
+    // needs a manual DevTools migration step again.
+    this._backfillMissingPhotos(allUsers);
 
     users.sort((a, b) => b.kp - a.kp);
 
@@ -2112,13 +2194,11 @@ class KalyanMitra {
         }
       }
 
-      // 2. Remove user main node completely (clears sanghCode, profile, logs)
+      // 2. Remove user main node completely (clears sanghCode, profile,
+      // logs, lock_status and attendance — all nested under users/{uid})
       await db.ref(`users/${uidToDelete}`).remove();
 
-      // 3. Remove lock status node
-      await db.ref(`lock_status/${uidToDelete}`).remove();
-
-      // 4. If currently viewing this user, return to leaderboard. Calls
+      // 3. If currently viewing this user, return to leaderboard. Calls
       // _showAdminOverview() directly rather than history.back() — this is
       // a programmatic transition after a destructive action (not a user
       // back-gesture), and the alert() below is a blocking dialog whose
@@ -2130,7 +2210,7 @@ class KalyanMitra {
         this._showAdminOverview();
       }
 
-      // 5. Refresh admin state and re-render
+      // 4. Refresh admin state and re-render
       await this._fetchAdminUserUids();
       await this.renderAdminLeaderboard();
 
@@ -2152,6 +2232,162 @@ class KalyanMitra {
       // Listener already running — do a one-time read to refresh now
       const snap = await db.ref('users').once('value');
       this._renderLeaderboardFromSnap(snap);
+    }
+  }
+
+  // ===== ATTENDANCE (replaces the old admin Lock tab) =====
+  // Storage: users/{uid}/attendance/{YYYY-MM-DD} = { present, gathas }.
+  // Deliberately per-user rather than a top-level attendance/{sanghCode}
+  // node — needs no firebase-rules.json change (the existing users/$uid
+  // rule already lets an admin write any member's node), survives a member
+  // transferring sangh, and arrives for free inside the same `users`
+  // snapshot the leaderboard listener already downloads (_adminUserRecords,
+  // populated by _renderLeaderboardFromSnap()) — so the grid and the export
+  // both need zero extra Firebase reads.
+  //
+  // Edits accumulate in this._attendanceDraft (uid -> {present, gathas})
+  // and never touch Firebase until Save — a class can have 30+ members, and
+  // writing on every tap would be one round trip per tap on what's often a
+  // patchy pathshala-hall connection. this._attendanceDate tracks which
+  // date the draft belongs to; changing the date discards it (after
+  // confirming) since a draft only ever makes sense for one date at a time.
+
+  renderAttendance() {
+    const listEl = document.getElementById('attendance-list');
+    const dateEl = document.getElementById('attendance-date');
+    if (!listEl || !dateEl) return;
+
+    if (!dateEl.value) dateEl.value = this.getTodayKey();
+    const dateKey = dateEl.value;
+
+    // A genuine date change starts a fresh, empty draft — attendance edits
+    // are per-date and must never silently carry over onto a different day.
+    // Re-rendering the SAME date (e.g. switching tabs away and back) must
+    // NOT reset an in-progress, unsaved draft.
+    if (this._attendanceDate !== dateKey) {
+      this._attendanceDate = dateKey;
+      this._clearAttendanceDraft();
+    }
+
+    if (!this._adminUserRecords) {
+      listEl.innerHTML = '<div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>';
+      return;
+    }
+
+    const members = this._eligibleSanghUsers(this._adminUserRecords);
+    if (members.length === 0) {
+      listEl.innerHTML = '<div class="admin-desc">No users found. Login with a user account first.</div>';
+      return;
+    }
+
+    const draft = this._attendanceDraft || {};
+    listEl.innerHTML = members.map(({ uid, data }) => {
+      const name = data.name || uid;
+      const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+      const saved = (data.attendance && data.attendance[dateKey]) || null;
+      const d = draft[uid];
+      const present = d ? !!d.present : !!(saved && saved.present);
+      const gathas = d ? (d.gathas || 0) : ((saved && saved.gathas) || 0);
+      return `
+      <div class="attendance-row${present ? '' : ' is-absent'}" data-uid="${this._escHtml(uid)}">
+        <div class="lb-avatar">
+          ${data.photo ? `<img src="${this._escHtml(data.photo)}" alt="">` : `<span class="lb-initial">${this._escHtml(initial)}</span>`}
+        </div>
+        <div class="lb-info"><span class="lb-name">${this._escHtml(name)}</span></div>
+        <label class="attendance-present-toggle">
+          <input type="checkbox" class="attendance-present-checkbox" data-uid="${this._escHtml(uid)}" ${present ? 'checked' : ''}>
+          <span>Present</span>
+        </label>
+        <div class="attendance-gatha-group">
+          <span class="attendance-gatha-label">Gathas</span>
+          <div class="counter-actions">
+            <button type="button" class="btn-counter-small btn-minus attendance-gatha-minus" data-uid="${this._escHtml(uid)}">−</button>
+            <span class="counter-val attendance-gatha-val" data-uid="${this._escHtml(uid)}">${gathas}</span>
+            <button type="button" class="btn-counter-small btn-plus attendance-gatha-plus" data-uid="${this._escHtml(uid)}">+</button>
+          </div>
+        </div>
+      </div>
+    `;
+    }).join('');
+  }
+
+  // Lazily creates a draft entry for uid, seeded from whatever is CURRENTLY
+  // rendered in that row (which already reflects saved-or-draft) rather
+  // than a hardcoded {present:false, gathas:0} — otherwise touching only
+  // the gatha counter would silently reset an already-ticked Present box
+  // back to unchecked the moment a draft entry was created for that uid.
+  _getOrInitAttendanceDraft(uid) {
+    if (!this._attendanceDraft) this._attendanceDraft = {};
+    if (!this._attendanceDraft[uid]) {
+      const row = document.querySelector(`.attendance-row[data-uid="${uid}"]`);
+      const cb = row ? row.querySelector('.attendance-present-checkbox') : null;
+      const valEl = row ? row.querySelector('.attendance-gatha-val') : null;
+      this._attendanceDraft[uid] = {
+        present: cb ? cb.checked : false,
+        gathas: valEl ? (parseInt(valEl.textContent, 10) || 0) : 0
+      };
+    }
+    return this._attendanceDraft[uid];
+  }
+
+  _markAttendanceDirty() {
+    this._attendanceDirty = true;
+    const ind = document.getElementById('attendance-unsaved-indicator');
+    if (ind) ind.classList.remove('hidden');
+  }
+
+  _clearAttendanceDraft() {
+    this._attendanceDraft = {};
+    this._attendanceDirty = false;
+    const ind = document.getElementById('attendance-unsaved-indicator');
+    if (ind) ind.classList.add('hidden');
+  }
+
+  _markAllAttendancePresent() {
+    const listEl = document.getElementById('attendance-list');
+    if (!listEl) return;
+    listEl.querySelectorAll('.attendance-row').forEach(row => {
+      const uid = row.dataset.uid;
+      const cb = row.querySelector('.attendance-present-checkbox');
+      if (cb && !cb.checked) {
+        cb.checked = true;
+        row.classList.remove('is-absent');
+      }
+      this._getOrInitAttendanceDraft(uid).present = true;
+    });
+    this._markAttendanceDirty();
+  }
+
+  async saveAttendance() {
+    const dateKey = this._attendanceDate;
+    const draft = this._attendanceDraft || {};
+    const uids = Object.keys(draft);
+    if (!dateKey || uids.length === 0) {
+      this._clearAttendanceDraft();
+      return;
+    }
+
+    const updates = {};
+    uids.forEach(uid => {
+      updates[`${uid}/attendance/${dateKey}`] = {
+        present: !!draft[uid].present,
+        gathas: Math.max(0, parseInt(draft[uid].gathas, 10) || 0)
+      };
+    });
+
+    const saveBtn = document.getElementById('btn-save-attendance');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+    try {
+      // One multi-path update for the whole class — the leaderboard
+      // listener re-fires from this write itself, refreshing
+      // _adminUserRecords with the saved values for free.
+      await db.ref('users').update(updates);
+      this._clearAttendanceDraft();
+    } catch (e) {
+      console.error('Failed to save attendance:', e);
+      alert('Failed to save attendance. Please check your connection and try again.');
+    } finally {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Save Attendance'; }
     }
   }
 
@@ -2264,6 +2500,149 @@ class KalyanMitra {
       this.closeExportDialog();
     } catch (e) {
       console.error('Export failed:', e);
+      showError('Export failed. Please try again.');
+    } finally {
+      if (btn) btn.disabled = false;
+      if (btnSpan) btnSpan.textContent = originalLabel;
+    }
+  }
+
+  // ===== EXCEL EXPORT (ATTENDANCE) =====
+
+  // Pure data step — no DOM, no network. Same authorization filter as the
+  // points export (_eligibleSanghUsers()), plus a walked list of every
+  // calendar date in [fromKey, toKey] so all three export sheets stay
+  // column-for-column aligned regardless of which dates a member does or
+  // doesn't have an attendance/{date} node for (absence = never marked).
+  // Dates are parsed/re-formatted via LOCAL date components throughout
+  // (never toISOString(), which is UTC and can drift a day near midnight),
+  // matching the YYYY-MM-DD keys attendance/{date} is already stored under.
+  _collectAttendanceRows(allUsers, fromKey, toKey) {
+    const dateKeys = [];
+    const cursor = new Date(`${fromKey}T00:00:00`);
+    const end = new Date(`${toKey}T00:00:00`);
+    while (cursor <= end) {
+      const y = cursor.getFullYear();
+      const m = String(cursor.getMonth() + 1).padStart(2, '0');
+      const d = String(cursor.getDate()).padStart(2, '0');
+      dateKeys.push(`${y}-${m}-${d}`);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    const rows = this._eligibleSanghUsers(allUsers).map(({ uid, data }) => {
+      const attendance = data.attendance || {};
+      const presentCells = [];
+      const gathaCells = [];
+      let daysPresent = 0;
+      let totalGathas = 0;
+      dateKeys.forEach(dateKey => {
+        const rec = attendance[dateKey];
+        const present = !!(rec && rec.present);
+        const gathas = (rec && rec.gathas) || 0;
+        if (present) daysPresent++;
+        totalGathas += gathas;
+        presentCells.push(present ? 'P' : 'A');
+        gathaCells.push(gathas);
+      });
+      return {
+        name: data.name || uid,
+        presentCells,
+        gathaCells,
+        daysPresent,
+        daysAbsent: dateKeys.length - daysPresent,
+        totalGathas
+      };
+    });
+
+    rows.sort((a, b) => b.daysPresent - a.daysPresent || a.name.localeCompare(b.name));
+    return { dateKeys, rows };
+  }
+
+  openAttendanceExportDialog() {
+    const errorEl = document.getElementById('attendance-export-error');
+    if (errorEl) errorEl.classList.add('hidden');
+
+    const fromEl = document.getElementById('attendance-export-from');
+    const toEl = document.getElementById('attendance-export-to');
+    if (fromEl && !fromEl.value) {
+      const now = new Date();
+      fromEl.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    }
+    if (toEl && !toEl.value) toEl.value = this.getTodayKey();
+
+    const o = document.getElementById('attendance-export-overlay');
+    if (o) { o.classList.remove('hidden'); o.classList.add('show'); }
+  }
+
+  closeAttendanceExportDialog() {
+    const o = document.getElementById('attendance-export-overlay');
+    if (o) { o.classList.remove('show'); o.classList.add('hidden'); }
+  }
+
+  async runAttendanceExport() {
+    const fromEl = document.getElementById('attendance-export-from');
+    const toEl = document.getElementById('attendance-export-to');
+    const errorEl = document.getElementById('attendance-export-error');
+    const btn = document.getElementById('btn-run-attendance-export');
+    const btnSpan = btn ? btn.querySelector('span') : null;
+
+    const showError = (msg) => {
+      if (errorEl) { errorEl.textContent = msg; errorEl.classList.remove('hidden'); }
+    };
+
+    const fromKey = fromEl ? fromEl.value : '';
+    const toKey = toEl ? toEl.value : '';
+
+    if (!fromKey || !toKey) return showError('Please select both a From and To date.');
+    if (fromKey > toKey) return showError('From date must be before To date.');
+    if (typeof XLSX === 'undefined') {
+      return showError('Export library failed to load. Please check your connection and reload the page.');
+    }
+    if (!this._adminUserUids || this._adminUserUids.length === 0) {
+      return showError('No users found for your sangh.');
+    }
+
+    if (errorEl) errorEl.classList.add('hidden');
+    const originalLabel = btnSpan ? btnSpan.textContent : '';
+    if (btn) btn.disabled = true;
+    if (btnSpan) btnSpan.textContent = 'Exporting...';
+
+    try {
+      const snap = await db.ref('users').once('value');
+      const { dateKeys, rows } = this._collectAttendanceRows(snap.val() || {}, fromKey, toKey);
+
+      if (rows.length === 0) {
+        showError('No users found for your sangh in this range.');
+        return;
+      }
+
+      const attHeader = ['Name', ...dateKeys];
+      const attAoa = [attHeader, ...rows.map(r => [r.name, ...r.presentCells])];
+      const attWs = XLSX.utils.aoa_to_sheet(attAoa);
+      attWs['!cols'] = attHeader.map((h, i) => ({ wch: i === 0 ? 20 : 12 }));
+
+      const gathaHeader = ['Name', ...dateKeys];
+      const gathaAoa = [gathaHeader, ...rows.map(r => [r.name, ...r.gathaCells])];
+      const gathaWs = XLSX.utils.aoa_to_sheet(gathaAoa);
+      gathaWs['!cols'] = gathaHeader.map((h, i) => ({ wch: i === 0 ? 20 : 12 }));
+
+      const summaryHeader = ['Name', 'Days Present', 'Days Absent', 'Total Gathas', 'Attendance %'];
+      const summaryAoa = [summaryHeader, ...rows.map(r => {
+        const pct = dateKeys.length > 0 ? Math.round((r.daysPresent / dateKeys.length) * 100) : 0;
+        return [r.name, r.daysPresent, r.daysAbsent, r.totalGathas, `${pct}%`];
+      })];
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryAoa);
+      summaryWs['!cols'] = summaryHeader.map(h => ({ wch: Math.max(12, h.length + 2) }));
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, attWs, 'Attendance');
+      XLSX.utils.book_append_sheet(wb, gathaWs, 'Gathas');
+      XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+      XLSX.writeFile(wb, `MyNiyam_Attendance_${fromKey}_to_${toKey}.xlsx`);
+
+      this.closeAttendanceExportDialog();
+    } catch (e) {
+      console.error('Attendance export failed:', e);
       showError('Export failed. Please try again.');
     } finally {
       if (btn) btn.disabled = false;
@@ -2384,7 +2763,7 @@ class KalyanMitra {
     this.initializing = false;
     this.loadAdminSettingsUI();
     this.renderAdminProgress();
-    this.renderAdminLock();
+    this._renderAdminUnlockButton();
     this.renderAdminHistory();
   }
 
@@ -2787,13 +3166,13 @@ class KalyanMitra {
     // Save settings
     document.getElementById('btn-save-settings').addEventListener('click', () => this.saveAdminSettings());
 
-    // Lock day
-    document.getElementById('btn-lock-day').addEventListener('click', () => this.adminLockDay());
+    // Unlock (now lives in the member drill-down, not a dedicated tab)
     const btnUnlockDay = document.getElementById('btn-unlock-day');
     if (btnUnlockDay) btnUnlockDay.addEventListener('click', () => this.adminUnlockDay());
 
-    // Reset
-    document.getElementById('btn-admin-reset').addEventListener('click', () => this.resetProgress());
+    // Reset (Danger Zone, also relocated into the member drill-down)
+    const btnAdminReset = document.getElementById('btn-admin-reset');
+    if (btnAdminReset) btnAdminReset.addEventListener('click', () => this.resetProgress());
 
     // Logout
     document.getElementById('btn-admin-logout').addEventListener('click', () => this.openLogoutConfirm());
@@ -2850,6 +3229,60 @@ class KalyanMitra {
     if (downloadPosterBtn) downloadPosterBtn.addEventListener('click', () => this._downloadPoster());
     const sharePosterBtn = document.getElementById('btn-share-poster');
     if (sharePosterBtn) sharePosterBtn.addEventListener('click', () => this._sharePoster());
+
+    // Attendance
+    const attendanceDateEl = document.getElementById('attendance-date');
+    if (attendanceDateEl) {
+      attendanceDateEl.addEventListener('change', () => {
+        if (this._attendanceDirty) {
+          if (!confirm("You have unsaved attendance changes. Discard them and switch dates?")) {
+            attendanceDateEl.value = this._attendanceDate || this.getTodayKey();
+            return;
+          }
+        }
+        this.renderAttendance();
+      });
+    }
+    const markAllPresentBtn = document.getElementById('btn-attendance-mark-all');
+    if (markAllPresentBtn) markAllPresentBtn.addEventListener('click', () => this._markAllAttendancePresent());
+    const saveAttendanceBtn = document.getElementById('btn-save-attendance');
+    if (saveAttendanceBtn) saveAttendanceBtn.addEventListener('click', () => this.saveAttendance());
+    // Delegated so a single binding survives every re-render of
+    // #attendance-list's innerHTML (per-row listeners would otherwise need
+    // re-attaching on every renderAttendance() call).
+    const attendanceListEl = document.getElementById('attendance-list');
+    if (attendanceListEl) {
+      attendanceListEl.addEventListener('change', (e) => {
+        const cb = e.target.closest('.attendance-present-checkbox');
+        if (!cb) return;
+        const uid = cb.dataset.uid;
+        this._getOrInitAttendanceDraft(uid).present = cb.checked;
+        this._markAttendanceDirty();
+        const row = cb.closest('.attendance-row');
+        if (row) row.classList.toggle('is-absent', !cb.checked);
+      });
+      attendanceListEl.addEventListener('click', (e) => {
+        const minus = e.target.closest('.attendance-gatha-minus');
+        const plus = e.target.closest('.attendance-gatha-plus');
+        if (!minus && !plus) return;
+        const uid = (minus || plus).dataset.uid;
+        const valEl = attendanceListEl.querySelector(`.attendance-gatha-val[data-uid="${uid}"]`);
+        if (!valEl) return;
+        let val = parseInt(valEl.textContent, 10) || 0;
+        val = minus ? Math.max(0, val - 1) : val + 1;
+        valEl.textContent = val;
+        this._getOrInitAttendanceDraft(uid).gathas = val;
+        this._markAttendanceDirty();
+      });
+    }
+
+    // Export attendance to Excel
+    const openAttendanceExportBtn = document.getElementById('btn-open-attendance-export');
+    if (openAttendanceExportBtn) openAttendanceExportBtn.addEventListener('click', () => this.openAttendanceExportDialog());
+    const cancelAttendanceExportBtn = document.getElementById('btn-cancel-attendance-export');
+    if (cancelAttendanceExportBtn) cancelAttendanceExportBtn.addEventListener('click', () => this.closeAttendanceExportDialog());
+    const runAttendanceExportBtn = document.getElementById('btn-run-attendance-export');
+    if (runAttendanceExportBtn) runAttendanceExportBtn.addEventListener('click', () => this.runAttendanceExport());
   }
 
   // ===== FIREBASE SYNC & REALTIME LISTENERS =====
@@ -2923,7 +3356,7 @@ class KalyanMitra {
       if (!this.initializing) {
         if (this.currentRole === 'admin') {
           this.renderAdminProgress();
-          this.renderAdminLock();
+          this._renderAdminUnlockButton();
         } else {
           this.renderDashboard();
         }
@@ -2959,7 +3392,7 @@ class KalyanMitra {
       this.currentDayLockValue = val;
       if (!this.initializing) {
         if (this.currentRole === 'user') this.updateLockUI();
-        else if (this.currentRole === 'admin') this.renderAdminLock();
+        else if (this.currentRole === 'admin') this._renderAdminUnlockButton();
       }
     });
 
@@ -3059,19 +3492,6 @@ class KalyanMitra {
     const v = this.currentDayLockValue;
     if (!v) return null;
     return (typeof v === 'object' && v.by) ? v.by : 'unknown';
-  }
-
-  async lockDay() {
-    const todayKey = this.getTodayKey();
-    const lockValue = this._lockValue('admin');
-    // Set locally before the await resolves (matching confirmSubmitDay()'s
-    // pattern), so the caller's repaint is correct even if the lock_status
-    // listener is detached or hasn't fired yet.
-    this.currentDayLocked = true;
-    this.currentDayLockValue = lockValue;
-    await db.ref(`users/${this.uid}/lock_status/${todayKey}`).set(lockValue);
-    // Process end-of-day when locked
-    this.processEndOfDay(todayKey);
   }
 
   startAutoLockCheck() {
@@ -5626,7 +6046,7 @@ class KalyanMitra {
     tabEl.classList.add('active');
     navEl.classList.add('active');
     if (tabName === 'admin-progress') this.renderAdminProgress();
-    if (tabName === 'admin-lock') this.renderAdminLock();
+    if (tabName === 'admin-attendance') this.renderAttendance();
     if (tabName === 'admin-leaderboard') this.renderAdminLeaderboard();
     history.replaceState({ ...(history.state || {}), tab: tabName, overlay: null }, '');
   }
@@ -5816,88 +6236,14 @@ class KalyanMitra {
     }
   }
 
-  renderAdminLock() {
-    const nameEl = document.getElementById('lock-user-name');
-    const managedEl = document.getElementById('lock-managed-content');
-
-    // The Lock tab is reachable from the bottom nav at any time, but
-    // lock_status is per-user — with no user selected there is nothing to
-    // show or act on. Returning here (before touching this.dailyLog) is
-    // also what keeps a fresh admin session from crashing on an
-    // uninitialized dailyLog.
-    if (!this._adminSelectedUid) {
-      if (nameEl) nameEl.textContent = '⚠️ No user selected — choose one from the Leaderboard tab to manage their lock.';
-      if (managedEl) managedEl.classList.add('hidden');
-      return;
-    }
-    if (nameEl) nameEl.textContent = `Managing: ${this._adminSelectedName || this.uid}`;
-    if (managedEl) managedEl.classList.remove('hidden');
-
-    const locked = this.isDayLocked();
-    const icon = document.getElementById('lock-status-icon');
-    const text = document.getElementById('lock-status-text');
-    const card = document.getElementById('lock-status-card');
-    const btn = document.getElementById('btn-lock-day');
+  // Replaces the old Lock tab's status card — unlock now lives in the
+  // member drill-down (#admin-individual), which always has a selected
+  // member, so there's no "no user selected" branch to handle here. Just
+  // enables the button when today is locked for whichever member is
+  // currently drilled into.
+  _renderAdminUnlockButton() {
     const unlockBtn = document.getElementById('btn-unlock-day');
-    if (!icon || !text || !card || !btn) return;
-
-    if (locked) {
-      const byLabel = { user: 'the user', admin: 'you (admin)', auto: 'auto-lock at midnight' }[this._lockedBy()] || 'unknown';
-      icon.textContent = '🔒';
-      text.innerHTML = `Today is <strong>locked</strong> (by ${byLabel}). User cannot modify activities.`;
-      card.classList.add('locked');
-      btn.disabled = true;
-      btn.textContent = '🔒 Already Locked';
-      if (unlockBtn) unlockBtn.disabled = false;
-    } else {
-      icon.textContent = '🔓';
-      text.innerHTML = 'Today is <strong>unlocked</strong>. User can still modify activities.';
-      card.classList.remove('locked');
-      btn.disabled = false;
-      btn.textContent = '🔒 Lock Today\'s Submissions';
-      if (unlockBtn) unlockBtn.disabled = true;
-    }
-
-    // Lock preview
-    const d = this.dailyLog || DEFAULT_DAILY_LOG;
-    const s = this.settings || DEFAULT_SETTINGS;
-    const preview = document.getElementById('lock-preview-list');
-    const items = [
-      s.enableNavkarsi ? `<div class="lock-preview-item"><span>🚰 Navkarsi:</span> <strong>${d.navkarsiDone ? '✓' : '✗'}</strong></div>` : '',
-      s.enableWakeup ? `<div class="lock-preview-item"><span>🌅 Wake < 7AM:</span> <strong>${d.wakeUpDone ? '✓' : '✗'}</strong></div>` : '',
-      s.enableSleep ? `<div class="lock-preview-item"><span>🌙 Sleep < 12AM:</span> <strong>${d.sleepDone ? '✓' : '✗'}</strong></div>` : '',
-      s.enablePranam ? `<div class="lock-preview-item"><span>🙇 Pranam:</span> <strong>${d.pranamDone ? '✓' : '✗'}</strong></div>` : '',
-      s.enablePooja ? `<div class="lock-preview-item"><span>🪔 Jin Pooja:</span> <strong>${d.poojaDone ? 'Done' : 'Not done'}${d.ashtaPrakariDone ? ' +Ashta' : ''}</strong></div>` : '',
-      s.enableSamayik ? `<div class="lock-preview-item"><span>🧘 Samayik:</span> <strong>${d.samayikDone || 0}</strong></div>` : '',
-      s.enablePratikraman ? `<div class="lock-preview-item"><span>🌅 Devasiya:</span> <strong>${d.devasiyaDone ? '✓' : '✗'}</strong></div>` : '',
-      s.enablePratikraman ? `<div class="lock-preview-item"><span>🌙 Raysiya:</span> <strong>${d.raysiyaDone ? '✓' : '✗'}</strong></div>` : '',
-      s.enableBookReading ? `<div class="lock-preview-item"><span>📖 Reading:</span> <strong>${d.bookReadingMins || 0} min</strong></div>` : '',
-      s.enableRatriBhojan ? `<div class="lock-preview-item"><span>🚫 Ratri Bhojan:</span> <strong>${d.ratriBhojanDone ? '✓' : '✗'}</strong></div>` : '',
-      s.enableKandmool ? `<div class="lock-preview-item"><span>🥔 Kandmool:</span> <strong>${d.kandmoolDone ? '✓' : '✗'}</strong></div>` : '',
-      s.enableScreenTime ? `<div class="lock-preview-item"><span>📱 Screen:</span> <strong>${d.screenTimeHours || 0}h ${d.screenTimeMins || 0}m</strong></div>` : '',
-      s.enableDailyNiyam ? `<div class="lock-preview-item"><span>✨ Niyam:</span> <strong>${d.dailyNiyamDone ? '✓' : '✗'}</strong></div>` : '',
-    ];
-    (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
-      if (!entry.flag || !s[entry.flag]) return;
-      entry.items.forEach(item => {
-        const icon = item.icon || entry.icon || '';
-        items.push(`<div class="lock-preview-item"><span>${icon} ${item.label}:</span> <strong>${d[item.prop] ? '✓' : '✗'}</strong></div>`);
-      });
-    });
-    if (preview) preview.innerHTML = items.filter(Boolean).join('');
-  }
-
-  async adminLockDay() {
-    if (!this._adminSelectedUid) {
-      alert('Select a user from the Leaderboard tab first.');
-      return;
-    }
-    if (this.isDayLocked()) return;
-    if (!confirm('🔒 Lock today\'s submissions? The user will no longer be able to modify today\'s activities unless you unlock it.')) return;
-
-    await this.lockDay();
-    this.renderAdminLock();
-    this.renderAdminProgress();
+    if (unlockBtn) unlockBtn.disabled = !this.isDayLocked();
   }
 
   async adminUnlockDay() {
@@ -5936,7 +6282,7 @@ class KalyanMitra {
       this.saveDailyLogFor(todayKey, this.dailyLog);
     }
 
-    this.renderAdminLock();
+    this._renderAdminUnlockButton();
     this.renderAdminProgress();
   }
 

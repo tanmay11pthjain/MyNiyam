@@ -24,7 +24,7 @@
        <noscript> fallback covers the rare case of JS being disabled. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-  <link rel="stylesheet" href="styles.css?v=31">
+  <link rel="stylesheet" href="styles.css?v=32">
   <script>
     // Decide the boot state before <body> even exists, so no element lookup
     // is possible here — the previous version of this check ran mid-body and
@@ -940,37 +940,44 @@
 
           <h3 class="sub-heading">📊 Lifetime Stats</h3>
           <div class="stats-grid" id="admin-stats-grid"><!-- Populated by JS: _renderLifetimeStats() --></div>
-        </div>
 
-      </div>
-    </div>
-
-    <!-- ADMIN TAB: LOCK DAY -->
-    <div id="admin-tab-lock" class="admin-tab-content">
-      <div class="admin-section">
-        <h2 class="section-heading">🔒 Lock Day</h2>
-        <p class="admin-desc">Lock today's submissions to finalize the user's activity status. You can unlock it again if needed.</p>
-        <p class="lock-user-name" id="lock-user-name"></p>
-
-        <div id="lock-managed-content">
-          <div class="lock-status-card" id="lock-status-card">
-            <div class="lock-status-icon" id="lock-status-icon">🔓</div>
-            <div class="lock-status-text" id="lock-status-text">Today is <strong>unlocked</strong>. User can still modify activities.</div>
-          </div>
-
-          <div class="lock-summary" id="lock-summary">
-            <p>Current status if locked now:</p>
-            <div id="lock-preview-list"><!-- Populated by JS --></div>
-          </div>
-
-          <button class="btn-lock-day" id="btn-lock-day">🔒 Lock Today's Submissions</button>
+          <h3 class="sub-heading">🔓 Unlock Today's Entry</h3>
+          <p class="admin-desc">Enabled only when this member's entry for today is locked (by their own submit or midnight auto-lock).</p>
           <button class="btn-unlock-day" id="btn-unlock-day" disabled>🔓 Unlock Today's Submissions</button>
-          <p class="lock-note">⏰ Auto-lock also happens at midnight. Users can also submit and lock their own entry.</p>
 
           <div class="settings-group danger-zone" style="margin-top:24px">
             <h3 class="settings-group-title">⚠️ Danger Zone</h3>
             <button class="btn-reset" id="btn-admin-reset">Reset All User Progress</button>
           </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ADMIN TAB: ATTENDANCE -->
+    <div id="admin-tab-attendance" class="admin-tab-content">
+      <div class="admin-section">
+        <h2 class="section-heading">📋 Attendance</h2>
+        <p class="admin-desc">Mark today's attendance and gatha count for each member, then save.</p>
+
+        <div class="input-group">
+          <label for="attendance-date">Date</label>
+          <input type="date" id="attendance-date">
+        </div>
+
+        <div class="export-bar">
+          <button class="btn-export" id="btn-attendance-mark-all">✅ Mark All Present</button>
+          <button class="btn-export" id="btn-open-attendance-export">📊 Export Attendance</button>
+        </div>
+
+        <div id="attendance-list" class="attendance-list">
+          <!-- Populated by JS -->
+          <div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>
+        </div>
+
+        <div class="attendance-save-bar">
+          <span class="attendance-unsaved hidden" id="attendance-unsaved-indicator">● Unsaved changes</span>
+          <button class="btn-login" id="btn-save-attendance">💾 Save Attendance</button>
         </div>
       </div>
     </div>
@@ -989,8 +996,8 @@
       <button class="nav-item" data-tab="admin-progress">
         <span class="nav-icon">📊</span><span class="nav-label">Progress</span>
       </button>
-      <button class="nav-item" data-tab="admin-lock">
-        <span class="nav-icon">🔒</span><span class="nav-label">Lock</span>
+      <button class="nav-item" data-tab="admin-attendance">
+        <span class="nav-icon">📋</span><span class="nav-label">Attend</span>
       </button>
     </nav>
   </div>
@@ -1116,6 +1123,29 @@
     </div>
   </div>
 
+  <!-- Export Attendance to Excel -->
+  <div id="attendance-export-overlay" class="overlay hidden">
+    <div class="overlay-content">
+      <h2 class="summary-title">📊 Export Attendance</h2>
+      <p class="submit-confirm-text">Pick a date range to export attendance and gatha counts.</p>
+      <div class="input-group">
+        <label for="attendance-export-from">From</label>
+        <input type="date" id="attendance-export-from">
+      </div>
+      <div class="input-group">
+        <label for="attendance-export-to">To</label>
+        <input type="date" id="attendance-export-to">
+      </div>
+      <div class="register-error hidden" id="attendance-export-error"></div>
+      <div class="overlay-actions">
+        <button class="btn-cancel" id="btn-cancel-attendance-export">Cancel</button>
+        <button class="btn-continue" id="btn-run-attendance-export">
+          <span>Export</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Leaderboard Poster -->
   <div id="poster-overlay" class="overlay hidden">
     <div class="overlay-content poster-overlay-content">
@@ -1189,6 +1219,6 @@
   <!-- Scripts -->
   <script src="data.js?v=47"></script>
   <script src="auth.js?v=48"></script>
-  <script src="app.js?v=48"></script>
+  <script src="app.js?v=49"></script>
 </body>
 </html>
