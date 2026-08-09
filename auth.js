@@ -90,29 +90,45 @@ const Auth = (() => {
       const slotIds = [baseUid];
       for (let slot = 2; slot <= MAX_PROFILES; slot++) slotIds.push(`${baseUid}${PROFILE_SEP}${slot}`);
 
-      const snaps = await Promise.all(
-        slotIds.map(id => db.ref(`users/${id}/registration`).once('value'))
-      );
+      // Three leaf reads per slot instead of one: "has a registration" is NOT
+      // the same as "is a profile" for an admin. Admins are provisioned
+      // console-side and their user record only ever carries `role` and
+      // `name` (app.js writes the latter on every admin login) — never a
+      // `registration` node. Judging by registration alone made an admin's
+      // OWN slot invisible in their own profile list, which broke
+      // getNextProfileId() (handed back the id already in use) and made
+      // app.js's "active profile vanished" self-heal fire against a profile
+      // that never went anywhere. All 15 reads are dispatched in one
+      // parallel batch over the already-open connection — still one round
+      // trip, not fifteen.
+      const [regSnaps, roleSnaps, nameSnaps] = await Promise.all([
+        Promise.all(slotIds.map(id => db.ref(`users/${id}/registration`).once('value'))),
+        Promise.all(slotIds.map(id => db.ref(`users/${id}/role`).once('value'))),
+        Promise.all(slotIds.map(id => db.ref(`users/${id}/name`).once('value')))
+      ]);
 
       const profiles = [];
-      snaps.forEach((snap, i) => {
-        const reg = snap.val();
-        if (!reg) return; // no registration at this slot — not a profile yet
+      slotIds.forEach((id, i) => {
+        const reg = regSnaps[i].val();
+        const isAdmin = roleSnaps[i].val() === 'admin';
+        if (!reg && !isAdmin) return; // genuinely empty slot — not a profile yet
         profiles.push({
-          profileId: slotIds[i],
-          name: String(reg.name || '').trim(),
-          sanghCode: String(reg.sanghCode || '').trim(),
-          // A registration node only ever exists once handleRegistration()
-          // has written it, and that always includes a non-empty sanghCode
-          // (the registration form requires one before it can submit) — so
-          // "has a registration" and "is registered" are the same fact here.
-          registered: true
+          profileId: id,
+          // An admin has no registration to take a name from; users/{id}/name
+          // is the only name their record carries.
+          name: String((reg && reg.name) || nameSnaps[i].val() || '').trim(),
+          sanghCode: String((reg && reg.sanghCode) || '').trim(),
+          // Still means exactly one thing — "this slot has a member
+          // registration" — which is why the admin case gets its OWN flag
+          // below rather than being folded in here and blurring both.
+          registered: !!reg,
+          isAdmin: isAdmin
         });
       });
 
       return profiles.length > 0
         ? profiles
-        : [{ profileId: baseUid, name: '', sanghCode: '', registered: false }];
+        : [{ profileId: baseUid, name: '', sanghCode: '', registered: false, isAdmin: false }];
     } catch (e) {
       // A genuine failure. Returning null (not a fabricated single-profile
       // list) is what stops app.js's _loadAccountProfiles() from treating a
@@ -368,7 +384,25 @@ const Auth = (() => {
         // from. A pre-multi-profile cached session has no baseUid at all,
         // so this is a no-op for it — fully backward compatible.
         if (parsed.baseUid) {
-          parsed.uid = getActiveProfileId(parsed.baseUid);
+          const activeId = getActiveProfileId(parsed.baseUid);
+          if (activeId !== parsed.uid) {
+            // The cache describes the profile we just switched AWAY from.
+            // uid is re-resolvable locally, but role/name/sanghCodes/profile
+            // are per-PROFILE facts only _fetchRoleFromFirebase() can answer.
+            // Publishing the old role under the new uid is what would let a
+            // switch from an admin into a family profile boot the admin
+            // panel for an instant — and app.js's admin branch stamps the
+            // admin's own cached name onto users/{thatProfile}/name before
+            // the real role ever arrives. Dropping these is what makes that
+            // branch unreachable until the fresh answer lands (app.js then
+            // sits on the loading screen, exactly as it already does for
+            // registered === undefined).
+            parsed.uid = activeId;
+            delete parsed.role;
+            delete parsed.name;
+            delete parsed.sanghCodes;
+            delete parsed.profile;
+          }
         }
         currentUser = parsed;
         _notifyListeners();

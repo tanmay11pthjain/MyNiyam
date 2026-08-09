@@ -607,6 +607,25 @@ body.landing-open {
   -webkit-overflow-scrolling: touch;
 }
 
+/* A position:fixed child of a position:fixed ancestor still positions
+   against the true viewport (fixed containing blocks only change when an
+   ancestor has a transform/filter/will-change, which #landing-screen does
+   not), so this stays pinned to the top edge regardless of the internal
+   scroll happening inside #landing-screen. Filled via scaleX() in JS —
+   transform, not width, so it never triggers layout on every scroll frame. */
+.landing-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+  transform: scaleX(0);
+  transform-origin: left;
+  z-index: 1102;
+  pointer-events: none;
+}
+
 .landing-hero {
   position: relative;
   min-height: 100vh;
@@ -623,6 +642,16 @@ body.landing-open {
   z-index: 10;
   max-width: 480px;
   text-align: center;
+  /* --hero-progress (0→1 over the first viewport height) is written onto
+     .landing-hero by _setupLandingScrollEffects()'s scroll handler and
+     inherits down to this child. The var(…, 0) fallback covers every frame
+     before the first scroll event, so this never flashes an animated state
+     on load. opacity's out-of-range values are clamped by spec, so no
+     min()/max() needed there; .landing-scroll-cue is a child of this
+     element and fades along with it for free via that clamped opacity —
+     no separate rule needed despite its own always-running bounce keyframe. */
+  opacity: calc(1 - var(--hero-progress, 0) * 1.15);
+  transform: translateY(calc(var(--hero-progress, 0) * -36px)) scale(calc(1 - var(--hero-progress, 0) * 0.08));
 }
 
 .landing-hero .login-lotus {
@@ -714,7 +743,16 @@ body.landing-open {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 18px;
+  /* Pops in on top of the band's own .landing-reveal fade — the two
+     transforms compose visually (parent translateY + child scale), which is
+     normal, expected behaviour for nested transformed elements. */
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.5s ease, transform 0.5s ease;
 }
+.landing-stats-band.is-visible .landing-stat { opacity: 1; transform: scale(1); }
+.landing-stats-band.is-visible .landing-stat:nth-child(1) { transition-delay: 100ms; }
+.landing-stats-band.is-visible .landing-stat:nth-child(2) { transition-delay: 200ms; }
 
 .landing-stat-value {
   font-family: 'Outfit', sans-serif;
@@ -772,6 +810,21 @@ body.landing-open {
   text-align: center;
 }
 
+/* Cards slide in from alternating sides once the SECTION (the ancestor
+   carrying .landing-reveal) is revealed — riding the same .is-visible
+   toggle _setupLandingScrollEffects()'s revealObserver already applies, so
+   no extra JS or observer is needed here. */
+.landing-card {
+  opacity: 0;
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.landing-card:nth-child(odd)  { transform: translateX(-28px); }
+.landing-card:nth-child(even) { transform: translateX(28px); }
+.landing-section.is-visible .landing-card { opacity: 1; transform: translateX(0); }
+.landing-section.is-visible .landing-card:nth-child(1) { transition-delay: 0ms; }
+.landing-section.is-visible .landing-card:nth-child(2) { transition-delay: 110ms; }
+.landing-section.is-visible .landing-card:nth-child(3) { transition-delay: 220ms; }
+
 .landing-card-icon { font-size: 2rem; display: block; margin-bottom: 10px; }
 .landing-card-title { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.05rem; margin: 0 0 8px; color: #fff; }
 .landing-card-text { font-size: 0.85rem; line-height: 1.6; color: rgba(255, 253, 248, 0.8); margin: 0; }
@@ -781,16 +834,57 @@ body.landing-open {
   display: grid;
   grid-template-columns: 1fr;
   gap: 16px;
+  position: relative; /* containing block for the rail pseudo-elements below */
+}
+
+/* Vertical rail connecting the step-number badges — track line always
+   present, gradient fill grows in alongside the steps themselves via the
+   SAME .is-visible toggle. Mobile-only: the desktop 4-column layout below
+   turns this into a horizontal row, where a vertical line reads as broken. */
+.landing-steps::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateX(-50%);
+  z-index: 0;
+}
+.landing-steps::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  width: 2px;
+  height: 0;
+  background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+  transform: translateX(-50%);
+  transition: height 1s ease;
+  z-index: 0;
+}
+.landing-section.is-visible .landing-steps::after {
+  height: calc(100% - 28px);
 }
 
 .landing-step {
   position: relative;
+  z-index: 1; /* sit above the rail, which shows only in the gaps between cards */
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 18px;
   padding: 24px 20px 20px;
   text-align: center;
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
 }
+.landing-section.is-visible .landing-step { opacity: 1; transform: translateY(0); }
+.landing-section.is-visible .landing-step:nth-child(1) { transition-delay: 0ms; }
+.landing-section.is-visible .landing-step:nth-child(2) { transition-delay: 90ms; }
+.landing-section.is-visible .landing-step:nth-child(3) { transition-delay: 180ms; }
+.landing-section.is-visible .landing-step:nth-child(4) { transition-delay: 270ms; }
 
 .landing-step-number {
   position: absolute;
@@ -830,7 +924,23 @@ body.landing-open {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   padding: 12px 14px;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.45s ease, transform 0.45s ease;
 }
+/* Popped in with a per-item stagger, capped at 8 explicit steps — the grid
+   is fed by NIYAM_STATS (app.js), which can grow, so anything past the 8th
+   item just shares that last delay rather than needing a matching CSS rule
+   added every time a niyam is registered. */
+.landing-section.is-visible .landing-niyam-item { opacity: 1; transform: scale(1); }
+.landing-section.is-visible .landing-niyam-item:nth-child(1) { transition-delay: 0ms; }
+.landing-section.is-visible .landing-niyam-item:nth-child(2) { transition-delay: 60ms; }
+.landing-section.is-visible .landing-niyam-item:nth-child(3) { transition-delay: 120ms; }
+.landing-section.is-visible .landing-niyam-item:nth-child(4) { transition-delay: 180ms; }
+.landing-section.is-visible .landing-niyam-item:nth-child(5) { transition-delay: 240ms; }
+.landing-section.is-visible .landing-niyam-item:nth-child(6) { transition-delay: 300ms; }
+.landing-section.is-visible .landing-niyam-item:nth-child(7) { transition-delay: 360ms; }
+.landing-section.is-visible .landing-niyam-item:nth-child(n+8) { transition-delay: 420ms; }
 
 .landing-niyam-icon { font-size: 1.3rem; flex-shrink: 0; }
 .landing-niyam-label { font-size: 0.82rem; font-weight: 600; color: rgba(255, 253, 248, 0.9); }
@@ -844,6 +954,16 @@ body.landing-open {
 .landing-footer .landing-cta { margin-bottom: 20px; }
 .landing-footer-url { font-size: 0.85rem; font-weight: 600; color: var(--primary-light); margin: 0 0 4px; }
 .landing-footer-credit { font-size: 0.78rem; color: rgba(255, 253, 248, 0.55); margin: 0; }
+
+/* Footer CTA glows twice right as it settles into view, then stops —
+   finite (not infinite) so it draws the eye without nagging forever. */
+@keyframes landingCtaGlow {
+  0%, 100% { box-shadow: 0 8px 24px rgba(232, 114, 42, 0.4); }
+  50% { box-shadow: 0 8px 36px rgba(232, 114, 42, 0.8); }
+}
+.landing-footer.is-visible .landing-cta {
+  animation: landingCtaGlow 1.4s ease 0.4s 2;
+}
 
 /* ----- Sticky CTA bar ----- */
 .landing-sticky-cta {
@@ -880,6 +1000,12 @@ body.landing-open {
   .landing-cards { grid-template-columns: repeat(3, 1fr); }
   .landing-steps { grid-template-columns: repeat(4, 1fr); }
   .landing-title { font-size: 3rem; }
+  /* A vertical connecting line reads as broken once the steps become a
+     horizontal row. */
+  .landing-steps::before,
+  .landing-steps::after {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -897,6 +1023,34 @@ body.landing-open {
   }
   .landing-sticky-cta {
     transition: opacity 0.01s linear, visibility 0.01s linear;
+  }
+  /* Neutralise every new scroll-driven effect: the item pop/slide stagger,
+     the hero parallax, the step rail's fill, and the footer glow. The scroll
+     listener that drives the progress bar and hero parallax is never even
+     attached under reduced motion (see _setupLandingScrollEffects()'s early
+     return), so the bar would otherwise sit frozen at 0 — hiding it is
+     clearer than a permanently-empty bar. */
+  .landing-progress-bar {
+    display: none !important;
+  }
+  .landing-hero-content {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .landing-card,
+  .landing-step,
+  .landing-stat,
+  .landing-niyam-item {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .landing-steps::after {
+    transition: none !important;
+    height: calc(100% - 28px) !important;
+  }
+  .landing-footer .landing-cta {
+    animation: none !important;
   }
 }
 
@@ -3797,6 +3951,9 @@ body.landing-open {
 .leaderboard-card { display: flex; align-items: center; background: white; border-radius: 16px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s; }
 .leaderboard-card:active { transform: scale(0.98); }
 .lb-rank { font-size: 18px; font-weight: 800; color: var(--primary); width: 40px; }
+.lb-avatar { width: 40px; height: 40px; border-radius: 50%; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--primary-light); margin-right: 12px; }
+.lb-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.lb-initial { color: #fff; font-weight: 800; font-size: 1rem; font-family: 'Outfit', sans-serif; }
 .lb-info { flex: 1; display: flex; flex-direction: column; }
 .lb-name { font-size: 16px; font-weight: 600; color: var(--text-dark); margin-bottom: 4px; }
 .lb-stats { font-size: 13px; color: var(--text-light); }
@@ -3810,6 +3967,16 @@ body.landing-open {
 .btn-delete-user { background: #fee2e2; color: #dc2626; border: 1.5px solid #fca5a5; border-radius: 10px; padding: 6px 14px; font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; transition: transform 0.15s, background 0.15s; white-space: nowrap; }
 .btn-delete-user:hover { background: #fecaca; }
 .btn-delete-user:active { transform: scale(0.95); background: #fca5a5; }
+
+/* ===== ADMIN PROFILE DETAILS CARD (drill-down) ===== */
+.admin-profile-details { margin-bottom: 16px; }
+.admin-profile-details-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.admin-profile-details-avatar { width: 56px; height: 56px; border-radius: 50%; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--primary-light); box-shadow: 0 2px 8px var(--shadow); }
+.admin-profile-details-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.admin-profile-details-initial { color: #fff; font-weight: 800; font-size: 1.4rem; font-family: 'Outfit', sans-serif; }
+.admin-profile-details-name { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.05rem; color: var(--text-dark); }
+.admin-profile-details .profile-readonly-row { margin-bottom: 6px; }
+.admin-profile-details .profile-readonly-value a { color: var(--primary); text-decoration: none; font-weight: 600; }
 
 /* ===== OVERVIEW CARDS ===== */
 .overview-summary-row { display: flex; gap: 12px; margin-bottom: 20px; }

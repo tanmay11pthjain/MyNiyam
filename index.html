@@ -24,7 +24,7 @@
        <noscript> fallback covers the rare case of JS being disabled. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-  <link rel="stylesheet" href="styles.css?v=30">
+  <link rel="stylesheet" href="styles.css?v=31">
   <script>
     // Decide the boot state before <body> even exists, so no element lookup
     // is possible here — the previous version of this check ran mid-body and
@@ -52,6 +52,11 @@
   <!-- ===== LANDING PAGE ===== -->
   <div id="landing-screen">
 
+    <!-- Scroll-progress bar — position:fixed, so it stays pinned to the
+         viewport regardless of #landing-screen's own internal scrolling.
+         Filled by _setupLandingScrollEffects() as the visitor scrolls. -->
+    <div class="landing-progress-bar" id="landing-progress-bar"></div>
+
     <!-- HERO -->
     <section class="landing-hero" id="landing-hero">
       <div class="login-bg-glow"></div>
@@ -71,7 +76,7 @@
         <h1 class="landing-title">🙏 MyNiyam</h1>
         <p class="landing-subtitle">Aapka Adhyatmik Saathi</p>
         <p class="landing-tagline">Your daily companion for Jain sadhana — Navkarsi, Samayik, Pratikraman and Swadhyay, tracked and celebrated with your Sangh.</p>
-        <!-- <button class="landing-cta landing-cta-primary">🙏 Fill My Niyam</button> -->
+        <button class="landing-cta landing-cta-primary">🙏 Fill My Niyam</button>
         <div class="landing-scroll-cue">↓ Discover MyNiyam</div>
       </div>
     </section>
@@ -155,9 +160,11 @@
       <p class="landing-footer-credit">Developed by Heer Sena</p>
     </footer>
 
-    <!-- STICKY CTA BAR -->
+    <!-- STICKY CTA BAR — its button is picked up by the same
+         `.landing-cta` querySelectorAll in _ensureLandingReady() that wires
+         the hero/footer buttons, so no separate JS binding is needed. -->
     <div class="landing-sticky-cta" id="landing-sticky-cta">
-      <!-- <button class="landing-cta">🙏 Fill My Niyam</button> -->
+      <button class="landing-cta">🙏 Fill My Niyam</button>
     </div>
   </div>
   <!-- ===== LOADING SCREEN ===== -->
@@ -744,6 +751,15 @@
           <span class="brand-name">🙏 MyNiyam</span>
           <div class="admin-brand-right">
             <span class="admin-role-tag">👑 Admin</span>
+            <!-- Same markup/CSS as the user header's #header-avatar-btn —
+                 distinct ids because #app stays in the DOM (display:none,
+                 not removed) during an admin session, so both headers exist
+                 at once and duplicate ids would break every getElementById
+                 the avatar-loading code does. -->
+            <button class="header-avatar-btn" id="admin-header-avatar-btn" title="Switch Profile">
+              <img class="header-avatar-img hidden" id="admin-header-avatar-img" src="" alt="">
+              <span class="header-avatar-placeholder" id="admin-header-avatar-placeholder">👤</span>
+            </button>
             <button class="btn-header-logout" id="btn-admin-logout" title="Logout">↩ Logout</button>
           </div>
         </div>
@@ -885,6 +901,12 @@
             <span id="admin-viewing-name" class="admin-viewing-name">Viewing: User</span>
             <button id="btn-delete-user" class="btn-delete-user" onclick="app.deleteAdminUser()">🗑️ Remove</button>
           </div>
+
+          <!-- Personal details card — populated by renderAdminUserDetails().
+               Hidden by that function itself when a record has nothing to
+               show (e.g. no registration on file). -->
+          <div id="admin-profile-details" class="admin-profile-details hidden"><!-- Populated by JS --></div>
+
           <h2 class="section-heading">📊 User Progress</h2>
 
           <div class="admin-profile-card">
@@ -1166,7 +1188,7 @@
 
   <!-- Scripts -->
   <script src="data.js?v=47"></script>
-  <script src="auth.js?v=47"></script>
-  <script src="app.js?v=47"></script>
+  <script src="auth.js?v=48"></script>
+  <script src="app.js?v=48"></script>
 </body>
 </html>

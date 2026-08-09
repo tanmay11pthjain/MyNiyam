@@ -377,6 +377,11 @@ class KalyanMitra {
     } catch (e) {
       console.error('Logout confirmation setup failed (non-fatal):', e);
     }
+    try {
+      this._initProfileSwitcher();
+    } catch (e) {
+      console.error('Profile switcher setup failed (non-fatal):', e);
+    }
   }
 
   // Binds the shared logout-confirmation overlay's Cancel/Confirm buttons
@@ -406,6 +411,25 @@ class KalyanMitra {
   closeLogoutConfirm() {
     const overlay = document.getElementById('logout-confirm-overlay');
     if (overlay) { overlay.classList.remove('show'); overlay.classList.add('hidden'); }
+  }
+
+  // Binds the shared profile-switcher overlay's entry points and controls
+  // once, here — same reasoning as _initLogoutConfirm() just above: the
+  // overlay now serves BOTH the user header's avatar / Profile-tab button
+  // AND the admin header's avatar, but only one of setupUserEventListeners()
+  // / setupAdminEventListeners() ever runs per session, so neither is a
+  // reliable home for something shared. A user session harmlessly binds the
+  // admin header's button too — it lives inside #admin-panel.hidden
+  // (display:none) for that session and can never be clicked.
+  _initProfileSwitcher() {
+    ['header-avatar-btn', 'btn-switch-profile', 'admin-header-avatar-btn'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('click', () => this.openProfileSwitcher());
+    });
+    const closeBtn = document.getElementById('btn-close-profile-switcher');
+    if (closeBtn) closeBtn.addEventListener('click', () => this.closeProfileSwitcher());
+    const addBtn = document.getElementById('btn-add-profile');
+    if (addBtn) addBtn.addEventListener('click', () => this.addProfile());
   }
 
   // ===== ANDROID BACK BUTTON / BROWSER HISTORY =====
@@ -799,11 +823,15 @@ class KalyanMitra {
   }
 
   // Scroll-driven behavior scoped to #landing-screen (which scrolls
-  // internally): reveals sections as they enter view, shows the sticky CTA
-  // bar once the hero scrolls away, and triggers the stats count-up exactly
-  // once. prefers-reduced-motion (or a browser without IntersectionObserver)
-  // skips all of it and shows every final state immediately — none of this
-  // is required to read or use the page.
+  // internally, NOT the window — see #landing-screen's own
+  // position:fixed/overflow-y:auto): reveals sections (and, via CSS alone,
+  // their staggered child cards/steps/stats/niyam-items and the step rail)
+  // as they enter view, shows the sticky CTA bar once the hero scrolls away,
+  // triggers the stats count-up exactly once, and tracks live scroll
+  // position for the progress bar + hero parallax. prefers-reduced-motion
+  // (or a browser without IntersectionObserver) skips all of it and shows
+  // every final state immediately — none of this is required to read or use
+  // the page.
   _setupLandingScrollEffects() {
     const scrollRoot = document.getElementById('landing-screen');
     const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -812,12 +840,17 @@ class KalyanMitra {
     const stickyBar = document.getElementById('landing-sticky-cta');
     const heroEl = document.getElementById('landing-hero');
     const statsEl = document.getElementById('landing-stats-band');
+    const progressBarEl = document.getElementById('landing-progress-bar');
 
     if (reduceMotion || typeof IntersectionObserver === 'undefined') {
       revealEls.forEach(el => el.classList.add('is-visible'));
       if (stickyBar) stickyBar.classList.add('is-visible');
       this._landingStatsAnimated = true;
       if (this._landingStats) this._paintLandingStats(false);
+      // The progress bar and hero parallax are purely decorative scroll-
+      // position trackers — under reduced motion (or an old browser with no
+      // IntersectionObserver) they're simply never wired up; the
+      // reduced-motion CSS block keeps both visually neutral either way.
       return;
     }
 
@@ -851,6 +884,34 @@ class KalyanMitra {
         });
       }, { threshold: 0.4, root: scrollRoot });
       statsObserver.observe(statsEl);
+    }
+
+    // Progress bar + hero parallax track live scroll POSITION rather than a
+    // one-shot "has this entered view yet", so they need an actual scroll
+    // listener rather than an IntersectionObserver. rAF-throttled so a fast
+    // scroll never queues more than one calculation per frame.
+    if (progressBarEl || heroEl) {
+      let ticking = false;
+      const updateOnScroll = () => {
+        ticking = false;
+        const scrollTop = scrollRoot.scrollTop;
+        if (progressBarEl) {
+          const maxScroll = scrollRoot.scrollHeight - scrollRoot.clientHeight;
+          const pct = maxScroll > 0 ? Math.min(1, Math.max(0, scrollTop / maxScroll)) : 0;
+          progressBarEl.style.transform = `scaleX(${pct})`;
+        }
+        if (heroEl) {
+          const heroHeight = heroEl.offsetHeight || 1;
+          const heroProgress = Math.min(1, Math.max(0, scrollTop / heroHeight));
+          heroEl.style.setProperty('--hero-progress', heroProgress);
+        }
+      };
+      scrollRoot.addEventListener('scroll', () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(updateOnScroll);
+      }, { passive: true });
+      updateOnScroll(); // paints the correct state immediately, e.g. on a re-show that reset scrollTop to 0
     }
   }
 
@@ -1492,6 +1553,32 @@ class KalyanMitra {
 
   // ===== MULTI-PROFILE (multiple members under one Google account) =====
 
+  // The profile id this SESSION *is*. Deliberately not this.uid: on the
+  // admin panel that field is the admin's current view TARGET — null on the
+  // Leaderboard overview (_clearAdminSelection()) and the managed member's
+  // uid while drilled into one (selectAdminUser()) — so keying any
+  // multi-profile logic off it would make ordinary admin-panel uid churn
+  // look like "the active profile vanished". _currentAuthUser.uid is written
+  // once, in init()'s auth listener, and never moves. Falls back to this.uid
+  // only for a session shape that predates _currentAuthUser existing.
+  _activeProfileId() {
+    const u = this._currentAuthUser;
+    return (u && u.uid) || this.uid || null;
+  }
+
+  // Escapes a value for safe interpolation into an innerHTML template
+  // literal. Needed here specifically because the profile switcher and (new)
+  // admin profile-details card render fields a user can set themselves
+  // (name, sanghCode, phone, city, area, photo src) straight from a
+  // self-writable Firebase record — unlike the rest of this file's
+  // template-literal renders, which only ever interpolate server-computed or
+  // admin-only values.
+  _escHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+
   // Loads the list of profiles under this Google account — paints instantly
   // from the cached index (account_profiles/{baseUid}), then reconciles
   // against Auth.fetchProfiles() (each slot's users/{id}/registration,
@@ -1545,11 +1632,20 @@ class KalyanMitra {
       console.warn('Failed to mirror account profiles to Firebase:', e);
     }
 
-    const stillExists = fresh.some(p => p.profileId === this.uid);
-    if (!stillExists) {
-      console.warn(`Active profile "${this.uid}" no longer exists — falling back to primary.`);
+    const activeId = this._activeProfileId();
+    const stillExists = fresh.some(p => p.profileId === activeId);
+    // The `activeId !== baseUid` half is what makes an infinite reload
+    // structurally impossible rather than merely unlikely: the fallback
+    // below moves the session TO the primary, so if the primary is where we
+    // already are, a reload could only ever land in the exact state it just
+    // left. Whatever reason `fresh` had for not listing us, looping on it is
+    // never the answer — staying put with a console error is.
+    if (!stillExists && activeId && activeId !== baseUid) {
+      console.warn(`Active profile "${activeId}" no longer exists — falling back to primary.`);
       Auth.setActiveProfile(baseUid, baseUid);
       location.reload();
+    } else if (!stillExists) {
+      console.error(`Primary profile "${activeId}" is missing from its own profile list — staying put rather than reloading into the same state.`);
     }
   }
 
@@ -1569,21 +1665,28 @@ class KalyanMitra {
       return;
     }
 
-    const activeId = this.uid;
+    const activeId = this._activeProfileId();
     listEl.innerHTML = profiles.map(p => {
       let cachedPhoto = null;
       try { cachedPhoto = localStorage.getItem(`myniyam_photo_${p.profileId}`); } catch (e) { /* ignore */ }
       const initial = (p.name || '?').trim().charAt(0).toUpperCase() || '?';
       const isActive = p.profileId === activeId;
-      const label = p.name || (p.registered ? p.profileId : 'New Profile');
+      const label = p.name || (p.isAdmin ? 'Admin' : (p.registered ? p.profileId : 'New Profile'));
+      // An admin slot has no registration and therefore no sanghCode, so the
+      // plain fallback would label the account owner's own row "Not
+      // registered yet" — both wrong and alarming. An admin who ALSO
+      // registered as a member keeps their sangh alongside the tag.
+      const subLabel = p.isAdmin
+        ? (p.sanghCode ? `👑 Admin · ${this._escHtml(p.sanghCode)}` : '👑 Admin')
+        : this._escHtml(p.sanghCode || (p.registered ? '' : 'Not registered yet'));
       return `
-        <div class="profile-switcher-item${isActive ? ' is-active' : ''}" data-profile-id="${p.profileId}">
+        <div class="profile-switcher-item${isActive ? ' is-active' : ''}" data-profile-id="${this._escHtml(p.profileId)}">
           <div class="profile-switcher-avatar">
-            ${cachedPhoto ? `<img src="${cachedPhoto}" alt="">` : `<span class="profile-switcher-initial">${initial}</span>`}
+            ${cachedPhoto ? `<img src="${cachedPhoto}" alt="">` : `<span class="profile-switcher-initial">${this._escHtml(initial)}</span>`}
           </div>
           <div class="profile-switcher-info">
-            <span class="profile-switcher-name">${label}</span>
-            <span class="profile-switcher-sangh">${p.sanghCode || (p.registered ? '' : 'Not registered yet')}</span>
+            <span class="profile-switcher-name">${this._escHtml(label)}</span>
+            <span class="profile-switcher-sangh">${subLabel}</span>
           </div>
           ${isActive ? '<span class="profile-switcher-active-badge">✓ Active</span>' : ''}
         </div>
@@ -1632,7 +1735,7 @@ class KalyanMitra {
   switchProfile(profileId) {
     const baseUid = this._currentAuthUser && this._currentAuthUser.baseUid;
     if (!baseUid || !profileId) return;
-    if (profileId === this.uid) { this.closeProfileSwitcher(); return; } // already active
+    if (profileId === this._activeProfileId()) { this.closeProfileSwitcher(); return; } // already active
     Auth.setActiveProfile(baseUid, profileId);
     location.reload();
   }
@@ -1644,7 +1747,12 @@ class KalyanMitra {
     const baseUid = this._currentAuthUser && this._currentAuthUser.baseUid;
     if (!baseUid) return;
     const nextId = Auth.getNextProfileId(baseUid, this._accountProfiles || []);
-    if (!nextId) return; // at the cap — button should already be hidden; safety net
+    // A no-op that reloads is indistinguishable from a broken button. The
+    // second half is only reachable from a cached account_profiles list that
+    // predates the active profile appearing in it — openProfileSwitcher()'s
+    // background reconcile fixes that within a beat, so refusing to act here
+    // is strictly better than reloading into the exact same screen.
+    if (!nextId || nextId === this._activeProfileId()) return;
     Auth.setActiveProfile(baseUid, nextId);
     location.reload();
   }
@@ -1717,6 +1825,13 @@ class KalyanMitra {
     this._adminSanghCodes = this._currentAuthUser.sanghCodes || [];
     this._adminUserUids = []; // UIDs this admin manages
     this.renderAdminHeaderBrand();
+    // Not awaited: paints the admin header avatar from cache immediately
+    // (inside the function itself) and reconciles the profile-switcher list
+    // in the background — mirrors initUser()'s _loadHeaderAvatar()/
+    // _loadAccountProfiles() pair, so the switcher opens already populated
+    // instead of showing "Loading profiles…" on first tap.
+    this._loadAdminHeaderAvatar();
+    this._loadAccountProfiles();
 
     // The only place #login-screen is hidden on this path (see init()'s
     // callback) — done in the same breath as revealing the admin panel so
@@ -1904,6 +2019,12 @@ class KalyanMitra {
 
     const allUsers = snap.val() || {};
     const users = [];
+    // Rebuilt fresh on every snapshot (this listener re-fires on every
+    // change under users/) so a deleted or no-longer-eligible member never
+    // lingers here. Holds the FULL record — not just the 4 leaderboard
+    // fields — so renderAdminUserDetails() can paint the drill-down's
+    // profile card with zero extra Firebase reads.
+    this._adminUserRecords = {};
     Object.entries(allUsers).forEach(([uid, data]) => {
       if (data.role === 'admin') return;
       // Strictly ONLY include users in this admin's sangh
@@ -1913,8 +2034,10 @@ class KalyanMitra {
           uid,
           name: data.name || uid,
           kp: data.profile?.totalKP || 0,
-          streak: data.profile?.currentStreak || 0
+          streak: data.profile?.currentStreak || 0,
+          photo: data.photo || null
         });
+        this._adminUserRecords[uid] = data;
       }
     });
 
@@ -1925,19 +2048,25 @@ class KalyanMitra {
       return;
     }
 
-    listEl.innerHTML = users.map((u, index) => `
-      <div class="leaderboard-card" data-uid="${u.uid}">
+    listEl.innerHTML = users.map((u, index) => {
+      const initial = (u.name || '?').trim().charAt(0).toUpperCase() || '?';
+      return `
+      <div class="leaderboard-card" data-uid="${this._escHtml(u.uid)}">
         <div class="lb-rank">#${index + 1}</div>
+        <div class="lb-avatar">
+          ${u.photo ? `<img src="${this._escHtml(u.photo)}" alt="">` : `<span class="lb-initial">${this._escHtml(initial)}</span>`}
+        </div>
         <div class="lb-info">
-          <span class="lb-name">${u.name}</span>
+          <span class="lb-name">${this._escHtml(u.name)}</span>
           <span class="lb-stats">${u.kp} AP • 🔥 ${u.streak}</span>
         </div>
         <div style="display: flex; gap: 8px; align-items: center;">
           <div class="lb-action">👁️ View</div>
-          <button class="btn-delete-card-user" data-uid="${u.uid}" data-name="${u.name}" title="Delete User" style="background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; border-radius: 8px; padding: 4px 8px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center;">🗑️</button>
+          <button class="btn-delete-card-user" data-uid="${this._escHtml(u.uid)}" data-name="${this._escHtml(u.name)}" title="Delete User" style="background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; border-radius: 8px; padding: 4px 8px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center;">🗑️</button>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     listEl.querySelectorAll('.leaderboard-card').forEach(card => {
       card.addEventListener('click', (e) => {
@@ -2212,14 +2341,27 @@ class KalyanMitra {
     // Show the individual view, hide the overview
     document.getElementById('admin-overview').classList.add('hidden');
     document.getElementById('admin-individual').classList.remove('hidden');
+    // Clear the previous member's profile card immediately — it holds
+    // personal details (phone, photo), so it must never flash a DIFFERENT
+    // member's data while this one's record resolves below.
+    const detailsCardEl = document.getElementById('admin-profile-details');
+    if (detailsCardEl) detailsCardEl.innerHTML = '';
 
     const nameEl = document.getElementById('admin-viewing-name');
 
-    // Fetch user name from top-level user record
-    const nameSnap = await db.ref(`users/${uid}/name`).once('value');
-    const userName = nameSnap.val() || uid;
+    // The leaderboard listener already has this user's full record in
+    // memory (see _renderLeaderboardFromSnap()) — only fall back to a
+    // direct read if that cache somehow missed them (e.g. selected in the
+    // instant before the very first leaderboard snapshot has landed).
+    let record = (this._adminUserRecords || {})[uid];
+    if (!record) {
+      const recSnap = await db.ref(`users/${uid}`).once('value');
+      record = recSnap.val() || {};
+    }
+    const userName = record.name || uid;
     this._adminSelectedName = userName;
     if (nameEl) nameEl.textContent = `Viewing: ${userName}`;
+    this.renderAdminUserDetails(record);
 
     // Reset admin history state to current month for new user
     const now = new Date();
@@ -2567,16 +2709,9 @@ class KalyanMitra {
     if (niyamStatsPrev) niyamStatsPrev.addEventListener('click', () => this._changeNiyamStatsMonth(-1));
     if (niyamStatsNext) niyamStatsNext.addEventListener('click', () => this._changeNiyamStatsMonth(1));
 
-    // Multi-profile switcher — two entry points (header avatar, Profile
-    // tab), one overlay.
-    const headerAvatarBtn = document.getElementById('header-avatar-btn');
-    if (headerAvatarBtn) headerAvatarBtn.addEventListener('click', () => this.openProfileSwitcher());
-    const btnSwitchProfile = document.getElementById('btn-switch-profile');
-    if (btnSwitchProfile) btnSwitchProfile.addEventListener('click', () => this.openProfileSwitcher());
-    const btnCloseProfileSwitcher = document.getElementById('btn-close-profile-switcher');
-    if (btnCloseProfileSwitcher) btnCloseProfileSwitcher.addEventListener('click', () => this.closeProfileSwitcher());
-    const btnAddProfile = document.getElementById('btn-add-profile');
-    if (btnAddProfile) btnAddProfile.addEventListener('click', () => this.addProfile());
+    // Multi-profile switcher bindings now live in _initProfileSwitcher(),
+    // called once from the constructor — shared with the admin header's
+    // avatar button, which this per-role setup function never sees.
 
     // Logout
     document.getElementById('btn-user-logout').addEventListener('click', () => this.openLogoutConfirm());
@@ -4217,7 +4352,11 @@ class KalyanMitra {
     const placeholderEl = document.getElementById(placeholderId);
     if (!avatarEl) return;
 
-    const cacheKey = `myniyam_photo_${this.uid}`;
+    // This session's own identity, not this.uid — see _activeProfileId()'s
+    // comment. Matters here because the admin header now calls this too,
+    // and this.uid on the admin panel is never the admin themselves.
+    const profileId = this._activeProfileId();
+    const cacheKey = `myniyam_photo_${profileId}`;
     let cached = null;
     try { cached = localStorage.getItem(cacheKey); } catch (e) { /* unavailable — ignore */ }
 
@@ -4239,7 +4378,8 @@ class KalyanMitra {
     const googlePlaceholder = this._isPrimaryProfile() ? (this._currentAuthUser && this._currentAuthUser.photoURL) : null;
     applyPhoto(cached || googlePlaceholder || null);
 
-    const photo = await Auth.fetchPhoto(this.uid); // never throws; null on any failure or "no photo"
+    if (!profileId) return;
+    const photo = await Auth.fetchPhoto(profileId); // never throws; null on any failure or "no photo"
     if (photo) {
       applyPhoto(photo);
       try { localStorage.setItem(cacheKey, photo); } catch (e) { /* storage full — non-fatal */ }
@@ -4260,6 +4400,10 @@ class KalyanMitra {
 
   async _loadHeaderAvatar() {
     return this._loadAvatarInto('header-avatar-img', 'header-avatar-placeholder');
+  }
+
+  async _loadAdminHeaderAvatar() {
+    return this._loadAvatarInto('admin-header-avatar-img', 'admin-header-avatar-placeholder');
   }
 
   // Bound to the Profile tab's "Change photo" file input. Firebase-first:
@@ -5582,6 +5726,62 @@ class KalyanMitra {
     const conf = document.getElementById('save-confirmation');
     conf.classList.remove('hidden');
     setTimeout(() => conf.classList.add('hidden'), 2000);
+  }
+
+  // Renders the drill-down's profile-details card from a full users/{uid}
+  // record — either the leaderboard listener's cached copy or the fallback
+  // read selectAdminUser() does on a cache miss. Every row is independently
+  // built and dropped when its field is empty, so a member who registered
+  // before a field existed (or predates it entirely) shows a shorter card,
+  // never a row that reads "undefined".
+  renderAdminUserDetails(record) {
+    const cardEl = document.getElementById('admin-profile-details');
+    if (!cardEl) return;
+
+    const reg = record.registration || {};
+    const photo = record.photo || null;
+    const name = record.name || '';
+    const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+
+    const joined = record.registeredAt
+      ? new Date(record.registeredAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+      : '';
+    const cityArea = [reg.city, reg.area].filter(Boolean).join(', ');
+    const sangh = reg.sanghName
+      ? (reg.sanghCity ? `${reg.sanghName} · ${reg.sanghCity}` : reg.sanghName)
+      : (reg.sanghCode || '');
+
+    const rows = [
+      ['📞', 'Phone', reg.phone ? `<a href="tel:${this._escHtml(reg.phone)}">${this._escHtml(reg.phone)}</a>` : ''],
+      ['🎂', 'Date of Birth', this._escHtml(reg.dob || '')],
+      ['📍', 'City / Area', this._escHtml(cityArea)],
+      ['🛕', 'Sangh', this._escHtml(sangh)],
+      ['📅', 'Joined', this._escHtml(joined)]
+    ].filter(([, , html]) => !!html);
+
+    if (!photo && !name && rows.length === 0) {
+      // Nothing at all to show (e.g. an admin's own console-created record
+      // has no registration) — hide the card rather than render an empty shell.
+      cardEl.classList.add('hidden');
+      cardEl.innerHTML = '';
+      return;
+    }
+    cardEl.classList.remove('hidden');
+
+    cardEl.innerHTML = `
+      <div class="admin-profile-details-header">
+        <div class="admin-profile-details-avatar">
+          ${photo ? `<img src="${this._escHtml(photo)}" alt="">` : `<span class="admin-profile-details-initial">${this._escHtml(initial)}</span>`}
+        </div>
+        <span class="admin-profile-details-name">${this._escHtml(name)}</span>
+      </div>
+      ${rows.map(([icon, label, html]) => `
+        <div class="profile-readonly-row">
+          <span class="profile-readonly-label">${icon} ${label}</span>
+          <span class="profile-readonly-value">${html}</span>
+        </div>
+      `).join('')}
+    `;
   }
 
   renderAdminProgress() {
