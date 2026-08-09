@@ -1023,23 +1023,32 @@ body.landing-open {
   margin: 0 auto;
   position: relative;
   min-height: 100dvh;
-  transition: opacity 0.5s ease;
 }
 
 /* No `transform` here (even translateY(0) counts) — ANY transform value on
    #app makes it the containing block for #bottom-nav's `position: fixed`,
    pinning the nav to the bottom of #app's own (possibly page-length) box
    instead of the viewport. That was the bug: the nav only appeared after
-   scrolling all the way down. Opacity alone still gives a fade transition
-   with none of that side effect. */
+   scrolling all the way down. */
 .app-hidden {
+  display: none;
   opacity: 0;
   pointer-events: none;
 }
 
+/* display: none, not just opacity: 0 — #app sits ABOVE #admin-panel in the
+   DOM, and its own min-height: 100dvh plus every niyam card meant an admin
+   session (which hides #app but never shows it) still occupied a full
+   invisible screen's worth of layout height above the Leaderboard. A plain
+   opacity/visibility transition can't run across a display:none boundary
+   (there's no rendered box to animate from), so the fade moves to the
+   `fadeIn` keyframes below instead — the same pattern already used for
+   .admin-tab-content.active's own fade-in. */
 .app-visible {
+  display: block;
   opacity: 1 !important;
   pointer-events: auto !important;
+  animation: fadeIn 0.4s ease;
 }
 
 /* ============================================================

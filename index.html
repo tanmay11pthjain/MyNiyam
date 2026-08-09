@@ -10,8 +10,21 @@
   <title>MyNiyam - Aapka Adhyatmik Saathi 🙏</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=29">
+  <!-- The app no longer READS from Sheets (Firebase is master — see
+       auth.js), but it still WRITES there in the background (registration,
+       profile edits, photo uploads all mirror to the Sheet for your own
+       reference), and fetchSanghs() has a transitional Sheet fallback until
+       the one-time migration populates sanghs/ in Firebase — preconnecting
+       lets whichever of those fires first skip DNS/TLS setup. -->
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="preconnect" href="https://script.googleusercontent.com">
+  <link rel="preconnect" href="https://my-niyam-default-rtdb.firebaseio.com">
+  <!-- Non-blocking font load: the stylesheet fetches with media="print" (so it
+       doesn't block rendering), then swaps to "all" once loaded. The
+       <noscript> fallback covers the rare case of JS being disabled. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
+  <link rel="stylesheet" href="styles.css?v=30">
   <script>
     // Decide the boot state before <body> even exists, so no element lookup
     // is possible here — the previous version of this check ran mid-body and
@@ -1014,6 +1027,19 @@
     </div>
   </div>
 
+  <!-- Logout Confirmation — shared by both the user and admin logout
+       buttons (see setupUserEventListeners()/setupAdminEventListeners()). -->
+  <div id="logout-confirm-overlay" class="overlay hidden">
+    <div class="overlay-content logout-confirm-content">
+      <h2 class="summary-title">👋 Log out?</h2>
+      <p class="submit-confirm-text">You'll need to sign in with Google again next time.</p>
+      <div class="overlay-actions">
+        <button class="btn-cancel" id="btn-cancel-logout">Cancel</button>
+        <button class="btn-continue" id="btn-confirm-logout">Log out</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Sangh Transfer Notice -->
   <div id="sangh-transfer-overlay" class="overlay hidden">
     <div class="overlay-content">
@@ -1131,12 +1157,16 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
-  <!-- Excel export (admin leaderboard) -->
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <!-- Excel export (admin leaderboard) — async: it's a ~900KB library used
+       only by the admin Export button, so it must never hold up the app's
+       own scripts. runExport() (app.js) already guards on
+       `typeof XLSX === 'undefined'`, so a click that beats the download
+       degrades to a clear error rather than a broken export. -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" async></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=44"></script>
-  <script src="auth.js?v=44"></script>
-  <script src="app.js?v=44"></script>
+  <script src="data.js?v=47"></script>
+  <script src="auth.js?v=47"></script>
+  <script src="app.js?v=47"></script>
 </body>
 </html>

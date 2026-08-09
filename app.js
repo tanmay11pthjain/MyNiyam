@@ -234,6 +234,7 @@ const OVERLAY_CLOSERS = {
   'poster-overlay': 'closePosterOverlay',
   'niyam-stats-overlay': 'closeNiyamStats',
   'evening-summary-overlay': 'closeEveningSummary',
+  'logout-confirm-overlay': 'closeLogoutConfirm',
 };
 
 // The only tab names switchTab()/switchAdminTab() may ever act on — a
@@ -371,6 +372,40 @@ class KalyanMitra {
     } catch (e) {
       console.error('Back-button navigation setup failed (non-fatal):', e);
     }
+    try {
+      this._initLogoutConfirm();
+    } catch (e) {
+      console.error('Logout confirmation setup failed (non-fatal):', e);
+    }
+  }
+
+  // Binds the shared logout-confirmation overlay's Cancel/Confirm buttons
+  // once, here — that overlay is reused by BOTH the user and admin logout
+  // buttons (see setupUserEventListeners()/setupAdminEventListeners()), but
+  // only one of those two ever runs per session (a session is either a user
+  // or an admin, never both), so neither is a reliable place to bind
+  // something shared. The constructor is the one place guaranteed to run
+  // exactly once regardless of role.
+  _initLogoutConfirm() {
+    const cancelBtn = document.getElementById('btn-cancel-logout');
+    const confirmBtn = document.getElementById('btn-confirm-logout');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => this.closeLogoutConfirm());
+    if (confirmBtn) confirmBtn.addEventListener('click', () => {
+      // Closes first so the dialog visibly dismisses before the page
+      // transitions to the landing screen, not after.
+      this.closeLogoutConfirm();
+      this.logout();
+    });
+  }
+
+  openLogoutConfirm() {
+    const overlay = document.getElementById('logout-confirm-overlay');
+    if (overlay) { overlay.classList.remove('hidden'); overlay.classList.add('show'); }
+  }
+
+  closeLogoutConfirm() {
+    const overlay = document.getElementById('logout-confirm-overlay');
+    if (overlay) { overlay.classList.remove('show'); overlay.classList.add('hidden'); }
   }
 
   // ===== ANDROID BACK BUTTON / BROWSER HISTORY =====
@@ -445,14 +480,34 @@ class KalyanMitra {
     }
   }
 
-  // The sole popstate handler: close the topmost overlay if one is open,
-  // otherwise step to whichever tab the entry we just landed on names.
+  // The sole popstate handler: close the topmost overlay if one is open;
+  // otherwise, if the admin is mid-drill-down into a specific user, back
+  // out to the Leaderboard; otherwise step to whichever tab the entry we
+  // just landed on names.
   _navOnPopState(e) {
     this._navHandlingPop = true;
     try {
       if (this._openOverlayStack.length > 0) {
         const topId = this._openOverlayStack[this._openOverlayStack.length - 1];
         this._navCloseOverlayById(topId);
+      } else if (!this.currentRole) {
+        // Signed out (logout() always nulls this) — a stray popstate can
+        // still arrive after logout() has already run (e.g. the logout-
+        // confirm overlay's own close consumes its history entry
+        // asynchronously, landing after the page has moved on). Neither of
+        // the branches below have anything valid to act on once #app and
+        // #admin-panel are both hidden, so this just stops here.
+        return;
+      } else if (this._adminSelectedUid) {
+        // Tracked via our own JS state rather than anything in the popped
+        // entry — mirrors the overlay stack above — because
+        // _showAdminOverview() itself always decides the destination
+        // (Leaderboard), so the entry's own `tab` value is irrelevant here.
+        // Only ever set by selectAdminUser(), and cleared by every path
+        // that leaves the individual view (this one, the "← Back" button,
+        // a direct nav-bar tap elsewhere, or deleting the viewed user) —
+        // see _resetAdminProgressView().
+        this._showAdminOverview();
       } else {
         const tab = e.state && typeof e.state.tab === 'string' ? e.state.tab : null;
         if (tab) this._navSwitchToTab(tab);
@@ -568,7 +623,7 @@ class KalyanMitra {
       try {
         await Auth.retryRoleCheck();
       } catch (e) {
-        // _fetchRoleFromSheets itself never throws, but the localStorage
+        // _fetchRoleFromFirebase itself never throws, but the localStorage
         // write inside _resolveAndPublishUser can (quota exceeded, private
         // browsing, etc.) — caught here so the button can never get stuck
         // disabled forever on that edge case.
@@ -813,15 +868,19 @@ class KalyanMitra {
           if (!this._adminInitDone) {
             this._adminInitDone = true;
             db.ref(`users/${user.uid}/name`).set(user.name || user.uid).catch(e => console.warn('Failed to write admin name:', e));
-            db.ref(`users/${user.uid}/role`).set(user.role).catch(e => console.warn('Failed to write admin role:', e));
+            // No role mirroring here — role now comes FROM Firebase (see
+            // auth.js's _fetchRoleFromFirebase), so writing it back would be
+            // a pointless self-write, and firebase-rules.json deliberately
+            // makes `role` non-client-writable (see its .validate rule) so
+            // a user can never grant themselves admin.
             this.initAdmin();
           }
         } else {
-          // Sheet is the master for registration status.
           // user.registered is: true (registered), false (not registered),
-          // or undefined (cached session — wait for fresh Sheet response)
+          // or undefined (cached session — wait for the fresh Firebase
+          // response; see _fetchRoleFromFirebase in auth.js).
           if (user.registered === undefined) {
-            // Cached session — the fresh Sheet response hasn't arrived yet.
+            // Cached session — the fresh response hasn't arrived yet.
             // The loading screen is deliberately left showing here — see
             // initUser() / initAdmin() / showRegistrationForm(), which are
             // now the ONLY places that ever call _hideLoadingScreen(), each
@@ -834,7 +893,6 @@ class KalyanMitra {
           if (user.registered) {
             if (!this._userInitDone) {
               this._userInitDone = true;
-              db.ref(`users/${user.uid}/role`).set(user.role).catch(e => console.warn('Failed to write user role:', e));
               this.initUser();
             }
           } else {
@@ -1164,17 +1222,20 @@ class KalyanMitra {
     const user = this._currentAuthUser;
 
     try {
-      // Save to Firebase — WITHOUT the photo. The photo lives only in the
-      // Sheet (see apps-script-additions.gs); keeping it out of Firebase's
-      // registration node matters because that node is read on every login
-      // (renderUserHeaderBrand, _syncFromSheetProfile) and must stay small.
+      // Save to Firebase — this IS registration now; nothing else has to
+      // succeed for the user to be registered. The photo goes to its own
+      // sibling path (users/{uid}/photo), not inside `registration` — that
+      // node is read on every login (_tryFetchIdentityFromFirebase in
+      // auth.js) and must stay small, exactly why the Sheet always kept its
+      // photo column separate from get_profile/google_login too.
       const { photo, ...regDataForFirebase } = regData;
       await db.ref(`users/${this.uid}`).update({
         name: name,
         role: 'user',
         registered: true,
         registration: regDataForFirebase,
-        registeredAt: new Date().toISOString()
+        registeredAt: new Date().toISOString(),
+        photo: this._registrationPhotoDataUrl
       });
 
       // Link user to their sangh for admin discovery
@@ -1182,12 +1243,12 @@ class KalyanMitra {
         await db.ref(`sangh_users/${sanghCode}/${this.uid}`).set(true);
       }
 
-      // Send to Google Sheets
-      try {
-        await Auth.sendRegistration(this.uid, user.email, regData);
-      } catch (sheetErr) {
-        console.warn('Sheet update failed (non-blocking):', sheetErr);
-      }
+      // Sheet write, in the background — purely to keep your Sheet current
+      // for your own reference. Registration already succeeded via Firebase
+      // above, so nothing here can slow down or block reaching the
+      // dashboard, and sendRegistration() already never throws (it catches
+      // and logs internally), so there's nothing to .catch() here either.
+      Auth.sendRegistration(this.uid, user.email, regData);
 
       // Cache the just-uploaded photo locally so the Profile tab shows it
       // instantly, and mark the one-time photo prompt as already satisfied —
@@ -1253,12 +1314,6 @@ class KalyanMitra {
     // like today, rather than being trapped inside history navigation.
     history.replaceState({ tab: 'home', overlay: null }, '');
     this._showDbErrorBanner(failedPaths);
-
-    // Sheet is the master: sync every load (piggybacked on the login response
-    // already fetched — no extra network call), so an edit made in the Sheet
-    // — including a changed Sangh Code — takes effect without the user
-    // needing to open the Profile tab first.
-    await this._syncFromSheetProfile(this._currentAuthUser.profile);
 
     // One-time: recompute totalKP (and every day's kpEarned) from raw niyam
     // points, dropping the old streak-multiplier/bonus inflation. Must finish
@@ -1414,44 +1469,6 @@ class KalyanMitra {
     }
   }
 
-  // Applies a Sheet-sourced profile to Firebase and detects a sangh transfer
-  // by comparing against the value already stored — that comparison MUST
-  // happen before _mirrorProfileToFirebase() overwrites it, which is why the
-  // read comes first. Keeps the sangh_users/{code}/{uid} index correct on
-  // transfer and shows a one-time notice. Shared by initUser() (runs on every
-  // app load) and refreshProfileFromSheet() (the Profile tab), so the two
-  // entry points can't disagree on how a Sheet edit is applied.
-  async _syncFromSheetProfile(profile) {
-    if (!profile) return;
-    try {
-      const snap = await db.ref(`users/${this.uid}/registration`).once('value');
-      const oldSanghCode = (snap.val() || {}).sanghCode || '';
-
-      await this._mirrorProfileToFirebase(profile);
-
-      // Only fires when the OLD code was non-empty — this is what stops a
-      // brand-new registration (old code "") from triggering a false
-      // "you've been transferred" notice on first load.
-      const newSanghCode = profile.sanghCode || '';
-      if (oldSanghCode && newSanghCode && oldSanghCode !== newSanghCode) {
-        // sanghName/sanghCity are Firebase-only convenience fields captured
-        // once at registration from the sangh dropdown — the Sheet has no
-        // equivalent columns, so _mirrorProfileToFirebase() only ever updates
-        // sanghCode. Left alone, renderUserHeaderBrand()/_paintSanghChip()
-        // would pair the NEW code with the OLD sangh's stale name. Clearing
-        // them forces both to re-resolve the new code via Auth.fetchSanghs().
-        await db.ref(`users/${this.uid}/registration`).update({ sanghName: null, sanghCity: null });
-        await db.ref(`sangh_users/${oldSanghCode}/${this.uid}`).remove();
-        await db.ref(`sangh_users/${newSanghCode}/${this.uid}`).set(true);
-        await this._showSanghTransferNotice(newSanghCode);
-      }
-
-      this.renderUserHeaderBrand();
-    } catch (e) {
-      console.warn('Failed to sync profile from Sheet:', e);
-    }
-  }
-
   async _showSanghTransferNotice(newSanghCode) {
     const textEl = document.getElementById('sangh-transfer-text');
     const overlay = document.getElementById('sangh-transfer-overlay');
@@ -1476,14 +1493,14 @@ class KalyanMitra {
   // ===== MULTI-PROFILE (multiple members under one Google account) =====
 
   // Loads the list of profiles under this Google account — paints instantly
-  // from the Firebase index (account_profiles/{baseUid}) if cached, then
-  // reconciles from Auth.fetchProfiles() (the Sheet, master) and mirrors the
-  // result back to Firebase. Identical instant-then-reconcile shape as
-  // _syncFromSheetProfile()/_mirrorProfileToFirebase() — same "Sheet is
-  // master" pattern, reused deliberately so there's one way this app does it.
+  // from the cached index (account_profiles/{baseUid}), then reconciles
+  // against Auth.fetchProfiles() (each slot's users/{id}/registration,
+  // the real source) and re-mirrors the confirmed result back into that
+  // cache. Both steps read Firebase; the cache read just saves the small
+  // extra latency of the up-to-5-slot fan-out below it.
   //
   // Also self-heals a stale active profile: if the profile this session is
-  // showing no longer exists in the Sheet (an admin removed it, or an "Add
+  // showing no longer exists (its registration was removed, or an "Add
   // Profile" attempt was abandoned before ever registering), falls back to
   // the primary and reloads once — the same "reload on switch" guarantee as
   // switchProfile(), so nothing here has to reconcile in-flight listeners
@@ -1597,7 +1614,7 @@ class KalyanMitra {
     this._renderProfileSwitcher(); // instant paint from whatever's cached
     overlay.classList.remove('hidden');
     overlay.classList.add('show');
-    // Refresh from the Sheet (master) in the background and re-render if the
+    // Reconciles against Firebase in the background and re-renders if the
     // list changed. Also self-heals (falls back + reloads) if the active
     // profile vanished — see _loadAccountProfiles().
     this._loadAccountProfiles().then(() => this._renderProfileSwitcher());
@@ -1745,13 +1762,13 @@ class KalyanMitra {
       return;
     }
 
-    // Sheet is the master — fetch users by sangh code from Google Sheets
+    // Fetch users by sangh code from Firebase (sangh_users/{code} index).
     try {
-      const sheetUsers = await Auth.fetchSanghUsers(codes);
-      this._adminUserUids = sheetUsers.map(u => u.uid).filter(uid => uid);
-      console.log('Admin sangh codes:', codes, '| Sheet users:', this._adminUserUids);
+      const sanghUsers = await Auth.fetchSanghUsers(codes);
+      this._adminUserUids = sanghUsers.map(u => u.uid).filter(uid => uid);
+      console.log('Admin sangh codes:', codes, '| Sangh users:', this._adminUserUids);
     } catch (e) {
-      console.error('Failed to fetch sangh users from Sheet:', e);
+      console.error('Failed to fetch sangh users:', e);
       this._adminUserUids = [];
     }
   }
@@ -1763,10 +1780,42 @@ class KalyanMitra {
     }
 
     this._leaderboardRef = db.ref('users');
+    // Only the FIRST snapshot this listener ever receives updates the public
+    // stats node — this fires again on every realtime change to `users`
+    // (any user logging a niyam, admin session left open, etc.), and the
+    // landing page's counters don't need to track that closely; see
+    // _updatePublicStats()'s own comment.
+    let statsUpdated = false;
     this._leaderboardListener = this._leaderboardRef.on('value', snap => {
       this._renderLeaderboardFromSnap(snap);
       this._renderOverviewFromSnap(snap);
+      if (!statsUpdated) {
+        statsUpdated = true;
+        this._updatePublicStats(snap.val() || {});
+      }
     });
+  }
+
+  // Recomputes the public `stats` node (see firebase-rules.json — the one
+  // path readable without auth) from the same full `users` snapshot the
+  // leaderboard listener already downloaded, so this costs one small extra
+  // read (the sangh count) rather than a second users/ download. Not
+  // awaited by its caller and failures are only logged: this is upkeep for
+  // the signed-out landing page's two counters, never something an admin
+  // action should be blocked or alarmed by.
+  async _updatePublicStats(allUsers) {
+    try {
+      let users = 0;
+      Object.values(allUsers || {}).forEach(data => {
+        if (data && data.role !== 'admin') users++;
+      });
+      const sanghsSnap = await db.ref('sanghs').once('value');
+      const sanghsVal = sanghsSnap.val();
+      const sanghs = (sanghsVal && typeof sanghsVal === 'object') ? Object.keys(sanghsVal).length : 0;
+      await db.ref('stats').set({ users, sanghs });
+    } catch (e) {
+      console.warn('Failed to update public stats (non-fatal):', e);
+    }
   }
 
   _renderOverviewFromSnap(snap) {
@@ -1940,12 +1989,16 @@ class KalyanMitra {
       // 3. Remove lock status node
       await db.ref(`lock_status/${uidToDelete}`).remove();
 
-      // 4. If currently viewing this user, return to leaderboard
+      // 4. If currently viewing this user, return to leaderboard. Calls
+      // _showAdminOverview() directly rather than history.back() — this is
+      // a programmatic transition after a destructive action (not a user
+      // back-gesture), and the alert() below is a blocking dialog whose
+      // interaction with an async popstate is worth not depending on. The
+      // tradeoff: the individual-view history entry this user's original
+      // selectAdminUser() pushed is left in place rather than consumed, so
+      // one extra (harmless, same-tab) back press may be needed afterwards.
       if (this.uid === uidToDelete) {
-        this._clearAdminSelection();
-        document.getElementById('admin-individual').classList.add('hidden');
-        document.getElementById('admin-overview').classList.remove('hidden');
-        this.switchAdminTab('admin-leaderboard');
+        this._showAdminOverview();
       }
 
       // 5. Refresh admin state and re-render
@@ -2119,6 +2172,30 @@ class KalyanMitra {
     this._resetAdminUserState();
   }
 
+  // Resets the Progress tab's individual-user sub-view back to the
+  // aggregate overview and clears the selection — but does NOT touch which
+  // admin tab is active. Shared by the admin nav (any direct tap on a
+  // bottom-nav tab always wants a fresh view, never a stale drill-down left
+  // over from a previous selectAdminUser()) and _showAdminOverview() below
+  // (which additionally navigates back to the Leaderboard tab). Safe to
+  // call even when nothing is selected — every step is a no-op then.
+  _resetAdminProgressView() {
+    const individualEl = document.getElementById('admin-individual');
+    const overviewEl = document.getElementById('admin-overview');
+    if (individualEl) individualEl.classList.add('hidden');
+    if (overviewEl) overviewEl.classList.remove('hidden');
+    this._clearAdminSelection();
+  }
+
+  // The "← Back" button's full behavior, extracted so the device back
+  // button (_navOnPopState()'s admin branch) and deleteAdminUser()'s
+  // return-to-leaderboard path trigger the exact same thing the button
+  // does — never two slightly different implementations that could drift.
+  _showAdminOverview() {
+    this._resetAdminProgressView();
+    this.switchAdminTab('admin-leaderboard');
+  }
+
   async selectAdminUser(uid) {
     // Detach old user listeners (but keep leaderboard listener alive)
     this._detachAllListeners();
@@ -2149,9 +2226,16 @@ class KalyanMitra {
     this._adminHistoryMonth = now.getMonth();
     this._adminHistoryYear = now.getFullYear();
     
-    // Switch to Progress tab automatically
+    // Selecting a user is its own back-navigable step, pushed BEFORE the
+    // tab switch below — same "push first" ordering as the nav handlers,
+    // and for the same reason: switchAdminTab()'s replaceState must land on
+    // the entry we're arriving at, not the one we're leaving. Always
+    // reached from the Leaderboard tab (the only place a user card can be
+    // clicked), so this never collides with a same-tab re-tap the way the
+    // nav handlers' guard exists for.
+    history.pushState({ tab: 'admin-progress', overlay: null }, '');
     this.switchAdminTab('admin-progress');
-    
+
     // Start real-time syncing for this user's data
     await this.setupRealtimeSync();
     
@@ -2451,12 +2535,17 @@ class KalyanMitra {
     // Navigation
     document.querySelectorAll('#bottom-nav .nav-item').forEach(btn => {
       btn.addEventListener('click', () => {
-        this.switchTab(btn.dataset.tab);
-        // A genuine tab-nav click is back-navigable — unlike switchTab()'s
-        // own replaceState (which just keeps history.state.tab truthful for
-        // every OTHER caller), this adds a real entry so the back button can
-        // step through tabs (see _navOnPopState()).
-        history.pushState({ tab: btn.dataset.tab, overlay: null }, '');
+        const tab = btn.dataset.tab;
+        // Pushed BEFORE switching — switchTab()'s own replaceState (which
+        // keeps history.state.tab truthful for every OTHER caller) then
+        // lands on the entry we're arriving at, not the one we're leaving.
+        // Pushing after switching was the bug: it overwrote the PREVIOUS
+        // entry's tab instead, so one back press could silently do nothing
+        // and the next one skipped straight past it. Skipped for a re-tap
+        // of the already-active tab so mashing one nav button doesn't pile
+        // up dead entries — switchTab() still re-runs either way.
+        if (this._navCurrentTab() !== tab) history.pushState({ tab, overlay: null }, '');
+        this.switchTab(tab);
       });
     });
 
@@ -2490,7 +2579,7 @@ class KalyanMitra {
     if (btnAddProfile) btnAddProfile.addEventListener('click', () => this.addProfile());
 
     // Logout
-    document.getElementById('btn-user-logout').addEventListener('click', () => this.logout());
+    document.getElementById('btn-user-logout').addEventListener('click', () => this.openLogoutConfirm());
 
     // Overlays
     document.getElementById('btn-close-badge').addEventListener('click', () => this.closeBadgeUnlock());
@@ -2543,8 +2632,20 @@ class KalyanMitra {
     // Admin nav
     document.querySelectorAll('#admin-bottom-nav .nav-item').forEach(btn => {
       btn.addEventListener('click', () => {
-        this.switchAdminTab(btn.dataset.tab);
-        history.pushState({ tab: btn.dataset.tab, overlay: null }, '');
+        const tab = btn.dataset.tab;
+        // A direct tap on ANY bottom-nav tab means "go there fresh" — it
+        // must never leave a stale individual-user selection active
+        // underneath. Without this, _navOnPopState()'s admin branch (which
+        // detects a drill-down via this._adminSelectedUid, not via what's
+        // in the popped entry — selectAdminUser() is the only other place
+        // that flag is ever set) could misfire on a later back press and
+        // redirect all the way to the Leaderboard instead of returning to
+        // whichever tab was actually being backed out of.
+        if (this._adminSelectedUid) this._resetAdminProgressView();
+        // Pushed BEFORE switching — see the user nav handler's comment for
+        // why the order matters. Skipped for a re-tap of the active tab.
+        if (this._navCurrentTab() !== tab) history.pushState({ tab, overlay: null }, '');
+        this.switchAdminTab(tab);
       });
     });
 
@@ -2560,16 +2661,15 @@ class KalyanMitra {
     document.getElementById('btn-admin-reset').addEventListener('click', () => this.resetProgress());
 
     // Logout
-    document.getElementById('btn-admin-logout').addEventListener('click', () => this.logout());
+    document.getElementById('btn-admin-logout').addEventListener('click', () => this.openLogoutConfirm());
 
-    // Back to leaderboard
+    // Back to leaderboard — goes through history.back() rather than calling
+    // _showAdminOverview() directly, so the button and the device back
+    // button are the exact same code path (_navOnPopState()'s admin
+    // branch) and can never drift apart. Consumes the history entry
+    // selectAdminUser() pushed when this user was first opened.
     const backBtn = document.getElementById('btn-back-leaderboard');
-    if (backBtn) backBtn.addEventListener('click', () => {
-      document.getElementById('admin-individual').classList.add('hidden');
-      document.getElementById('admin-overview').classList.remove('hidden');
-      this._clearAdminSelection();
-      this.switchAdminTab('admin-leaderboard');
-    });
+    if (backBtn) backBtn.addEventListener('click', () => history.back());
 
     // Admin history month navigation
     const ahPrev = document.getElementById('btn-admin-history-prev');
@@ -4044,23 +4144,19 @@ class KalyanMitra {
     const emailEl = document.getElementById('profile-header-email');
     if (emailEl) emailEl.textContent = user.email || '';
 
-    // Photo: instant paint from cache/Google account, then refresh from the
-    // Sheet (the master) in the background — not awaited, same pattern as
-    // the rest of this tab.
+    // Photo: instant paint from cache/Google account, then upgrades from
+    // Firebase in the background — not awaited, same pattern as the rest of
+    // this tab. See _loadAvatarInto().
     this._loadProfilePhoto();
 
-    // Paint immediately from the Firebase copy — instant, always available, and what
-    // keeps this tab usable even before the Sheet-side get_profile/update_profile
-    // actions have been deployed.
+    // Firebase is master, so this is simply the profile — no second,
+    // slower "authoritative" source to reconcile against afterwards.
     try {
       const snap = await db.ref(`users/${this.uid}/registration`).once('value');
       this._paintProfile(snap.val() || {});
     } catch (e) {
       console.warn('Failed to load registration from Firebase:', e);
     }
-
-    // Then refresh from the Sheet (the master) so external Sheet edits show up.
-    this.refreshProfileFromSheet();
   }
 
   // Shared image pipeline for both the registration photo picker and the
@@ -4112,11 +4208,10 @@ class KalyanMitra {
     }
   }
 
-  // Instant paint from cache/Google account photo, then a background refresh
-  // from the Sheet (the master) — mirrors the pattern already used for the
-  // rest of the Profile tab's data. Shared by the Profile tab's own photo
-  // and the header avatar button (_loadHeaderAvatar()) — same cache-then-
-  // fetch shape, different target elements.
+  // Instant paint from cache/Google account photo, then a background
+  // upgrade from Firebase (users/{uid}/photo). Shared by the Profile tab's
+  // own photo and the header avatar button (_loadHeaderAvatar()) — same
+  // cache-then-fetch shape, different target elements.
   async _loadAvatarInto(imgId, placeholderId) {
     const avatarEl = document.getElementById(imgId);
     const placeholderEl = document.getElementById(placeholderId);
@@ -4167,29 +4262,36 @@ class KalyanMitra {
     return this._loadAvatarInto('header-avatar-img', 'header-avatar-placeholder');
   }
 
-  // Bound to the Profile tab's "Change photo" file input.
+  // Bound to the Profile tab's "Change photo" file input. Firebase-first:
+  // the upload's success/failure is decided by the Firebase write alone;
+  // Auth.updatePhoto() (the Sheet write) runs afterwards in the background,
+  // purely to keep the Sheet's copy current for your own reference.
   async _handleProfilePhotoChange(file) {
     const errorEl = document.getElementById('profile-error');
     if (errorEl) errorEl.classList.add('hidden');
     try {
       const dataUrl = await this._resizeImageToDataUrl(file);
-      const result = await Auth.updatePhoto(this.uid, dataUrl);
-      if (result.success) {
-        const avatarEl = document.getElementById('profile-avatar');
-        const placeholderEl = document.getElementById('profile-avatar-placeholder');
-        if (avatarEl) {
-          avatarEl.src = dataUrl;
-          avatarEl.classList.remove('hidden');
-        }
-        if (placeholderEl) placeholderEl.classList.add('hidden');
-        try {
-          localStorage.setItem(`myniyam_photo_${this.uid}`, dataUrl);
-          localStorage.setItem(`myniyam_photo_prompted_${this.uid}`, '1');
-        } catch (e) { /* non-fatal */ }
-      } else if (errorEl) {
-        errorEl.textContent = 'Failed to upload photo. Please try again.';
-        errorEl.classList.remove('hidden');
+      await db.ref(`users/${this.uid}/photo`).set(dataUrl);
+
+      const avatarEl = document.getElementById('profile-avatar');
+      const placeholderEl = document.getElementById('profile-avatar-placeholder');
+      if (avatarEl) {
+        avatarEl.src = dataUrl;
+        avatarEl.classList.remove('hidden');
       }
+      if (placeholderEl) placeholderEl.classList.add('hidden');
+      try {
+        localStorage.setItem(`myniyam_photo_${this.uid}`, dataUrl);
+        localStorage.setItem(`myniyam_photo_prompted_${this.uid}`, '1');
+      } catch (e) { /* non-fatal */ }
+
+      // Background Sheet write — never awaited, never blocks the UI update
+      // above. updatePhoto() resolves { success: false } rather than
+      // rejecting on a Sheet-side failure, so both are checked; either way
+      // it's just logged, never surfaced to the user.
+      Auth.updatePhoto(this.uid, dataUrl).then(result => {
+        if (!result.success) console.warn('Background Sheet photo update failed (non-fatal):', result.error);
+      }).catch(e => console.warn('Background Sheet photo update failed (non-fatal):', e));
     } catch (e) {
       console.error('Photo upload failed:', e);
       if (errorEl) {
@@ -4234,29 +4336,10 @@ class KalyanMitra {
     this.switchTab('profile');
   }
 
-  async refreshProfileFromSheet() {
-    const statusEl = document.getElementById('profile-sync-status');
-    if (statusEl) statusEl.classList.remove('hidden');
-    try {
-      const profile = await Auth.fetchProfile(this.uid);
-      if (profile) {
-        this._paintProfile(profile);
-        await this._syncFromSheetProfile(profile);
-      } else {
-        console.warn('No profile returned from Sheet — keeping Firebase values on screen.');
-      }
-    } catch (e) {
-      console.warn('Failed to refresh profile from Sheet:', e);
-    } finally {
-      if (statusEl) statusEl.classList.add('hidden');
-    }
-  }
-
-  // Paints the read-only fields, sangh chip, and editable inputs from either the
-  // Firebase registration object or the Sheet's get_profile response — both use the
-  // same logical field names (name, dob, phone, city, area, sanghCode), so one
-  // painter handles both sources. Skips an input the user is actively typing in so
-  // an async Sheet refresh can't clobber an in-progress edit.
+  // Paints the read-only fields, sangh chip, and editable inputs from the
+  // Firebase registration object (name, dob, phone, city, area, sanghCode).
+  // Skips an input the user is actively typing in so a re-paint can't
+  // clobber an in-progress edit.
   _paintProfile(data) {
     const nameEl = document.getElementById('profile-view-name');
     if (nameEl) nameEl.textContent = data.name || this._currentAuthUser.name || '—';
@@ -4303,29 +4386,31 @@ class KalyanMitra {
       : `<span class="sangh-chip"><strong>${code}</strong></span>`;
   }
 
-  // Mirrors Sheet data into Firebase with update() (not set()) so untouched keys like
-  // sanghName/sanghCity/dob survive. Also mirrors name to the denormalized
-  // users/{uid}/name path that the admin leaderboard reads, so a name edited only in
-  // the Sheet doesn't leave the admin view stale.
+  // Writes profile fields to Firebase (users/{uid}/registration) with
+  // update() (not set()) so untouched keys like sanghName/sanghCity/dob
+  // survive. Also mirrors name to the denormalized users/{uid}/name path
+  // the admin leaderboard reads. Firebase is master now, so — unlike its
+  // old "best-effort mirror after the Sheet already confirmed success" role
+  // — this must propagate a failure rather than swallow it: it's the ONLY
+  // thing saveProfileEdits() now waits on to decide whether the save
+  // actually worked.
   async _mirrorProfileToFirebase(profile) {
-    try {
-      const updates = {};
-      ['name', 'dob', 'phone', 'city', 'area', 'sanghCode'].forEach(k => {
-        if (profile[k] !== undefined) updates[k] = profile[k];
-      });
-      if (Object.keys(updates).length === 0) return;
-      await db.ref(`users/${this.uid}/registration`).update(updates);
-      if (updates.name) {
-        await db.ref(`users/${this.uid}/name`).set(updates.name);
-      }
-    } catch (e) {
-      console.warn('Failed to mirror profile to Firebase:', e);
+    const updates = {};
+    ['name', 'dob', 'phone', 'city', 'area', 'sanghCode'].forEach(k => {
+      if (profile[k] !== undefined) updates[k] = profile[k];
+    });
+    if (Object.keys(updates).length === 0) return;
+    await db.ref(`users/${this.uid}/registration`).update(updates);
+    if (updates.name) {
+      await db.ref(`users/${this.uid}/name`).set(updates.name);
     }
   }
 
-  // Bound to #btn-profile-save. Only mirrors to Firebase on a confirmed Sheet
-  // success — unlike sendRegistration()'s fire-and-forget pattern, a failure here
-  // must not let the two stores silently diverge.
+  // Bound to #btn-profile-save. Firebase-first: the save's success/failure is
+  // decided by the Firebase write alone, so it's instant and never blocked by
+  // Apps Script. Auth.updateProfile() (the Sheet write) runs afterwards in
+  // the background, purely to keep the Sheet's copy current for your own
+  // reference — its outcome never affects what the user sees.
   async saveProfileEdits() {
     const phone = document.getElementById('profile-phone').value.trim();
     const city = document.getElementById('profile-city').value.trim();
@@ -4352,15 +4437,16 @@ class KalyanMitra {
     btnSpan.textContent = 'Saving...';
 
     try {
-      const result = await Auth.updateProfile(this.uid, { phone, city, area });
-      if (result.success) {
-        await this._mirrorProfileToFirebase({ phone, city, area });
-        confEl.classList.remove('hidden');
-        setTimeout(() => confEl.classList.add('hidden'), 2500);
-      } else {
-        errorEl.textContent = 'Failed to save. Please try again.';
-        errorEl.classList.remove('hidden');
-      }
+      await this._mirrorProfileToFirebase({ phone, city, area });
+      confEl.classList.remove('hidden');
+      setTimeout(() => confEl.classList.add('hidden'), 2500);
+      // Background Sheet write — never awaited, never blocks the
+      // confirmation above. updateProfile() resolves { success: false }
+      // rather than rejecting on a Sheet-side failure, so both are checked;
+      // either way it's just logged, never surfaced to the user.
+      Auth.updateProfile(this.uid, { phone, city, area }).then(result => {
+        if (!result.success) console.warn('Background Sheet profile update failed (non-fatal):', result.error);
+      }).catch(e => console.warn('Background Sheet profile update failed (non-fatal):', e));
     } catch (e) {
       console.error('Profile save failed:', e);
       errorEl.textContent = 'Failed to save. Please try again.';
@@ -5381,8 +5467,10 @@ class KalyanMitra {
     // button click (that path pushes its own entry — see
     // setupUserEventListeners()) — e.g. goToProfileFromPhotoPrompt() — so
     // back-driven tab switching (_navSwitchToTab()) never reads a stale tab.
-    // A plain in-place update, never a new entry.
-    history.replaceState({ tab: tabName, overlay: null }, '');
+    // A plain in-place update, never a new entry. Spreads the existing
+    // state first (rather than replacing it outright) so any other field a
+    // future caller relies on survives a tab switch it didn't ask about.
+    history.replaceState({ ...(history.state || {}), tab: tabName, overlay: null }, '');
   }
 
   switchAdminTab(tabName) {
@@ -5396,7 +5484,7 @@ class KalyanMitra {
     if (tabName === 'admin-progress') this.renderAdminProgress();
     if (tabName === 'admin-lock') this.renderAdminLock();
     if (tabName === 'admin-leaderboard') this.renderAdminLeaderboard();
-    history.replaceState({ tab: tabName, overlay: null }, '');
+    history.replaceState({ ...(history.state || {}), tab: tabName, overlay: null }, '');
   }
 
   // ===== ADMIN FUNCTIONS =====
@@ -5656,6 +5744,14 @@ class KalyanMitra {
   logout() {
     Auth.signOut();
     this.currentRole = null;
+    // Defensive reset: if an admin logs out while mid-drill-down into a
+    // user, this stops _navOnPopState()'s admin branch from possibly
+    // firing on a later, unrelated popstate (e.g. the logout-confirm
+    // overlay's own closing consuming its history entry, which arrives
+    // asynchronously and could otherwise land after the page has already
+    // moved on to the landing screen) and mutating the now-hidden admin
+    // panel. Harmless for a user session, where this is already null.
+    this._adminSelectedUid = null;
     if (this.autoLockInterval) clearInterval(this.autoLockInterval);
     this._detachAllListeners();
     // Detach leaderboard listener

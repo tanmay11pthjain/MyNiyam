@@ -1,4 +1,11 @@
-// ===== MyNiyam V4 — Firebase Google Auth + Sheets Role Lookup =====
+// ===== MyNiyam V4 — Firebase Google Auth + Firebase-backed Identity =====
+// Firebase is the sole master for everything the app reads. The Sheet
+// (via Apps Script — see apps-script-additions.gs) is written to on
+// registration/profile/photo changes so it stays a convenient, current
+// place to look at data by hand, but the app itself never reads from it —
+// except fetchSanghs()'s transitional fallback (see its own comment) and
+// the *FromSheetLegacy() functions, which exist only for the one-time
+// migration script (migrate-to-firebase.js).
 
 const Auth = (() => {
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbysnFVeHYnOj9yqZzXCtBV2KQfStNV8GMe-ABHPxM4a7GA16yWziTkqM3ouyHb2wEMp/exec";
@@ -67,44 +74,54 @@ const Auth = (() => {
     return null;
   }
 
-  // Lists every profile under one Google account — Sheet is master (see
-  // handleGetProfiles in apps-script-additions.gs). Returns null on ANY
-  // failure (transport error, parse error, or the Sheet reporting
-  // success:false) — callers must treat that as "unknown", never as "this
-  // account has just one profile". A brand-new account with zero Sheet rows
-  // is still a genuine, successful answer (not a failure), so THAT case
-  // gets a primary placeholder rather than null.
+  // Lists every profile under one Google account — Firebase is master.
+  // A profile "exists" iff users/{id}/registration is present, checked for
+  // all MAX_PROFILES possible slot ids in parallel (never more than 5 reads,
+  // over the same already-open connection auth used — no round-trip cost
+  // per slot the way a separate HTTP request would have). Returns null on
+  // ANY failure — callers must treat that as "unknown", never as "this
+  // account has just one profile". A brand-new account with zero registered
+  // slots is still a genuine, successful answer (not a failure), so THAT
+  // case gets a primary placeholder rather than null — same contract this
+  // function has always had, just answered from a different source.
   async function fetchProfiles(baseUid) {
     try {
-      const text = await _sheetsRequest({ action: "get_profiles", baseUid });
-      console.log("Profiles response:", text);
-      try {
-        const result = JSON.parse(text);
-        if (result.success && Array.isArray(result.profiles)) {
-          const profiles = result.profiles
-            .map(p => ({
-              profileId: String(p.profileId || '').trim(),
-              name: String(p.name || '').trim(),
-              sanghCode: String(p.sanghCode || '').trim(),
-              registered: !!p.registered
-            }))
-            .filter(p => p.profileId);
-          return profiles.length > 0
-            ? profiles
-            : [{ profileId: baseUid, name: '', sanghCode: '', registered: false }];
-        }
-      } catch (parseErr) {
-        console.error("Failed to parse profiles response:", text);
-      }
+      const db = firebase.database();
+      const slotIds = [baseUid];
+      for (let slot = 2; slot <= MAX_PROFILES; slot++) slotIds.push(`${baseUid}${PROFILE_SEP}${slot}`);
+
+      const snaps = await Promise.all(
+        slotIds.map(id => db.ref(`users/${id}/registration`).once('value'))
+      );
+
+      const profiles = [];
+      snaps.forEach((snap, i) => {
+        const reg = snap.val();
+        if (!reg) return; // no registration at this slot — not a profile yet
+        profiles.push({
+          profileId: slotIds[i],
+          name: String(reg.name || '').trim(),
+          sanghCode: String(reg.sanghCode || '').trim(),
+          // A registration node only ever exists once handleRegistration()
+          // has written it, and that always includes a non-empty sanghCode
+          // (the registration form requires one before it can submit) — so
+          // "has a registration" and "is registered" are the same fact here.
+          registered: true
+        });
+      });
+
+      return profiles.length > 0
+        ? profiles
+        : [{ profileId: baseUid, name: '', sanghCode: '', registered: false }];
     } catch (e) {
-      console.error("Fetch profiles failed:", e);
+      // A genuine failure. Returning null (not a fabricated single-profile
+      // list) is what stops app.js's _loadAccountProfiles() from treating a
+      // failed request as authoritative — feeding it a fallback that looks
+      // identical to a real "just the primary" account is what silently
+      // bounced a newly added, not-yet-registered profile back to the primary.
+      console.error("Fetch profiles from Firebase failed:", e);
+      return null;
     }
-    // A genuine failure. Returning null (not a fabricated single-profile
-    // list) is what stops app.js's _loadAccountProfiles() from treating a
-    // failed request as authoritative — feeding it a fallback that looks
-    // identical to a real "just the primary" account is what silently
-    // bounced a newly added, not-yet-registered profile back to the primary.
-    return null;
   }
 
   // ===== SHEETS TRANSPORT (fetch, with a JSONP fallback for CORS failures) =====
@@ -203,60 +220,84 @@ const Auth = (() => {
     _notifyListeners();
   }
 
-  // Single attempt against the Sheet. Returns the parsed shape on a genuine
-  // answer, or null on ANY failure (transport error, parse error, or the
-  // Sheet itself reporting success:false) — callers must never treat null
-  // as "not registered". Conflating "the request failed" with "this person
-  // hasn't registered" was a real bug: it sent a fully-registered user (whose
-  // Sheet row is perfectly intact) to the registration form, which would
-  // have overwritten that row on submit.
-  async function _tryFetchRoleFromSheets(uid, email, name) {
+  // ===== IDENTITY — resolved from Firebase, not Sheets =====
+  // role/sanghCodes/registered used to come from an Apps Script round trip
+  // (google_login) on EVERY login — a 302-redirecting, occasionally
+  // cold-starting call that was the single biggest contributor to a slow
+  // load. Firebase already mirrors everything needed:
+  //   - users/{uid}/role       — written on every login for as long as this
+  //                              app has existed (see app.js's init()), so
+  //                              every returning user already has it
+  //   - users/{uid}/sanghCodes — NEW; console-managed (there is no in-app
+  //                              admin-role UI). Absent for an admin means
+  //                              "not yet backfilled", not "no sanghs" — see
+  //                              the fallback below and firebase-rules.json.
+  //   - users/{uid}/registration / registered — already written at
+  //                              registration (handleRegistration())
+  // Reads each field at its own path (not the whole users/{uid} node) —
+  // that node also holds the user's entire daily_logs history, and pulling
+  // all of it just to read four small fields would be slower than the
+  // Sheets call this replaces, not faster.
+  //
+  // Single attempt. Returns the resolved shape on success, or null on ANY
+  // failure — same contract _tryFetchRoleFromSheets always had, so
+  // _fetchRoleFromFirebase's retry wrapper below can treat the two
+  // identically.
+  async function _tryFetchIdentityFromFirebase(uid) {
     try {
-      const text = await _sheetsRequest({ action: "google_login", uid, email, name });
-      console.log("Sheets login response:", text);
-      try {
-        const result = JSON.parse(text);
-        if (result.success) {
-          return {
-            role: result.role || "user",
-            sanghCodes: result.sanghCodes || [],
-            registered: !!result.registered,
-            // Piggybacks the Sheet's full row onto every login response — see
-            // apps-script-additions.gs handleGoogleLogin — so the app can sync
-            // Sheet edits (including a changed Sangh Code) on every load with
-            // no extra network request. null for a not-yet-registered user.
-            profile: result.profile || null
-          };
-        }
-      } catch (parseErr) {
-        console.error("Failed to parse Sheets response:", text);
+      const db = firebase.database();
+      const [roleSnap, sanghCodesSnap, registrationSnap, registeredSnap] = await Promise.all([
+        db.ref(`users/${uid}/role`).once('value'),
+        db.ref(`users/${uid}/sanghCodes`).once('value'),
+        db.ref(`users/${uid}/registration`).once('value'),
+        db.ref(`users/${uid}/registered`).once('value'),
+      ]);
+
+      const role = roleSnap.val() === 'admin' ? 'admin' : 'user';
+      const registration = registrationSnap.val() || null;
+
+      let sanghCodes = sanghCodesSnap.val();
+      if (!Array.isArray(sanghCodes) || sanghCodes.length === 0) {
+        // Matches the Sheet's own old fallback (handleGoogleLogin: sanghCodes
+        // defaults to [sanghCode] when the explicit list is empty) — an
+        // ordinary user only ever has their own single code anyway, so this
+        // needs no backfill; only an admin managing several sanghs does.
+        sanghCodes = (registration && registration.sanghCode) ? [registration.sanghCode] : [];
       }
+
+      // Trusts the explicit boolean (set at registration) but also accepts a
+      // populated registration.name as evidence of being registered, as a
+      // safety net for any record from before that boolean field existed —
+      // getting this wrong in the "not registered" direction would route an
+      // already-registered user into the registration form, which would
+      // overwrite their real data on submit.
+      const registered = registeredSnap.val() === true || !!(registration && registration.name);
+
+      return { role, sanghCodes, registered, profile: registration };
     } catch (e) {
-      console.error("Sheets role fetch failed:", e);
+      console.error("Firebase identity fetch failed:", e);
+      return null;
     }
-    return null;
   }
 
-  // Retries a few times with a short delay so a single cold-start/network
-  // blip self-heals instead of being mistaken for "not registered". If every
-  // attempt fails, resolves registered: undefined — NEVER false. init()
-  // already treats undefined as "don't decide yet, keep waiting" (it's what
-  // a cached session uses while the fresh check is in flight), so this
-  // leaves an inconclusive lookup on the loading screen with its retry
-  // affordance, rather than routing a real user into a destructive
-  // registration form. google_login is a pure read (plus an idempotent
-  // UID-backfill write it already does at most once), so retrying it is safe.
-  async function _fetchRoleFromSheets(uid, email, name) {
+  // Retries a few times so a momentary connection blip self-heals instead of
+  // being mistaken for "not registered". If every attempt fails, resolves
+  // registered: undefined — NEVER false — for exactly the same reason
+  // _fetchRoleFromSheets always did: init() (app.js) treats undefined as
+  // "don't decide yet, keep waiting", leaving an inconclusive lookup on the
+  // loading screen with its retry affordance rather than routing a real user
+  // into a destructive registration form.
+  async function _fetchRoleFromFirebase(uid) {
     const ATTEMPTS = 3;
-    const RETRY_DELAY_MS = 1200;
+    const RETRY_DELAY_MS = 800;
     for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-      const result = await _tryFetchRoleFromSheets(uid, email, name);
+      const result = await _tryFetchIdentityFromFirebase(uid);
       if (result) return result;
       if (attempt < ATTEMPTS) {
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
       }
     }
-    console.error(`Sheets role fetch failed after ${ATTEMPTS} attempts — leaving registration status undetermined.`);
+    console.error(`Firebase identity fetch failed after ${ATTEMPTS} attempts — leaving registration status undetermined.`);
     return { role: "user", sanghCodes: [], registered: undefined, profile: null };
   }
 
@@ -270,12 +311,11 @@ const Auth = (() => {
     // Resolved locally, no network round-trip — see getActiveProfileId().
     const activeProfileId = getActiveProfileId(baseUid);
 
-    // Fetch role and registration status from Sheets (master)
-    const { role, sanghCodes, registered, profile } = await _fetchRoleFromSheets(
-      activeProfileId,
-      firebaseUser.email,
-      firebaseUser.displayName || firebaseUser.email.split('@')[0]
-    );
+    // Fetch role and registration status from Firebase — see
+    // _tryFetchIdentityFromFirebase's comment for why this replaced the old
+    // Sheets round trip. Firebase is now the master for this data outright —
+    // there is no Sheet reconciliation step left to run afterwards.
+    const { role, sanghCodes, registered, profile } = await _fetchRoleFromFirebase(activeProfileId);
 
     currentUser = {
       uid: activeProfileId,
@@ -301,11 +341,11 @@ const Auth = (() => {
     _notifyListeners();
   }
 
-  // Manually re-runs the Sheet role/registration check for whichever
+  // Manually re-runs the Firebase role/registration check for whichever
   // Firebase user is currently signed in. Bound to the loading screen's
-  // Retry button, which only appears if _fetchRoleFromSheets's own internal
-  // attempts all failed. No-op if nobody is signed in (shouldn't happen
-  // while the loading screen is up, but defensive regardless).
+  // Retry button, which only appears if _fetchRoleFromFirebase's own
+  // internal attempts all failed. No-op if nobody is signed in (shouldn't
+  // happen while the loading screen is up, but defensive regardless).
   async function retryRoleCheck() {
     const firebaseUser = firebase.auth().currentUser;
     if (!firebaseUser) return;
@@ -382,6 +422,14 @@ const Auth = (() => {
   let _sanghsCache = null;
   let _sanghsFetchPromise = null;
 
+  // Reads the console-managed sanghs/ node. Falls back to the Sheet (via
+  // fetchSanghsFromSheetLegacy(), single attempt) ONLY when sanghs/ comes
+  // back empty or unreachable — this is purely transitional, for the gap
+  // between deploying this and running the one-time migration that
+  // populates sanghs/. Without it, a brand-new visitor would see an empty
+  // registration dropdown and be unable to register at all until that
+  // migration runs. It self-disables the moment sanghs/ has data, since the
+  // Firebase branch below returns first whenever it succeeds.
   async function fetchSanghs() {
     // Only a non-empty result is treated as cached — an empty list (e.g. from a
     // backend that isn't deployed yet) must not permanently stick for the session.
@@ -390,32 +438,30 @@ const Auth = (() => {
 
     _sanghsFetchPromise = (async () => {
       try {
-        const text = await _sheetsRequest({ action: "get_sanghs" });
-        console.log("Sanghs response:", text);
-        try {
-          const result = JSON.parse(text);
-          if (result.success) {
-            // Normalize every row to trimmed strings — Sheets can return a
-            // numeric-looking code as a number, which would throw inside
-            // s.code.toLowerCase() in the autocomplete filter — and drop any row
-            // with no code.
-            const sanghs = (result.sanghs || [])
-              .map(s => ({
-                code: String(s.code || '').trim(),
-                name: String(s.name || '').trim(),
-                city: String(s.city || '').trim()
-              }))
-              .filter(s => s.code);
-            if (sanghs.length) _sanghsCache = sanghs;
+        const snap = await firebase.database().ref('sanghs').once('value');
+        const val = snap.val();
+        if (val && typeof val === 'object') {
+          // Normalize every entry to trimmed strings, and drop any with no
+          // code — mirrors the old Sheet-side normalization exactly.
+          const sanghs = Object.keys(val)
+            .map(code => ({
+              code: String(code || '').trim(),
+              name: String((val[code] && val[code].name) || '').trim(),
+              city: String((val[code] && val[code].city) || '').trim()
+            }))
+            .filter(s => s.code);
+          if (sanghs.length) {
+            _sanghsCache = sanghs;
             return sanghs;
           }
-        } catch (parseErr) {
-          console.error("Failed to parse Sanghs response:", text);
         }
       } catch (e) {
-        console.error("Fetch sanghs failed:", e);
+        console.error("Fetch sanghs from Firebase failed:", e);
       }
-      return [];
+      console.warn('sanghs/ empty or unreachable — falling back to the Sheet.');
+      const legacy = await fetchSanghsFromSheetLegacy();
+      if (legacy.length) _sanghsCache = legacy;
+      return legacy;
     })();
 
     try {
@@ -425,37 +471,62 @@ const Auth = (() => {
     }
   }
 
+  // Legacy Sheet-backed sangh list. Kept only as (a) fetchSanghs()'s
+  // transitional fallback above, and (b) for the one-time migration script
+  // to read from when it populates sanghs/ — the live app never calls this
+  // directly once that migration has run.
+  async function fetchSanghsFromSheetLegacy() {
+    try {
+      const text = await _sheetsRequest({ action: "get_sanghs" });
+      console.log("Sanghs (Sheet, legacy) response:", text);
+      try {
+        const result = JSON.parse(text);
+        if (result.success) {
+          return (result.sanghs || [])
+            .map(s => ({
+              code: String(s.code || '').trim(),
+              name: String(s.name || '').trim(),
+              city: String(s.city || '').trim()
+            }))
+            .filter(s => s.code);
+        }
+      } catch (parseErr) {
+        console.error("Failed to parse Sanghs response:", text);
+      }
+    } catch (e) {
+      console.error("Fetch sanghs (legacy) failed:", e);
+    }
+    return [];
+  }
+
   let _statsCache = null;
   let _statsFetchPromise = null;
 
-  // Public, aggregate-only counts for the landing page (get_stats returns
-  // just { users, sanghs } — no uid, name, email, or sangh row). Mirrors
-  // fetchSanghs()'s memoization pattern, and — unlike fetchSanghs — resolves
-  // null (not an empty object) on ANY failure, so the landing page can tell
-  // "no data yet" apart from "genuinely zero" and render a dash instead of 0.
+  // Public, aggregate-only counts for the (signed-out) landing page. Reads
+  // the `stats` node, the one Firebase path readable without auth — see
+  // firebase-rules.json — kept up to date by app.js whenever an admin loads
+  // the panel (see _updatePublicStats()). Mirrors fetchSanghs()'s
+  // memoization pattern, and — like before — resolves null (not an empty
+  // object) on ANY failure/absence, so the landing page can tell "no data
+  // yet" apart from "genuinely zero" and render a dash instead of 0.
   async function fetchStats() {
     if (_statsCache) return _statsCache;
     if (_statsFetchPromise) return _statsFetchPromise;
 
     _statsFetchPromise = (async () => {
       try {
-        const text = await _sheetsRequest({ action: "get_stats" });
-        console.log("Stats response:", text);
-        try {
-          const result = JSON.parse(text);
-          if (result.success) {
-            const stats = {
-              users: Number(result.users) || 0,
-              sanghs: Number(result.sanghs) || 0
-            };
-            _statsCache = stats;
-            return stats;
-          }
-        } catch (parseErr) {
-          console.error("Failed to parse Stats response:", text);
+        const snap = await firebase.database().ref('stats').once('value');
+        const val = snap.val();
+        if (val) {
+          const stats = {
+            users: Number(val.users) || 0,
+            sanghs: Number(val.sanghs) || 0
+          };
+          _statsCache = stats;
+          return stats;
         }
       } catch (e) {
-        console.error("Fetch stats failed:", e);
+        console.error("Fetch stats from Firebase failed:", e);
       }
       return null;
     })();
@@ -487,13 +558,27 @@ const Auth = (() => {
     }
   }
 
-  // Fetch a single user's profile photo (data URL) from the Sheet. Its own
-  // action — deliberately separate from fetchProfile()/get_profile — so the
-  // image never rides along with lighter, more frequent requests.
+  // Fetch a single user's profile photo (data URL). Lives at its own path
+  // (users/{uid}/photo) — deliberately separate from registration — so the
+  // ~20KB image never rides along with the smaller, more frequent reads
+  // (_tryFetchIdentityFromFirebase's login-path fetch, renderProfile()'s
+  // own registration read).
   async function fetchPhoto(uid) {
     try {
+      const snap = await firebase.database().ref(`users/${uid}/photo`).once('value');
+      return snap.val() || null;
+    } catch (e) {
+      console.error("Fetch photo from Firebase failed:", e);
+      return null;
+    }
+  }
+
+  // Legacy Sheet-backed photo reader. Kept only for the one-time migration
+  // script — the live app always reads users/{uid}/photo now.
+  async function fetchPhotoFromSheetLegacy(uid) {
+    try {
       const text = await _sheetsRequest({ action: "get_photo", uid }, { allowJsonp: false });
-      console.log("Get photo response length:", text ? text.length : 0);
+      console.log("Get photo (Sheet, legacy) response length:", text ? text.length : 0);
       try {
         const result = JSON.parse(text);
         if (result.success) return result.photo || null;
@@ -501,7 +586,7 @@ const Auth = (() => {
         console.error("Failed to parse get_photo response:", text);
       }
     } catch (e) {
-      console.error("Fetch photo failed:", e);
+      console.error("Fetch photo (legacy) failed:", e);
     }
     return null;
   }
@@ -525,25 +610,6 @@ const Auth = (() => {
       console.error("Update photo failed:", e);
       return { success: false, error: 'network_error' };
     }
-  }
-
-  // Fetch a single user's full profile row from the Sheet (master). Deliberately
-  // uncached — the Profile tab calls this on every open so Sheet-side edits show up.
-  // Returns the profile object on success, or null (caller falls back to Firebase).
-  async function fetchProfile(uid) {
-    try {
-      const text = await _sheetsRequest({ action: "get_profile", uid });
-      console.log("Get profile response:", text);
-      try {
-        const result = JSON.parse(text);
-        if (result.success) return result.profile || null;
-      } catch (parseErr) {
-        console.error("Failed to parse get_profile response:", text);
-      }
-    } catch (e) {
-      console.error("Fetch profile failed:", e);
-    }
-    return null;
   }
 
   // Updates the editable profile fields (phone/city/area) on the Sheet. Unlike
@@ -573,11 +639,42 @@ const Auth = (() => {
     }
   }
 
-  // Fetch users belonging to specific sangh codes from the Sheet (master)
+  // Fetch users belonging to specific sangh codes — sangh_users/{code} is the
+  // index (written at registration and on transfer; see app.js), so for each
+  // code this reads that index, then each listed uid's denormalized name
+  // (users/{uid}/name). Both levels run fully in parallel over the same
+  // already-open connection, so this stays fast even for a sangh with many
+  // members. Resolves [] on any failure — matches the exact contract this
+  // function has always had; _fetchAdminUserUids() (app.js) already treats
+  // "no users" and "the fetch failed" the same way.
   async function fetchSanghUsers(sanghCodes) {
     try {
+      const db = firebase.database();
+      const codes = (sanghCodes || []).map(c => String(c || '').trim()).filter(Boolean);
+      if (!codes.length) return [];
+
+      const perCode = await Promise.all(codes.map(async code => {
+        const indexSnap = await db.ref(`sangh_users/${code}`).once('value');
+        const indexVal = indexSnap.val() || {};
+        const uids = Object.keys(indexVal).filter(uid => indexVal[uid]);
+        const nameSnaps = await Promise.all(uids.map(uid => db.ref(`users/${uid}/name`).once('value')));
+        return uids.map((uid, i) => ({ uid, name: nameSnaps[i].val() || '', sanghCode: code }));
+      }));
+
+      return perCode.flat();
+    } catch (e) {
+      console.error("Fetch sangh users from Firebase failed:", e);
+      return [];
+    }
+  }
+
+  // Legacy Sheet-backed sangh-users reader. Kept only for the one-time
+  // migration script, which uses it to backfill sangh_users/{code} for
+  // users who registered before that index existed.
+  async function fetchSanghUsersFromSheetLegacy(sanghCodes) {
+    try {
       const text = await _sheetsRequest({ action: "get_sangh_users", sanghCodes: sanghCodes });
-      console.log("Sangh users response:", text);
+      console.log("Sangh users (Sheet, legacy) response:", text);
       try {
         const result = JSON.parse(text);
         if (result.success) return result.users || [];
@@ -585,7 +682,7 @@ const Auth = (() => {
         console.error("Failed to parse sangh users response:", text);
       }
     } catch (e) {
-      console.error("Fetch sangh users failed:", e);
+      console.error("Fetch sangh users (legacy) failed:", e);
     }
     return [];
   }
@@ -601,7 +698,6 @@ const Auth = (() => {
     fetchSanghs,
     fetchStats,
     fetchSanghUsers,
-    fetchProfile,
     updateProfile,
     fetchPhoto,
     updatePhoto,
@@ -612,6 +708,11 @@ const Auth = (() => {
     getNextProfileId,
     fetchProfiles,
     MAX_PROFILES,
-    retryRoleCheck
+    retryRoleCheck,
+    // Legacy Sheet readers — unused by the live app, exported only for the
+    // one-time migration script (see plan/migration snippet).
+    fetchSanghsFromSheetLegacy,
+    fetchPhotoFromSheetLegacy,
+    fetchSanghUsersFromSheetLegacy
   };
 })();

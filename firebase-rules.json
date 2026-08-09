@@ -2,11 +2,19 @@
   "rules": {
     "settings": {
       ".read": "auth != null",
-      ".write": "auth != null"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
     },
     "users": {
       ".read": "auth != null",
-      ".write": "auth != null"
+      "$uid": {
+        ".write": "auth != null && (auth.uid === $uid || $uid.beginsWith(auth.uid + '__p') || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "role": {
+          ".validate": "newData.val() === 'user' || root.child('users').child(auth.uid).child('role').val() === 'admin'"
+        },
+        "sanghCodes": {
+          ".validate": false
+        }
+      }
     },
     "sangh_users": {
       ".read": "auth != null",
@@ -15,6 +23,14 @@
     "account_profiles": {
       ".read": "auth != null",
       ".write": "auth != null"
+    },
+    "sanghs": {
+      ".read": "auth != null",
+      ".write": false
+    },
+    "stats": {
+      ".read": true,
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
     }
   }
 }
