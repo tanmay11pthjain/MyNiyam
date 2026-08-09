@@ -20,31 +20,100 @@ const db = firebase.database();
 
 // ===== RAW NIYAM POINTS — single source of truth =====
 // What a day's raw points are, derived purely from what was actually done
-// that day (POINTS.* × the relevant flag/counter). No streak multiplier, no
-// Perfect Day bonus, no daily-login bonus — none of those are part of the
-// score anymore. The live award path (activity handlers), the historical
-// recompute (_migrateToRawPoints), and the admin Excel export all read from
-// this same list, so they can never disagree on what "raw points" means.
+// that day (a point value × the relevant flag/counter). No streak
+// multiplier, no Perfect Day bonus, no daily-login bonus — none of those
+// are part of the score anymore. The live award path (activity handlers),
+// the historical recompute (_migrateToRawPoints), and the admin Excel
+// export all read from this same list, so they can never disagree on what
+// "raw points" means.
+//
+// Each rule carries a stable `key` (matches either a POINTS key or a
+// NIYAM_REGISTRY item's `prop`) and reads its value from the PASSED map
+// `P` rather than closing over POINTS directly — admin-side aggregates
+// (the Excel export, the poster) can span members of DIFFERENT sanghs with
+// different point overrides in one pass, so a single mutated global would
+// score everyone at whichever sangh's map happened to be applied last. A
+// logged-in user belongs to exactly one sangh, so their call sites simply
+// omit P and get their own live map — see livePoints() below.
+//
+// Ashta Prakari only ever scores alongside Pooja — matching the live award
+// path (completePooja()/toggleAshtaPrakari()) and the day-edit dependsOn
+// rule (DAY_EDIT_FIELDS above). Raysiya has its OWN key (not devasiya's) so
+// the two can be priced independently — see completePratikraman() below.
 const RAW_POINT_RULES = [
-  { label: 'Navkarsi', points: log => log.navkarsiDone ? POINTS.navkarsi : 0 },
-  { label: 'Wake < 7AM', points: log => log.wakeUpDone ? POINTS.wakeUpEarly : 0 },
-  { label: 'Sleep < 12AM', points: log => log.sleepDone ? POINTS.sleepEarly : 0 },
-  { label: 'Pranam', points: log => log.pranamDone ? POINTS.pranam : 0 },
-  { label: 'Jin Pooja', points: log => log.poojaDone ? POINTS.pooja : 0 },
-  { label: 'Samayik', points: log => (log.samayikDone || 0) * POINTS.samayik },
-  { label: 'Devasiya', points: log => log.devasiyaDone ? POINTS.devasiya : 0 },
-  { label: 'Raysiya', points: log => log.raysiyaDone ? POINTS.raysiya : 0 },
-  { label: 'Book Reading', points: log => Math.floor((log.bookReadingMins || 0) / 30) * POINTS.bookReading },
-  { label: 'Ratri Bhojan Tyag', points: log => log.ratriBhojanDone ? POINTS.ratriBhojan : 0 },
-  { label: 'Kandmool Tyag', points: log => log.kandmoolDone ? POINTS.kandmool : 0 },
-  { label: 'Daily Niyam', points: log => log.dailyNiyamDone ? POINTS.dailyNiyam : 0 },
-  { label: 'Ashta Prakari', points: log => log.ashtaPrakariDone ? POINTS.ashtaPrakari : 0 },
-  { label: 'Screen Time Penalty', points: log => -(Math.floor((((log.screenTimeHours || 0) * 60) + (log.screenTimeMins || 0)) / 60) * POINTS.screenTimePenalty) },
+  { key: 'navkarsi', label: 'Navkarsi', points: (log, P) => log.navkarsiDone ? P.navkarsi : 0 },
+  { key: 'wakeUpEarly', label: 'Wake < 7AM', points: (log, P) => log.wakeUpDone ? P.wakeUpEarly : 0 },
+  { key: 'sleepEarly', label: 'Sleep < 12AM', points: (log, P) => log.sleepDone ? P.sleepEarly : 0 },
+  { key: 'pranam', label: 'Pranam', points: (log, P) => log.pranamDone ? P.pranam : 0 },
+  { key: 'pooja', label: 'Jin Pooja', points: (log, P) => log.poojaDone ? P.pooja : 0 },
+  { key: 'samayik', label: 'Samayik', points: (log, P) => (log.samayikDone || 0) * P.samayik },
+  { key: 'devasiya', label: 'Devasiya', points: (log, P) => log.devasiyaDone ? P.devasiya : 0 },
+  { key: 'raysiya', label: 'Raysiya', points: (log, P) => log.raysiyaDone ? P.raysiya : 0 },
+  { key: 'bookReading', label: 'Book Reading', points: (log, P) => Math.floor((log.bookReadingMins || 0) / 30) * P.bookReading },
+  { key: 'ratriBhojan', label: 'Ratri Bhojan Tyag', points: (log, P) => log.ratriBhojanDone ? P.ratriBhojan : 0 },
+  { key: 'kandmool', label: 'Kandmool Tyag', points: (log, P) => log.kandmoolDone ? P.kandmool : 0 },
+  { key: 'dailyNiyam', label: 'Daily Niyam', points: (log, P) => log.dailyNiyamDone ? P.dailyNiyam : 0 },
+  { key: 'ashtaPrakari', label: 'Ashta Prakari', points: (log, P) => (log.ashtaPrakariDone && log.poojaDone) ? P.ashtaPrakari : 0 },
+  { key: 'screenTimePenalty', label: 'Screen Time Penalty', points: (log, P) => -(Math.floor((((log.screenTimeHours || 0) * 60) + (log.screenTimeMins || 0)) / 60) * P.screenTimePenalty) },
 ];
 
 // A day's total raw points — the same figure used for kpEarned everywhere.
-function computeRawDayPoints(log) {
-  return RAW_POINT_RULES.reduce((sum, rule) => sum + rule.points(log), 0);
+// `P` defaults to the caller's own live point map (see livePoints()) so
+// every single-sangh call site can simply omit it; admin aggregates that
+// span multiple sanghs pass each member's own resolved map explicitly.
+function computeRawDayPoints(log, P) {
+  const map = P || livePoints();
+  return RAW_POINT_RULES.reduce((sum, rule) => sum + rule.points(log, map), 0);
+}
+
+// ===== ADMIN-CONFIGURABLE POINT VALUES (per sangh) =====
+// DEFAULT_POINT_MAP is a frozen snapshot of the CODED defaults — POINTS
+// (data.js) for the 13 built-in niyams, plus every successfully-registered
+// NIYAM_REGISTRY item's `points`, keyed by its `prop`. Registry props are
+// enforced globally unique and always end in "Done" (registerNiyams()'s
+// PROP_RE), so they can never collide with a POINTS key — one flat map is
+// safe. Built AFTER registerNiyams() runs (below), both because it needs
+// `entry.flag` to know which entries actually survived validation, and
+// because it must capture the truly-original defaults before any override
+// is ever applied.
+let DEFAULT_POINT_MAP = null;
+let _livePointMap = null;
+
+function _buildDefaultPointMap() {
+  const map = { ...POINTS };
+  (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
+    if (!entry.flag) return; // failed registerNiyams() validation — no rule exists for it
+    entry.items.forEach(item => { map[item.prop] = item.points; });
+  });
+  return map;
+}
+
+// Merges a sangh's stored point overrides onto the coded defaults. Any
+// value that is missing, non-numeric or negative is dropped rather than
+// applied — a blank/garbled/negative admin input must never poison
+// scoring. A deliberate 0 IS allowed: the niyam still counts toward
+// streaks/perfect-day/stats, it just scores no points. Never mutates
+// DEFAULT_POINT_MAP itself.
+function resolvePointMap(overrides) {
+  const map = { ...DEFAULT_POINT_MAP };
+  Object.entries(overrides || {}).forEach(([key, val]) => {
+    if (!(key in map)) return; // unknown/stale key — ignore rather than pollute the map
+    const n = Number(val);
+    if (Number.isFinite(n) && n >= 0) map[key] = n;
+  });
+  return map;
+}
+
+// The map currently in effect for THIS session — a user's own sangh's
+// resolved map (set by the sangh_settings listener in setupRealtimeSync()),
+// or the coded defaults before that listener has resolved for the first
+// time / for a session with no sangh at all.
+function livePoints() {
+  return _livePointMap || DEFAULT_POINT_MAP;
+}
+
+function setLivePoints(map) {
+  _livePointMap = map;
 }
 
 // ===== STREAK SAVER — PAST-DAY EDIT FIELD SPEC =====
@@ -187,11 +256,12 @@ function registerNiyams() {
         DEFAULT_DAILY_LOG[item.prop] = false;
 
         RAW_POINT_RULES.push({
+          key: item.prop,
           label: item.label,
-          points: log => {
+          points: (log, P) => {
             if (!log[item.prop]) return 0;
             if (item.dependsOn && !log[item.dependsOn]) return 0;
-            return item.points;
+            return P[item.prop];
           }
         });
 
@@ -213,6 +283,7 @@ function registerNiyams() {
   });
 }
 registerNiyams();
+DEFAULT_POINT_MAP = _buildDefaultPointMap();
 
 // ===== ANDROID BACK BUTTON — overlay-close + tab-step navigation =====
 // Every overlay id this app has, mapped to its dedicated close method (see
@@ -1432,19 +1503,27 @@ class KalyanMitra {
     this._loadAccountProfiles();
   }
 
-  // One-time migration to raw-points-only scoring. Recomputes every day's
-  // kpEarned from RAW_POINT_RULES (the same rules the live award path and the
-  // Excel export use) and sums them into a fresh profile.totalKP — discarding
-  // whatever inflation past streak multipliers/Perfect-Day/daily-login bonuses
-  // baked into the old numbers. Guarded by profile.rawPointsMigrated so it
-  // never re-runs once it succeeds; on failure the guard is deliberately left
-  // unset so the next login retries rather than silently staying un-migrated.
+  // Recomputes every day's kpEarned from RAW_POINT_RULES (the same rules the
+  // live award path and the Excel export use, evaluated against THIS
+  // session's livePoints() — see computeRawDayPoints()) and sums them into
+  // a fresh profile.totalKP. Originally a one-time migration off the old
+  // streak-multiplier/bonus scoring (guarded by the plain boolean
+  // rawPointsMigrated); now doubles as the lazy self-heal for a per-sangh
+  // niyam-points change, via profile.pointsVersion vs. this session's
+  // this._sanghPointsVersion (set by setupRealtimeSync()'s sangh_settings
+  // listener, which resolves before this is ever called — see initUser()).
+  // Catches anyone an admin's own fan-out (_recomputeSanghPoints()) missed:
+  // offline at save time, a member outside _adminUserUids, a partial write.
+  // On failure the guard fields are deliberately left unset/stale so the
+  // next login retries rather than silently staying un-migrated.
   //
-  // Idempotent by construction: every run recomputes from the same source
-  // daily_logs, so running it twice (e.g. a retry after a partial failure)
-  // always converges on the same total rather than compounding.
+  // Idempotent by construction either way: every run recomputes from the
+  // same source daily_logs, so running it twice (a retry, or two logins in
+  // a row before a version bump) always converges on the same total rather
+  // than compounding.
   async _migrateToRawPoints() {
-    if (this.profile.rawPointsMigrated) return;
+    const targetVersion = this._sanghPointsVersion || 0;
+    if (this.profile.rawPointsMigrated && (this.profile.pointsVersion || 0) >= targetVersion) return;
     try {
       const snap = await db.ref(`users/${this.uid}/daily_logs`).once('value');
       const logs = snap.val() || {};
@@ -1469,8 +1548,12 @@ class KalyanMitra {
         this.dailyLog.kpEarned = computeRawDayPoints(this.dailyLog);
       }
 
-      this.profile.totalKP = total;
+      // Clamped — a member whose penalties now exceed their earnings must
+      // read 0, never negative. The live award path (deductKarmaPoints())
+      // already floors at 0; a recompute must agree.
+      this.profile.totalKP = Math.max(0, total);
       this.profile.rawPointsMigrated = true;
+      this.profile.pointsVersion = targetVersion;
       await this.saveProfile();
     } catch (e) {
       console.warn('Raw-points migration failed — will retry on next load.', e);
@@ -1825,6 +1908,7 @@ class KalyanMitra {
     // Store admin's sangh codes from auth
     this._adminSanghCodes = this._currentAuthUser.sanghCodes || [];
     this._adminUserUids = []; // UIDs this admin manages
+    this._adminSanghPoints = {}; // code -> raw stored sangh_settings value (or null), kept fresh by the listeners started below
     this.renderAdminHeaderBrand();
     // Not awaited: paints the admin header avatar from cache immediately
     // (inside the function itself) and reconciles the profile-switcher list
@@ -1861,6 +1945,23 @@ class KalyanMitra {
       // never a crash, and the admin panel is already visible either way.
       console.error('Firebase read failed for "settings":', err);
       this._showDbErrorBanner(['settings']);
+    });
+
+    // Per-sangh niyam point overrides — one listener per managed sangh, so
+    // the points UI and every aggregate (_adminSanghPointMap(), used by the
+    // export/poster) always reflect the latest stored value. Cached RAW
+    // (not merged with defaults) so _adminSanghPointMap()/_loadAdminPointInputs()
+    // can resolve it fresh on demand.
+    this._adminSanghCodes.forEach(code => {
+      db.ref(`sangh_settings/${code}`).on('value', snap => {
+        this._adminSanghPoints[code] = snap.val() || null;
+        // Only repaints if the points UI is currently showing THIS sangh —
+        // a background sangh's listener firing must never clobber whatever
+        // sangh the admin has selected in the dropdown right now.
+        const sel = document.getElementById('admin-points-sangh');
+        const activeCode = (sel && sel.value) || this._adminSanghCodes[0];
+        if (activeCode === code) this._loadAdminPointInputs();
+      }, err => console.error(`Firebase read failed for "sangh_settings/${code}":`, err));
     });
 
     // Fetch user UIDs from all assigned sanghs
@@ -2014,6 +2115,19 @@ class KalyanMitra {
       .map(([uid, data]) => ({ uid, data }));
   }
 
+  // Resolves ONE member's own sangh's point map — for admin aggregates
+  // (the Excel export, the poster) that can span members of DIFFERENT
+  // sanghs in a single pass. Never this admin session's own livePoints(),
+  // which the admin's own role never actually uses for scoring (see
+  // initUser()'s currentRole==='user' guard). Reads from
+  // this._adminSanghPoints, kept fresh by the per-sangh listeners started
+  // in initAdmin(); a sangh with no listener yet (or that has never been
+  // customised) simply resolves to the coded defaults.
+  _adminSanghPointMap(sanghCode) {
+    const stored = sanghCode ? (this._adminSanghPoints || {})[sanghCode] : null;
+    return resolvePointMap(stored && stored.points);
+  }
+
   // Self-healing photo migration. users/{uid}/photo has been mandatory at
   // registration since v4.790, so this only ever matters for members who
   // registered before the Firebase switchover — their photo still lives
@@ -2163,6 +2277,27 @@ class KalyanMitra {
         this.selectAdminUser(card.dataset.uid);
       });
     });
+
+    // Re-applies whatever the admin already typed into the search box —
+    // this listener re-fires on every change under users/, which would
+    // otherwise silently clear an active filter on every rebuild.
+    this._filterLeaderboard();
+  }
+
+  // Filters the Leaderboard by name — toggles display on the EXISTING rows
+  // rather than re-rendering, so a filter never disturbs the click handlers
+  // just bound above. Called on every keystroke and after every rebuild
+  // (see the end of _renderLeaderboardFromSnap() above).
+  _filterLeaderboard() {
+    const input = document.getElementById('leaderboard-search');
+    const listEl = document.getElementById('admin-leaderboard-list');
+    if (!input || !listEl) return;
+    const q = input.value.trim().toLowerCase();
+    listEl.querySelectorAll('.leaderboard-card').forEach(row => {
+      const nameEl = row.querySelector('.lb-name');
+      const name = nameEl ? nameEl.textContent.toLowerCase() : '';
+      row.style.display = (!q || name.includes(q)) ? '' : 'none';
+    });
   }
 
   async deleteAdminUser(targetUid, targetName) {
@@ -2309,6 +2444,26 @@ class KalyanMitra {
       </div>
     `;
     }).join('');
+
+    // Re-applies whatever the admin already typed into the search box —
+    // renderAttendance() rebuilds this list's innerHTML on every date
+    // change, so a filter left unre-applied would silently clear itself.
+    this._filterAttendance();
+  }
+
+  // Same idea as _filterLeaderboard() — toggles display on existing rows,
+  // never re-renders, so an in-progress attendance draft is never disturbed
+  // by typing into the search box.
+  _filterAttendance() {
+    const input = document.getElementById('attendance-search');
+    const listEl = document.getElementById('attendance-list');
+    if (!input || !listEl) return;
+    const q = input.value.trim().toLowerCase();
+    listEl.querySelectorAll('.attendance-row').forEach(row => {
+      const nameEl = row.querySelector('.lb-name');
+      const name = nameEl ? nameEl.textContent.toLowerCase() : '';
+      row.style.display = (!q || name.includes(q)) ? '' : 'none';
+    });
   }
 
   // Lazily creates a draft entry for uid, seeded from whatever is CURRENTLY
@@ -2346,7 +2501,12 @@ class KalyanMitra {
   _markAllAttendancePresent() {
     const listEl = document.getElementById('attendance-list');
     if (!listEl) return;
+    // Scoped to rows the search filter is currently showing — with an
+    // empty search that's every row (today's behaviour exactly), but a
+    // member hidden by an active search must never be silently marked
+    // present without the admin seeing them.
     listEl.querySelectorAll('.attendance-row').forEach(row => {
+      if (row.style.display === 'none') return;
       const uid = row.dataset.uid;
       const cb = row.querySelector('.attendance-present-checkbox');
       if (cb && !cb.checked) {
@@ -2409,7 +2569,11 @@ class KalyanMitra {
       if (!this._adminUserUids.includes(uid)) return;
 
       const logs = data.daily_logs || {};
-      const { stats, daysLogged, perfectDays, totalAP } = this._computeNiyamRange(logs, fromKey, toKey, s, true);
+      // Each member scored at THEIR OWN sangh's point values — this export
+      // can span an admin's several sanghs in one pass.
+      const sanghCode = data.registration && data.registration.sanghCode;
+      const pointsMap = this._adminSanghPointMap(sanghCode);
+      const { stats, daysLogged, perfectDays, totalAP } = this._computeNiyamRange(logs, fromKey, toKey, s, true, pointsMap);
 
       rows.push({ name: data.name || uid, stats, totalAP, daysLogged, perfectDays });
     });
@@ -2820,7 +2984,7 @@ class KalyanMitra {
           </div>
         </div>
         <div class="compact-actions">
-          <button class="btn-complete-small" id="btn-${entry.id}">+${item.points} AP</button>
+          <button class="btn-complete-small" id="btn-${entry.id}" data-point-key="${item.prop}" data-point-format="+{n} AP">+${item.points} AP</button>
           <button class="btn-undo-small hidden" id="btn-${entry.id}-undo">Undo</button>
         </div>
       </div>`;
@@ -2845,9 +3009,9 @@ class KalyanMitra {
         <div class="compact-actions pooja-complex-actions">
           <label class="ashta-toggle">
             <input type="checkbox" id="${entry.id}-child-checkbox">
-            <span>${child.label} (+${child.points})</span>
+            <span data-point-key="${child.prop}" data-point-format="${this._escHtml(child.label)} (+{n})">${child.label} (+${child.points})</span>
           </label>
-          <button class="btn-complete-small" id="btn-${entry.id}">+${parent.points} AP</button>
+          <button class="btn-complete-small" id="btn-${entry.id}" data-point-key="${parent.prop}" data-point-format="+{n} AP">+${parent.points} AP</button>
           <button class="btn-undo-small hidden" id="btn-${entry.id}-undo">Undo</button>
         </div>
       </div>`;
@@ -2856,18 +3020,19 @@ class KalyanMitra {
   // Shared by 'dual' (two independent toggles, like the built-in Pratikraman
   // card) and 'exclusive' (pick one or neither) — same two-slot-button
   // markup either way; only the click semantics differ (bound separately in
-  // _bindRegistryCardEvents()). When both items share the same points value
-  // it's shown once in the card header ("+10 each"); otherwise each slot
-  // shows its own points, since a single shared header would be misleading.
+  // _bindRegistryCardEvents()). Each slot always shows its OWN points
+  // (never a single shared "+N each" header) — the two items can be priced
+  // independently by an admin at any time, even if their coded defaults
+  // happen to start equal, so a shared header could otherwise go stale the
+  // moment one is overridden without the other (same reasoning as the
+  // built-in Pratikraman card's Devasiya/Raysiya split).
   _buildRegistrySlotCardHtml(entry, isExclusive) {
     const [a, b] = entry.items;
-    const samePoints = a.points === b.points;
-    const kpHeader = samePoints ? `<span class="card-kp">+${a.points} each</span>` : '';
-    const slotLabel = item => samePoints ? item.label : `${item.label} (+${item.points})`;
     const slotHtml = (item, idx) => `
       <button class="slot-btn" id="${entry.id}-opt${idx}" type="button">
         <span class="slot-icon">${item.icon || entry.icon || ''}</span>
-        <span class="slot-label">${slotLabel(item)}</span>
+        <span class="slot-label">${item.label}</span>
+        <span class="card-kp" data-point-key="${item.prop}" data-point-format="+{n} AP">+${item.points} AP</span>
         <span class="slot-check" id="${entry.id}-opt${idx}-check">○</span>
       </button>`;
     const statusText = isExclusive ? 'None selected' : `0/${entry.items.length} completed`;
@@ -2880,7 +3045,6 @@ class KalyanMitra {
             <span class="card-title">${entry.label}</span>
             <span class="card-title-hindi">${entry.labelHindi || ''}</span>
           </div>
-          ${kpHeader}
         </div>
         <div class="card-body">
           <div class="pratikraman-slots">
@@ -2904,8 +3068,8 @@ class KalyanMitra {
         const item = entry.items[0];
         const btn = document.getElementById(`btn-${entry.id}`);
         const btnUndo = document.getElementById(`btn-${entry.id}-undo`);
-        if (btn) btn.addEventListener('click', () => this.toggleSimpleActivity(entry.id, item.prop, true, item.points));
-        if (btnUndo) btnUndo.addEventListener('click', () => this.toggleSimpleActivity(entry.id, item.prop, false, item.points));
+        if (btn) btn.addEventListener('click', () => this.toggleSimpleActivity(entry.id, item.prop, true, item.prop));
+        if (btnUndo) btnUndo.addEventListener('click', () => this.toggleSimpleActivity(entry.id, item.prop, false, item.prop));
       } else if (entry.layout === 'dependent') {
         const btn = document.getElementById(`btn-${entry.id}`);
         const btnUndo = document.getElementById(`btn-${entry.id}-undo`);
@@ -2937,8 +3101,9 @@ class KalyanMitra {
     const [parent, child] = entry.items;
     if (this.dailyLog[parent.prop] === isDone) return;
     this.dailyLog[parent.prop] = isDone;
-    let points = parent.points;
-    if (this.dailyLog[child.prop]) points += child.points;
+    const P = livePoints();
+    let points = P[parent.prop];
+    if (this.dailyLog[child.prop]) points += P[child.prop];
     if (isDone) {
       this.addKarmaPoints(points, entry.id);
       this.showCompletionBurst(document.getElementById(`${entry.id}-card`));
@@ -2957,8 +3122,9 @@ class KalyanMitra {
     if (!checkbox) return;
     this.dailyLog[child.prop] = checkbox.checked;
     if (this.dailyLog[parent.prop]) {
-      if (this.dailyLog[child.prop]) this.addKarmaPoints(child.points, entry.id);
-      else this.deductKarmaPoints(child.points);
+      const childPoints = livePoints()[child.prop];
+      if (this.dailyLog[child.prop]) this.addKarmaPoints(childPoints, entry.id);
+      else this.deductKarmaPoints(childPoints);
     }
     this.afterActivity();
   }
@@ -2969,12 +3135,13 @@ class KalyanMitra {
     if (this.isDayLocked()) return;
     const wasDone = !!this.dailyLog[item.prop];
     this.dailyLog[item.prop] = !wasDone;
+    const points = livePoints()[item.prop];
     if (!wasDone) {
-      this.addKarmaPoints(item.points, entry.id);
+      this.addKarmaPoints(points, entry.id);
       this.showCompletionBurst(document.getElementById(`${entry.id}-card`));
       this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
     } else {
-      this.deductKarmaPoints(item.points);
+      this.deductKarmaPoints(points);
       if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) this.dailyLog.perfectDay = false;
     }
     this.afterActivity();
@@ -2986,18 +3153,19 @@ class KalyanMitra {
     if (this.isDayLocked()) return;
     const otherItem = entry.items.find(i => i.prop !== chosenItem.prop);
     const wasChosen = !!this.dailyLog[chosenItem.prop];
+    const P = livePoints();
 
     if (wasChosen) {
       // Clicking the already-selected option again clears it → back to "none".
       this.dailyLog[chosenItem.prop] = false;
-      this.deductKarmaPoints(chosenItem.points);
+      this.deductKarmaPoints(P[chosenItem.prop]);
     } else {
       if (otherItem && this.dailyLog[otherItem.prop]) {
         this.dailyLog[otherItem.prop] = false;
-        this.deductKarmaPoints(otherItem.points);
+        this.deductKarmaPoints(P[otherItem.prop]);
       }
       this.dailyLog[chosenItem.prop] = true;
-      this.addKarmaPoints(chosenItem.points, entry.id);
+      this.addKarmaPoints(P[chosenItem.prop], entry.id);
       this.showCompletionBurst(document.getElementById(`${entry.id}-card`));
       this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
     }
@@ -3007,20 +3175,24 @@ class KalyanMitra {
 
   // ===== EVENT LISTENERS =====
   setupUserEventListeners() {
-    const bindSimple = (id, prop, points, elId = id) => {
+    // `pointKey` (NOT a number) — resolved via livePoints() lazily, inside
+    // toggleSimpleActivity(), on every tap. Binding the NUMBER here instead
+    // would capture it by value in this closure at dashboard-init time, so
+    // an admin's point-value change wouldn't take effect until reload.
+    const bindSimple = (id, prop, pointKey, elId = id) => {
       const btn = document.getElementById(`btn-${elId}`);
       const btnUndo = document.getElementById(`btn-${elId}-undo`);
-      if (btn) btn.addEventListener('click', () => this.toggleSimpleActivity(elId, prop, true, points));
-      if (btnUndo) btnUndo.addEventListener('click', () => this.toggleSimpleActivity(elId, prop, false, points));
+      if (btn) btn.addEventListener('click', () => this.toggleSimpleActivity(elId, prop, true, pointKey));
+      if (btnUndo) btnUndo.addEventListener('click', () => this.toggleSimpleActivity(elId, prop, false, pointKey));
     };
 
-    bindSimple('navkarsi', 'navkarsiDone', POINTS.navkarsi);
-    bindSimple('wakeup', 'wakeUpDone', POINTS.wakeUpEarly);
-    bindSimple('sleep', 'sleepDone', POINTS.sleepEarly);
-    bindSimple('pranam', 'pranamDone', POINTS.pranam);
-    bindSimple('ratribhojan', 'ratriBhojanDone', POINTS.ratriBhojan);
-    bindSimple('kandmool', 'kandmoolDone', POINTS.kandmool);
-    bindSimple('niyam', 'dailyNiyamDone', POINTS.dailyNiyam);
+    bindSimple('navkarsi', 'navkarsiDone', 'navkarsi');
+    bindSimple('wakeup', 'wakeUpDone', 'wakeUpEarly');
+    bindSimple('sleep', 'sleepDone', 'sleepEarly');
+    bindSimple('pranam', 'pranamDone', 'pranam');
+    bindSimple('ratribhojan', 'ratriBhojanDone', 'ratriBhojan');
+    bindSimple('kandmool', 'kandmoolDone', 'kandmool');
+    bindSimple('niyam', 'dailyNiyamDone', 'dailyNiyam');
 
     // Registry niyams (data.js's NIYAM_REGISTRY) — see _bindRegistryCardEvents()
     this._bindRegistryCardEvents();
@@ -3042,8 +3214,8 @@ class KalyanMitra {
       if (btnPlus) btnPlus.addEventListener('click', () => handler(1));
     };
 
-    bindCounter('samayik', (delta) => this.adjustCounter('samayikDone', delta, POINTS.samayik, 'samayik'));
-    bindCounter('book', (delta) => this.adjustCounter('bookReadingMins', delta * 30, POINTS.bookReading, 'book'));
+    bindCounter('samayik', (delta) => this.adjustCounter('samayikDone', delta, 'samayik', 'samayik'));
+    bindCounter('book', (delta) => this.adjustCounter('bookReadingMins', delta * 30, 'bookReading', 'book'));
 
     const bindScreenTime = (id, prop, delta) => {
       const btnMinus = document.getElementById(`btn-${id}-minus`);
@@ -3208,6 +3380,10 @@ class KalyanMitra {
     if (niyamStatsPrevAdmin) niyamStatsPrevAdmin.addEventListener('click', () => this._changeNiyamStatsMonth(-1));
     if (niyamStatsNextAdmin) niyamStatsNextAdmin.addEventListener('click', () => this._changeNiyamStatsMonth(1));
 
+    // Leaderboard search
+    const leaderboardSearchEl = document.getElementById('leaderboard-search');
+    if (leaderboardSearchEl) leaderboardSearchEl.addEventListener('input', () => this._filterLeaderboard());
+
     // Export leaderboard to Excel
     const openExportBtn = document.getElementById('btn-open-export');
     if (openExportBtn) openExportBtn.addEventListener('click', () => this.openExportDialog());
@@ -3243,6 +3419,8 @@ class KalyanMitra {
         this.renderAttendance();
       });
     }
+    const attendanceSearchEl = document.getElementById('attendance-search');
+    if (attendanceSearchEl) attendanceSearchEl.addEventListener('input', () => this._filterAttendance());
     const markAllPresentBtn = document.getElementById('btn-attendance-mark-all');
     if (markAllPresentBtn) markAllPresentBtn.addEventListener('click', () => this._markAllAttendancePresent());
     const saveAttendanceBtn = document.getElementById('btn-save-attendance');
@@ -3396,12 +3574,34 @@ class KalyanMitra {
       }
     });
 
+    // Per-sangh niyam point overrides — user sessions only (the admin's OWN
+    // role never scores anything; a family profile switched INTO always
+    // goes through this same initUser()/setupRealtimeSync() path as its
+    // own uid, so it resolves its own sangh's map correctly regardless).
+    // Must resolve before _migrateToRawPoints() runs (see initUser()'s
+    // ordering comment) — it's included in the same awaited settle below
+    // as everything else, so that ordering is guaranteed.
+    let p5 = Promise.resolve();
+    const labeledPaths = ['settings', `${userPath}/profile`, `${userPath}/daily_logs/${todayKey}`, `${userPath}/lock_status/${todayKey}`];
+    if (this.currentRole === 'user') {
+      const sanghCode = (this._currentAuthUser && this._currentAuthUser.sanghCodes && this._currentAuthUser.sanghCodes[0]) || null;
+      if (sanghCode) {
+        p5 = this.listenToRef(`sangh_settings/${sanghCode}`, val => {
+          setLivePoints(resolvePointMap(val && val.points));
+          this._sanghPointsVersion = (val && val.pointsVersion) || 0;
+          // renderDashboard() itself calls _refreshPointLabels() — no need
+          // to call it separately here.
+          if (!this.initializing) this.renderDashboard();
+        });
+        labeledPaths.push(`sangh_settings/${sanghCode}`);
+      }
+    }
+
     // allSettled (not all) so one denied/unreachable ref can never hang
     // initialisation — every caller gets to reveal *something* regardless
     // of what Firebase's rules allow. Returns the paths that failed so the
     // caller can tell the user their data may not be syncing.
-    const labeledPaths = ['settings', `${userPath}/profile`, `${userPath}/daily_logs/${todayKey}`, `${userPath}/lock_status/${todayKey}`];
-    const results = await Promise.allSettled([p1, p2, p3, p4]);
+    const results = await Promise.allSettled([p1, p2, p3, p4, p5]);
     return results
       .map((r, i) => (r.status === 'rejected' ? labeledPaths[i] : null))
       .filter(Boolean);
@@ -3769,6 +3969,26 @@ class KalyanMitra {
     }
   }
 
+  // Repaints every element carrying data-point-key — the 14 hardcoded
+  // "+N AP" labels in index.html (one per built-in niyam) PLUS every
+  // registry card's own points label (_buildRegistry*CardHtml() tags them
+  // the same way) — from this session's live point map. `{n}` inside
+  // data-point-format is the one substituted placeholder; everything else
+  // in the format string (icon-less labels, "Ashta (+{n})", "-{n}/hr", …)
+  // is preserved verbatim. A key with no live value (shouldn't happen —
+  // DEFAULT_POINT_MAP always covers every tagged key — but defensive
+  // regardless) simply leaves that label unchanged rather than writing
+  // "undefined".
+  _refreshPointLabels() {
+    const P = livePoints();
+    document.querySelectorAll('[data-point-key]').forEach(el => {
+      const val = P[el.dataset.pointKey];
+      if (typeof val !== 'number') return;
+      const format = el.dataset.pointFormat || '+{n} AP';
+      el.textContent = format.replace('{n}', val);
+    });
+  }
+
   renderDashboard() {
     // updateLockUI() runs first so it establishes the locked/unlocked baseline;
     // renderActivities() runs last so it has final authority over each button's
@@ -3780,6 +4000,7 @@ class KalyanMitra {
     this.renderHeader();
     this.renderSubmitButton();
     this.renderActivities();
+    this._refreshPointLabels();
   }
 
   // Today's AP, read straight from `this.dailyLog` — the live in-memory log
@@ -4087,10 +4308,11 @@ class KalyanMitra {
 
   // ===== ACTIVITY ACTIONS (REVERSIBLE) =====
 
-  toggleSimpleActivity(elId, prop, isDone, points) {
+  toggleSimpleActivity(elId, prop, isDone, pointKey) {
     if (this.isDayLocked()) return;
     if (this.dailyLog[prop] === isDone) return;
     this.dailyLog[prop] = isDone;
+    const points = livePoints()[pointKey];
 
     if (isDone) {
       this.addKarmaPoints(points, elId);
@@ -4114,7 +4336,12 @@ class KalyanMitra {
     const statKey = slot === 'morning' ? 'totalDevasiya' : 'totalRaysiya';
     const wasDone = !!this.dailyLog[prop];
     this.dailyLog[prop] = !wasDone;
-    const pts = POINTS.devasiya; // both devasiya and raysiya are worth 30 AP
+    // Each slot is priced independently (RAW_POINT_RULES gives Raysiya its
+    // OWN key rather than reusing Devasiya's) so an admin can set them
+    // differently — this used to always price both off POINTS.devasiya,
+    // which happened to agree with RAW_POINT_RULES only because the two
+    // coded defaults were equal.
+    const pts = livePoints()[slot === 'morning' ? 'devasiya' : 'raysiya'];
 
     if (!wasDone) {
       this.addKarmaPoints(pts, 'Pratikraman');
@@ -4134,8 +4361,9 @@ class KalyanMitra {
   completePooja() {
     if (this.isDayLocked() || this.dailyLog.poojaDone) return;
     this.dailyLog.poojaDone = true;
-    let points = POINTS.pooja;
-    if (this.dailyLog.ashtaPrakariDone) points += POINTS.ashtaPrakari;
+    const P = livePoints();
+    let points = P.pooja;
+    if (this.dailyLog.ashtaPrakariDone) points += P.ashtaPrakari;
     this.addKarmaPoints(points, 'Pooja');
     this.showCompletionBurst(document.getElementById('pooja-card'));
     this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
@@ -4147,8 +4375,9 @@ class KalyanMitra {
   undoPooja() {
     if (this.isDayLocked() || !this.dailyLog.poojaDone) return;
     this.dailyLog.poojaDone = false;
-    let points = POINTS.pooja;
-    if (this.dailyLog.ashtaPrakariDone) points += POINTS.ashtaPrakari;
+    const P = livePoints();
+    let points = P.pooja;
+    if (this.dailyLog.ashtaPrakariDone) points += P.ashtaPrakari;
     this.deductKarmaPoints(points);
     if (this.dailyLog.perfectDay && !this.isAllTasksComplete()) {
       this.dailyLog.perfectDay = false;
@@ -4161,22 +4390,22 @@ class KalyanMitra {
     this.dailyLog.ashtaPrakariDone = document.getElementById('ashta-checkbox').checked;
     if (this.dailyLog.poojaDone) {
       if (this.dailyLog.ashtaPrakariDone) {
-        this.addKarmaPoints(POINTS.ashtaPrakari, 'Ashta Prakari');
+        this.addKarmaPoints(livePoints().ashtaPrakari, 'Ashta Prakari');
       } else {
-        this.deductKarmaPoints(POINTS.ashtaPrakari);
+        this.deductKarmaPoints(livePoints().ashtaPrakari);
       }
     }
     this.saveDailyLog();
   }
 
-  adjustCounter(prop, delta, pointsPerUnit, elId) {
+  adjustCounter(prop, delta, pointKey, elId) {
     if (this.isDayLocked()) return;
     const oldVal = this.dailyLog[prop] || 0;
     const newVal = Math.max(0, oldVal + delta);
     if (oldVal === newVal) return;
     this.dailyLog[prop] = newVal;
 
-    const points = pointsPerUnit;
+    const points = livePoints()[pointKey];
 
     if (delta > 0) {
       this.addKarmaPoints(points, elId);
@@ -4218,10 +4447,10 @@ class KalyanMitra {
     
     if (hoursNew > hoursOld) {
       const diff = hoursNew - hoursOld;
-      this.deductKarmaPoints(diff * POINTS.screenTimePenalty);
+      this.deductKarmaPoints(diff * livePoints().screenTimePenalty);
     } else if (hoursNew < hoursOld) {
       const diff = hoursOld - hoursNew;
-      this.addKarmaPoints(diff * POINTS.screenTimePenalty, 'Screen Time Reverted');
+      this.addKarmaPoints(diff * livePoints().screenTimePenalty, 'Screen Time Reverted');
     }
     
     this.afterActivity();
@@ -5164,7 +5393,12 @@ class KalyanMitra {
   // `includePenalties` gates `penalty: true` entries (Screen Time): off for
   // the Monthly overlay (a penalty was never something "followed"), on for
   // the lifetime grid and export, where the raw amount is still useful.
-  _computeNiyamRange(logs, fromKey, toKey, settings, includePenalties = true) {
+  // `pointsMap` (optional, trailing) lets an admin aggregate that spans
+  // MULTIPLE sanghs pass each member's own resolved point map — see
+  // _adminSanghPointMap(). Omitted, computeRawDayPoints() falls back to
+  // this session's own livePoints(), which is what every user-side call
+  // site (the lifetime grid, the Monthly Niyam Stats overlay) wants.
+  _computeNiyamRange(logs, fromKey, toKey, settings, includePenalties = true, pointsMap) {
     const s = settings || DEFAULT_SETTINGS;
     const enabled = NIYAM_STATS.filter(n => s[n.flag] && (includePenalties || !n.penalty));
     const stats = enabled.map(n => ({
@@ -5180,7 +5414,7 @@ class KalyanMitra {
       if (!log || dateKey < fromKey || dateKey > toKey) return;
       daysLogged++;
       if (log.perfectDay) perfectDays++;
-      totalAP += computeRawDayPoints(log);
+      totalAP += computeRawDayPoints(log, pointsMap);
 
       enabled.forEach((n, i) => {
         if (n.countsDay(log, s)) stats[i].days++;
@@ -5281,7 +5515,9 @@ class KalyanMitra {
     return eligible
       .map(({ uid, data }) => {
         const logs = data.daily_logs || {};
-        const { totalAP } = this._computeNiyamRange(logs, fromKey, toKey, s, true);
+        const sanghCode = data.registration && data.registration.sanghCode;
+        const pointsMap = this._adminSanghPointMap(sanghCode);
+        const { totalAP } = this._computeNiyamRange(logs, fromKey, toKey, s, true, pointsMap);
         return { uid, name: data.name || uid, ap: totalAP };
       })
       .filter(u => u.ap > 0)
@@ -6084,6 +6320,74 @@ class KalyanMitra {
     container.innerHTML = html;
   }
 
+  // Generates one number input per NIYAM_REGISTRY scoring item into
+  // #admin-registry-points, grouped by section — mirrors
+  // _renderAdminRegistryToggles() exactly, including its idempotence guard:
+  // a repeated loadAdminSettingsUI() call (e.g. the sangh_settings listener
+  // firing again while the admin is mid-edit) must never rebuild this and
+  // drop whatever they were typing.
+  _renderAdminPointInputs() {
+    const container = document.getElementById('admin-registry-points');
+    if (!container || container.dataset.built === '1') return;
+    container.dataset.built = '1';
+
+    const REGISTRY = typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : [];
+    const sections = [
+      { key: 'bhakti', title: '⭐ Niyam Points — Dev-Guru Bhakti' },
+      { key: 'aachar', title: '⭐ Niyam Points — Aachar' },
+    ];
+    let html = '';
+    sections.forEach(sec => {
+      const entries = REGISTRY.filter(e => e.flag && e.section === sec.key);
+      if (entries.length === 0) return;
+      html += `<div class="settings-group"><h3 class="settings-group-title">${sec.title}</h3>`;
+      entries.forEach(entry => {
+        entry.items.forEach(item => {
+          const label = entry.items.length > 1 ? `${entry.label} — ${item.label}` : entry.label;
+          html += `
+            <div class="setting-item">
+              <label for="admin-points-${item.prop}">${label}</label>
+              <input type="number" min="0" step="1" id="admin-points-${item.prop}" placeholder="${item.points}">
+            </div>`;
+        });
+      });
+      html += `</div>`;
+    });
+    container.innerHTML = html;
+  }
+
+  // Paints the sangh selector (hidden entirely for a single-sangh admin —
+  // the common case) and every points input's VALUE for whichever sangh is
+  // selected. Blank input = "use the coded default", shown via its
+  // placeholder — NEVER fabricated as an explicit value, since blank and
+  // "explicitly set to the default number" are different admin intentions.
+  _loadAdminPointInputs() {
+    const sel = document.getElementById('admin-points-sangh');
+    const groupEl = document.getElementById('admin-points-sangh-group');
+    const codes = this._adminSanghCodes || [];
+    if (sel) {
+      const optionValues = Array.from(sel.options, o => o.value);
+      const codesMatch = optionValues.length === codes.length && optionValues.every((v, i) => v === codes[i]);
+      if (!codesMatch) {
+        const prev = sel.value;
+        sel.innerHTML = codes.map(code => `<option value="${this._escHtml(code)}">${this._escHtml(code)}</option>`).join('');
+        if (codes.includes(prev)) sel.value = prev;
+      }
+      if (groupEl) groupEl.classList.toggle('hidden', codes.length <= 1);
+    }
+    const activeCode = (sel && sel.value) || codes[0];
+    if (!activeCode) return; // admin manages no sangh — nothing to paint
+
+    const stored = (this._adminSanghPoints || {})[activeCode];
+    const overrides = (stored && stored.points) || {};
+    Object.keys(DEFAULT_POINT_MAP).forEach(key => {
+      const el = document.getElementById(`admin-points-${key}`);
+      if (!el) return;
+      const val = overrides[key];
+      el.value = (typeof val === 'number' && Number.isFinite(val)) ? val : '';
+    });
+  }
+
   loadAdminSettingsUI() {
     const s = this.settings;
     document.getElementById('admin-toggle-navkarsi').checked = s.enableNavkarsi;
@@ -6117,9 +6421,12 @@ class KalyanMitra {
     niyamSelect.value = s.currentDailyNiyamId || 0;
 
     // admin-location removed
+
+    this._renderAdminPointInputs();
+    this._loadAdminPointInputs();
   }
 
-  saveAdminSettings() {
+  async saveAdminSettings() {
     const s = this.settings;
     s.enableNavkarsi = document.getElementById('admin-toggle-navkarsi').checked;
     s.enableWakeup = document.getElementById('admin-toggle-wakeup').checked;
@@ -6143,9 +6450,95 @@ class KalyanMitra {
 
     // Location removed from admin UI - fetched via Geolocation
     this.saveSettings();
+
+    // Niyam points — a SEPARATE per-sangh path (sangh_settings/{code}), not
+    // part of the global `settings` node saved just above. Awaited so the
+    // confirmation checkmark only appears once the retroactive recompute
+    // (_recomputeSanghPoints(), inside _saveAdminPoints()) has actually run.
+    await this._saveAdminPoints();
+
     const conf = document.getElementById('save-confirmation');
     conf.classList.remove('hidden');
     setTimeout(() => conf.classList.add('hidden'), 2000);
+  }
+
+  // Reads every admin-points-{key} input for the currently-selected sangh,
+  // writes the overrides + a bumped pointsVersion to sangh_settings/{code},
+  // then fans the change out to that sangh's members — see
+  // _recomputeSanghPoints(). A sangh nobody is currently editing against
+  // (no sangh at all) is a safe no-op.
+  async _saveAdminPoints() {
+    const sel = document.getElementById('admin-points-sangh');
+    const code = (sel && sel.value) || (this._adminSanghCodes || [])[0];
+    if (!code) return;
+
+    const overrides = {};
+    Object.keys(DEFAULT_POINT_MAP).forEach(key => {
+      const el = document.getElementById(`admin-points-${key}`);
+      if (!el) return;
+      const raw = el.value;
+      if (raw === '') return; // blank = "use the default" — omit entirely
+      const n = Number(raw);
+      if (Number.isFinite(n) && n >= 0) overrides[key] = n;
+    });
+
+    const pointsVersion = Date.now();
+    try {
+      await db.ref(`sangh_settings/${code}`).update({ points: overrides, pointsVersion });
+      if (!this._adminSanghPoints) this._adminSanghPoints = {};
+      this._adminSanghPoints[code] = { points: overrides, pointsVersion };
+      await this._recomputeSanghPoints(code, pointsVersion);
+    } catch (e) {
+      console.error('Failed to save niyam points:', e);
+      alert('Failed to save niyam points. Please check your connection and try again.');
+    }
+  }
+
+  // Retroactively rescores every member of `code` at the just-saved point
+  // values — pure in-memory work (this._adminUserRecords already holds
+  // every managed member's full daily_logs, populated by
+  // _renderLeaderboardFromSnap()) plus ONE multi-path write, chunked so a
+  // very large sangh can't produce a single oversized update. Anyone this
+  // fan-out misses (offline at save time, a member outside
+  // _adminUserUids, a partial write) self-heals on their own next login —
+  // see _migrateToRawPoints()'s pointsVersion guard.
+  async _recomputeSanghPoints(code, pointsVersion) {
+    const P = this._adminSanghPointMap(code);
+    const records = this._adminUserRecords || {};
+    const members = Object.entries(records).filter(([, data]) =>
+      data && data.registration && data.registration.sanghCode === code
+    );
+    if (members.length === 0) return;
+
+    const CHUNK = 500; // staged keys per write — keeps any single update comfortably sized
+    let updates = {};
+    let pending = 0;
+
+    const flush = async () => {
+      if (Object.keys(updates).length === 0) return;
+      await db.ref('users').update(updates);
+      updates = {};
+    };
+
+    for (const [uid, data] of members) {
+      const logs = data.daily_logs || {};
+      let total = 0;
+      Object.entries(logs).forEach(([dateKey, log]) => {
+        if (!log) return;
+        const raw = computeRawDayPoints(log, P);
+        total += raw;
+        if (log.kpEarned !== raw) {
+          updates[`${uid}/daily_logs/${dateKey}/kpEarned`] = raw;
+          pending++;
+        }
+      });
+      updates[`${uid}/profile/totalKP`] = Math.max(0, total);
+      updates[`${uid}/profile/pointsVersion`] = pointsVersion;
+      updates[`${uid}/profile/rawPointsMigrated`] = true;
+      pending += 3;
+      if (pending >= CHUNK) { await flush(); pending = 0; }
+    }
+    await flush();
   }
 
   // Renders the drill-down's profile-details card from a full users/{uid}

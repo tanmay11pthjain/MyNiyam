@@ -24,7 +24,7 @@
        <noscript> fallback covers the rare case of JS being disabled. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-  <link rel="stylesheet" href="styles.css?v=32">
+  <link rel="stylesheet" href="styles.css?v=33">
   <script>
     // Decide the boot state before <body> even exists, so no element lookup
     // is possible here — the previous version of this check ran mid-body and
@@ -396,7 +396,7 @@
               </div>
             </div>
             <div class="compact-actions">
-              <button class="btn-complete-small" id="btn-navkarsi">+10 AP</button>
+              <button class="btn-complete-small" id="btn-navkarsi" data-point-key="navkarsi" data-point-format="+{n} AP">+10 AP</button>
               <button class="btn-undo-small hidden" id="btn-navkarsi-undo">Undo</button>
             </div>
           </div>
@@ -411,7 +411,7 @@
               </div>
             </div>
             <div class="compact-actions">
-              <button class="btn-complete-small" id="btn-wakeup">+10 AP</button>
+              <button class="btn-complete-small" id="btn-wakeup" data-point-key="wakeUpEarly" data-point-format="+{n} AP">+10 AP</button>
               <button class="btn-undo-small hidden" id="btn-wakeup-undo">Undo</button>
             </div>
           </div>
@@ -426,7 +426,7 @@
               </div>
             </div>
             <div class="compact-actions">
-              <button class="btn-complete-small" id="btn-sleep">+10 AP</button>
+              <button class="btn-complete-small" id="btn-sleep" data-point-key="sleepEarly" data-point-format="+{n} AP">+10 AP</button>
               <button class="btn-undo-small hidden" id="btn-sleep-undo">Undo</button>
             </div>
           </div>
@@ -441,7 +441,7 @@
               </div>
             </div>
             <div class="compact-actions">
-              <button class="btn-complete-small" id="btn-pranam">+20 AP</button>
+              <button class="btn-complete-small" id="btn-pranam" data-point-key="pranam" data-point-format="+{n} AP">+20 AP</button>
               <button class="btn-undo-small hidden" id="btn-pranam-undo">Undo</button>
             </div>
           </div>
@@ -463,9 +463,9 @@
             <div class="compact-actions pooja-complex-actions">
               <label class="ashta-toggle">
                 <input type="checkbox" id="ashta-checkbox">
-                <span>Ashta (+50)</span>
+                <span data-point-key="ashtaPrakari" data-point-format="Ashta (+{n})">Ashta (+50)</span>
               </label>
-              <button class="btn-complete-small" id="btn-pooja">+10 AP</button>
+              <button class="btn-complete-small" id="btn-pooja" data-point-key="pooja" data-point-format="+{n} AP">+10 AP</button>
               <button class="btn-undo-small hidden" id="btn-pooja-undo">Undo</button>
             </div>
           </div>
@@ -477,7 +477,7 @@
               <div class="compact-info">
                 <span class="card-title">Samayik</span>
                 <span class="card-title-hindi">सामायिक</span>
-                <span class="card-kp">+20/ea</span>
+                <span class="card-kp" data-point-key="samayik" data-point-format="+{n}/ea">+20/ea</span>
               </div>
             </div>
             <div class="compact-actions counter-actions">
@@ -495,18 +495,19 @@
                 <span class="card-title">Pratikraman</span>
                 <span class="card-title-hindi">प्रतिक्रमण</span>
               </div>
-              <span class="card-kp">+30 AP</span>
             </div>
             <div class="card-body">
               <div class="pratikraman-slots">
                 <button class="slot-btn" id="pratikraman-morning" onclick="app.completePratikraman('morning')">
                   <span class="slot-icon">🌅</span>
                   <span class="slot-label">Morning</span>
+                  <span class="card-kp" data-point-key="devasiya" data-point-format="+{n} AP">+30 AP</span>
                   <span class="slot-check" id="pratikraman-morning-check">○</span>
                 </button>
                 <button class="slot-btn" id="pratikraman-evening" onclick="app.completePratikraman('evening')">
                   <span class="slot-icon">🌙</span>
                   <span class="slot-label">Evening</span>
+                  <span class="card-kp" data-point-key="raysiya" data-point-format="+{n} AP">+30 AP</span>
                   <span class="slot-check" id="pratikraman-evening-check">○</span>
                 </button>
               </div>
@@ -522,7 +523,7 @@
               <div class="compact-info">
                 <span class="card-title">Dharmik Book Reading (30m)</span>
                 <span class="card-title-hindi">धार्मिक पुस्तक पढ़ना</span>
-                <span class="card-kp">+20/ea</span>
+                <span class="card-kp" data-point-key="bookReading" data-point-format="+{n}/ea">+20/ea</span>
               </div>
             </div>
             <div class="compact-actions counter-actions">
@@ -547,7 +548,7 @@
               </div>
             </div>
             <div class="compact-actions">
-              <button class="btn-complete-small" id="btn-ratribhojan">+20 AP</button>
+              <button class="btn-complete-small" id="btn-ratribhojan" data-point-key="ratriBhojan" data-point-format="+{n} AP">+20 AP</button>
               <button class="btn-undo-small hidden" id="btn-ratribhojan-undo">Undo</button>
             </div>
           </div>
@@ -562,7 +563,7 @@
               </div>
             </div>
             <div class="compact-actions">
-              <button class="btn-complete-small" id="btn-kandmool">+20 AP</button>
+              <button class="btn-complete-small" id="btn-kandmool" data-point-key="kandmool" data-point-format="+{n} AP">+20 AP</button>
               <button class="btn-undo-small hidden" id="btn-kandmool-undo">Undo</button>
             </div>
           </div>
@@ -574,7 +575,7 @@
               <div class="compact-info">
                 <span class="card-title">Screen Time</span>
                 <span class="card-title-hindi">स्क्रीन टाइम</span>
-                <span class="card-kp kp-negative">-5/hr</span>
+                <span class="card-kp kp-negative" data-point-key="screenTimePenalty" data-point-format="-{n}/hr">-5/hr</span>
               </div>
             </div>
             <div class="compact-actions screentime-actions">
@@ -599,7 +600,7 @@
             </div>
             <div class="card-actions">
               <button class="btn-complete btn-niyam" id="btn-niyam">
-                <span class="btn-icon">✓</span> +10 AP
+                <span class="btn-icon">✓</span> <span data-point-key="dailyNiyam" data-point-format="+{n} AP">+10 AP</span>
               </button>
               <button class="btn-undo hidden" id="btn-niyam-undo">
                 <span class="btn-icon">↩</span> Undo
@@ -776,6 +777,7 @@
           <button class="btn-export" id="btn-open-export">📊 Export to Excel</button>
           <button class="btn-export" id="btn-open-poster">📸 Generate Poster</button>
         </div>
+        <input type="search" class="admin-search-input" id="leaderboard-search" placeholder="🔍 Search by name...">
         <div id="admin-leaderboard-list" class="leaderboard-list">
           <!-- Populated by JS -->
           <div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>
@@ -862,6 +864,95 @@
         <!-- Generated by _renderAdminRegistryToggles() (app.js) from data.js's
              NIYAM_REGISTRY — starts empty on purpose. -->
         <div id="admin-registry-niyams"></div>
+
+        <!-- Per-sangh niyam points — a NEW path (sangh_settings/{code}),
+             separate from the global `settings` node above. Saved together
+             with everything else in Save Settings; see _saveAdminPoints(). -->
+        <div class="settings-group hidden" id="admin-points-sangh-group">
+          <h3 class="settings-group-title">🕌 Editing Points For</h3>
+          <div class="setting-item">
+            <label for="admin-points-sangh" style="flex:0 0 100px;">Sangh</label>
+            <select id="admin-points-sangh" style="flex:1; max-width:200px;">
+              <!-- Populated by JS -->
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">⭐ Niyam Points — Morning Rituals</h3>
+          <div class="setting-item">
+            <label for="admin-points-navkarsi">Navkarsi</label>
+            <input type="number" min="0" step="1" id="admin-points-navkarsi" placeholder="10">
+          </div>
+          <div class="setting-item">
+            <label for="admin-points-wakeUpEarly">Wake &lt; 7AM</label>
+            <input type="number" min="0" step="1" id="admin-points-wakeUpEarly" placeholder="10">
+          </div>
+          <div class="setting-item">
+            <label for="admin-points-sleepEarly">Sleep &lt; 12AM</label>
+            <input type="number" min="0" step="1" id="admin-points-sleepEarly" placeholder="10">
+          </div>
+          <div class="setting-item">
+            <label for="admin-points-pranam">Mata Pita Pranam</label>
+            <input type="number" min="0" step="1" id="admin-points-pranam" placeholder="20">
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">⭐ Niyam Points — Sadhana</h3>
+          <div class="setting-item">
+            <label for="admin-points-pooja">Jin Pooja</label>
+            <input type="number" min="0" step="1" id="admin-points-pooja" placeholder="10">
+          </div>
+          <div class="setting-item">
+            <label for="admin-points-ashtaPrakari">Ashta Prakari</label>
+            <input type="number" min="0" step="1" id="admin-points-ashtaPrakari" placeholder="50">
+          </div>
+          <div class="setting-item">
+            <label for="admin-points-samayik">Samayik — per samayik</label>
+            <input type="number" min="0" step="1" id="admin-points-samayik" placeholder="20">
+          </div>
+          <div class="setting-item">
+            <label for="admin-points-devasiya">Devasiya</label>
+            <input type="number" min="0" step="1" id="admin-points-devasiya" placeholder="30">
+          </div>
+          <div class="setting-item">
+            <label for="admin-points-raysiya">Raysiya</label>
+            <input type="number" min="0" step="1" id="admin-points-raysiya" placeholder="30">
+          </div>
+          <div class="setting-item">
+            <label for="admin-points-bookReading">Book Reading — per 30 min</label>
+            <input type="number" min="0" step="1" id="admin-points-bookReading" placeholder="20">
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">⭐ Niyam Points — Tyag &amp; Discipline</h3>
+          <div class="setting-item">
+            <label for="admin-points-ratriBhojan">Ratri Bhojan Tyag</label>
+            <input type="number" min="0" step="1" id="admin-points-ratriBhojan" placeholder="20">
+          </div>
+          <div class="setting-item">
+            <label for="admin-points-kandmool">Kandmool Tyag</label>
+            <input type="number" min="0" step="1" id="admin-points-kandmool" placeholder="20">
+          </div>
+          <div class="setting-item">
+            <label for="admin-points-screenTimePenalty">Screen Time — penalty per hour</label>
+            <input type="number" min="0" step="1" id="admin-points-screenTimePenalty" placeholder="5">
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">⭐ Niyam Points — Daily Niyam</h3>
+          <div class="setting-item">
+            <label for="admin-points-dailyNiyam">Daily Niyam</label>
+            <input type="number" min="0" step="1" id="admin-points-dailyNiyam" placeholder="10">
+          </div>
+        </div>
+
+        <!-- Generated by _renderAdminPointInputs() (app.js) from data.js's
+             NIYAM_REGISTRY — one number input per scoring item, starts empty. -->
+        <div id="admin-registry-points"></div>
 
         <button class="btn-save-settings" id="btn-save-settings">💾 Save Settings</button>
         <div class="save-confirmation hidden" id="save-confirmation">✅ Settings saved!</div>
@@ -970,6 +1061,7 @@
           <button class="btn-export" id="btn-open-attendance-export">📊 Export Attendance</button>
         </div>
 
+        <input type="search" class="admin-search-input" id="attendance-search" placeholder="🔍 Search by name...">
         <div id="attendance-list" class="attendance-list">
           <!-- Populated by JS -->
           <div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>
@@ -1217,8 +1309,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" async></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=47"></script>
+  <script src="data.js?v=48"></script>
   <script src="auth.js?v=48"></script>
-  <script src="app.js?v=49"></script>
+  <script src="app.js?v=50"></script>
 </body>
 </html>

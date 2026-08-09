@@ -4,6 +4,12 @@
       ".read": "auth != null",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
     },
+    "sangh_settings": {
+      ".read": "auth != null",
+      "$code": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      }
+    },
     "users": {
       ".read": "auth != null",
       "$uid": {

@@ -184,6 +184,7 @@ const DEFAULT_LOCATION = {
 const DEFAULT_PROFILE = {
   totalKP: 0,              // Raw points only — no starting bonus
   rawPointsMigrated: false, // set true after _migrateToRawPoints() has run once
+  pointsVersion: 0,        // sangh_settings/{code}/pointsVersion this totalKP was last computed against
   currentStreak: 0,
   longestStreak: 0,
   lastActiveDate: null,

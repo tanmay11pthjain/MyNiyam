@@ -3813,6 +3813,27 @@ body.landing-open {
   white-space: nowrap;
 }
 
+/* Shared by the Leaderboard and Attendance tabs — filters rows client-side
+   by name (see _filterLeaderboard()/_filterAttendance() in app.js), never
+   re-rendering the list itself so neither an attendance draft nor bound
+   click handlers are disturbed by typing. */
+.admin-search-input {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  margin-top: 12px;
+  border: 2px solid #e0d5c8;
+  border-radius: var(--radius-pill);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  background: #fff;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.admin-search-input::placeholder { color: #c0b5a8; font-weight: 400; }
+.admin-search-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(232, 114, 42, 0.12); }
+
 .leaderboard-list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
 .leaderboard-card { display: flex; align-items: center; background: white; border-radius: 16px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s; }
 .leaderboard-card:active { transform: scale(0.98); }
