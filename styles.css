@@ -2663,6 +2663,57 @@ body.landing-open {
   text-align: center;
 }
 
+/* ----- Merged niyam rows (Settings tab: label + points + toggle) ----- */
+/* .niyam-row keeps .setting-item at exactly two flex children (label,
+   controls) — its own space-between layout is untouched — so the points
+   input and toggle share one right-hand group instead of being spread
+   across the row by space-between with a 3rd child. */
+.niyam-row-label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.niyam-row-hint {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.niyam-row-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* Fills the toggle's column on a sub-row (no toggle of its own), so its
+   points input still lines up under the parent row's points input. Matches
+   the toggle pill's declared width (styles.css .setting-item input[type="checkbox"]). */
+.niyam-toggle-spacer {
+  width: 44px;
+  flex-shrink: 0;
+}
+
+.niyam-row-sub {
+  padding-left: 14px;
+}
+
+.niyam-row-sub .niyam-row-label label {
+  color: var(--text-secondary);
+}
+
+/* Dimmed + locked when the governing toggle is off — see _syncNiyamRowStates() */
+.niyam-row.is-off .niyam-row-label {
+  opacity: 0.55;
+}
+
+.niyam-row-controls input[type="number"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f2ede8;
+}
+
 .btn-detect-location {
   display: block;
   width: 100%;

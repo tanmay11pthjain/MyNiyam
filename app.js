@@ -3338,6 +3338,23 @@ class KalyanMitra {
     // Save settings
     document.getElementById('btn-save-settings').addEventListener('click', () => this.saveAdminSettings());
 
+    // Niyam points/toggle merged rows — delegated on the whole tab since the
+    // registry rows are generated later by _renderAdminNiyamRows() and a
+    // per-checkbox listener would miss them.
+    const settingsTabEl = document.getElementById('admin-tab-settings');
+    if (settingsTabEl) settingsTabEl.addEventListener('change', (e) => {
+      if (e.target && e.target.matches('input[type="checkbox"][id^="admin-toggle-"]')) {
+        this._syncNiyamRowStates();
+      }
+    });
+
+    // Repaints the points inputs when a multi-sangh admin switches which
+    // sangh they're editing — without this, switching the dropdown left the
+    // PREVIOUS sangh's values on screen, and saving then wrote them onto
+    // the newly-selected sangh.
+    const pointsSanghEl = document.getElementById('admin-points-sangh');
+    if (pointsSanghEl) pointsSanghEl.addEventListener('change', () => this._loadAdminPointInputs());
+
     // Unlock (now lives in the member drill-down, not a dedicated tab)
     const btnUnlockDay = document.getElementById('btn-unlock-day');
     if (btnUnlockDay) btnUnlockDay.addEventListener('click', () => this.adminUnlockDay());
@@ -6288,12 +6305,17 @@ class KalyanMitra {
   }
 
   // ===== ADMIN FUNCTIONS =====
-  // Generates one checkbox per NIYAM_REGISTRY entry into #admin-registry-niyams,
-  // grouped by section, matching the existing .settings-group/.setting-item
-  // markup exactly. Idempotent (checks a data-built marker) so repeated
-  // loadAdminSettingsUI() calls (tab switches, selecting a different user)
-  // never rebuild it — that would drop whatever the admin was mid-editing.
-  _renderAdminRegistryToggles() {
+  // Generates one merged row per NIYAM_REGISTRY entry into
+  // #admin-registry-niyams — label + points input + toggle together,
+  // matching the hand-written rows above in index.html. Entries with two
+  // scoring items (navkarJaap, devDarshan, guruVandan) get a second,
+  // indented "sub" row for items[1] — points only, no toggle of its own,
+  // same pattern as the hardcoded Jin Pooja/Ashta Prakari and
+  // Pratikraman/Raysiya pairs. Idempotent (checks a data-built marker) so a
+  // repeated loadAdminSettingsUI() call (tab switches, the settings
+  // listener firing mid-edit) never rebuilds it — that would drop whatever
+  // the admin was mid-typing.
+  _renderAdminNiyamRows() {
     const container = document.getElementById('admin-registry-niyams');
     if (!container || container.dataset.built === '1') return;
     container.dataset.built = '1';
@@ -6309,47 +6331,27 @@ class KalyanMitra {
       if (entries.length === 0) return;
       html += `<div class="settings-group"><h3 class="settings-group-title">${sec.title}</h3>`;
       entries.forEach(entry => {
+        const toggleId = `admin-toggle-${entry.id}`;
+        const main = entry.items[0];
         html += `
-          <div class="setting-item">
-            <label for="admin-toggle-${entry.id}">${entry.label}</label>
-            <input type="checkbox" id="admin-toggle-${entry.id}">
+          <div class="setting-item niyam-row" data-toggle-id="${toggleId}">
+            <div class="niyam-row-label"><label for="${toggleId}">${entry.label}</label></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-${main.prop}" placeholder="${main.points}">
+              <input type="checkbox" id="${toggleId}">
+            </div>
           </div>`;
-      });
-      html += `</div>`;
-    });
-    container.innerHTML = html;
-  }
-
-  // Generates one number input per NIYAM_REGISTRY scoring item into
-  // #admin-registry-points, grouped by section — mirrors
-  // _renderAdminRegistryToggles() exactly, including its idempotence guard:
-  // a repeated loadAdminSettingsUI() call (e.g. the sangh_settings listener
-  // firing again while the admin is mid-edit) must never rebuild this and
-  // drop whatever they were typing.
-  _renderAdminPointInputs() {
-    const container = document.getElementById('admin-registry-points');
-    if (!container || container.dataset.built === '1') return;
-    container.dataset.built = '1';
-
-    const REGISTRY = typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : [];
-    const sections = [
-      { key: 'bhakti', title: '⭐ Niyam Points — Dev-Guru Bhakti' },
-      { key: 'aachar', title: '⭐ Niyam Points — Aachar' },
-    ];
-    let html = '';
-    sections.forEach(sec => {
-      const entries = REGISTRY.filter(e => e.flag && e.section === sec.key);
-      if (entries.length === 0) return;
-      html += `<div class="settings-group"><h3 class="settings-group-title">${sec.title}</h3>`;
-      entries.forEach(entry => {
-        entry.items.forEach(item => {
-          const label = entry.items.length > 1 ? `${entry.label} — ${item.label}` : entry.label;
+        if (entry.items.length > 1) {
+          const sub = entry.items[1];
           html += `
-            <div class="setting-item">
-              <label for="admin-points-${item.prop}">${label}</label>
-              <input type="number" min="0" step="1" id="admin-points-${item.prop}" placeholder="${item.points}">
-            </div>`;
-        });
+          <div class="setting-item niyam-row niyam-row-sub" data-toggle-id="${toggleId}">
+            <div class="niyam-row-label"><label for="admin-points-${sub.prop}">↳ ${sub.label}</label></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-${sub.prop}" placeholder="${sub.points}">
+              <span class="niyam-toggle-spacer" aria-hidden="true"></span>
+            </div>
+          </div>`;
+        }
       });
       html += `</div>`;
     });
@@ -6388,6 +6390,25 @@ class KalyanMitra {
     });
   }
 
+  // Dims + locks (disables) every merged row's points input whose governing
+  // toggle is currently off — a niyam nobody is scoring shouldn't look
+  // editable. Purely visual/UI-state: the stored number itself is never
+  // touched, so switching a niyam off and back on leaves its points exactly
+  // as they were (both _loadAdminPointInputs() and _saveAdminPoints() read
+  // .value directly regardless of .disabled). Called once after every
+  // toggle/points repaint (loadAdminSettingsUI()) and again on every
+  // individual toggle flip (see the delegated listener in
+  // setupAdminEventListeners()).
+  _syncNiyamRowStates() {
+    document.querySelectorAll('#admin-tab-settings .niyam-row[data-toggle-id]').forEach(row => {
+      const toggle = document.getElementById(row.dataset.toggleId);
+      const on = !!(toggle && toggle.checked);
+      row.classList.toggle('is-off', !on);
+      const numEl = row.querySelector('input[type="number"]');
+      if (numEl) numEl.disabled = !on;
+    });
+  }
+
   loadAdminSettingsUI() {
     const s = this.settings;
     document.getElementById('admin-toggle-navkarsi').checked = s.enableNavkarsi;
@@ -6403,7 +6424,7 @@ class KalyanMitra {
     document.getElementById('admin-toggle-screentime').checked = s.enableScreenTime;
     document.getElementById('admin-toggle-niyam').checked = s.enableDailyNiyam;
 
-    this._renderAdminRegistryToggles();
+    this._renderAdminNiyamRows();
     (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
       if (!entry.flag) return;
       const el = document.getElementById(`admin-toggle-${entry.id}`);
@@ -6422,8 +6443,11 @@ class KalyanMitra {
 
     // admin-location removed
 
-    this._renderAdminPointInputs();
     this._loadAdminPointInputs();
+    // Dims + locks every points input whose niyam is currently off — must
+    // run AFTER both the toggles above and _loadAdminPointInputs() so a
+    // freshly-painted row is never left enabled for a niyam that is off.
+    this._syncNiyamRowStates();
   }
 
   async saveAdminSettings() {
