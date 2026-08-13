@@ -2409,7 +2409,11 @@ class KalyanMitra {
       return;
     }
 
-    const members = this._eligibleSanghUsers(this._adminUserRecords);
+    // Always alphabetical — the raw snapshot order (_eligibleSanghUsers())
+    // is Firebase's lexicographic uid order, meaningless to a human marking
+    // a class.
+    const members = this._eligibleSanghUsers(this._adminUserRecords)
+      .sort((a, b) => (a.data.name || a.uid).localeCompare(b.data.name || b.uid));
     if (members.length === 0) {
       listEl.innerHTML = '<div class="admin-desc">No users found. Login with a user account first.</div>';
       return;
@@ -2673,14 +2677,40 @@ class KalyanMitra {
 
   // ===== EXCEL EXPORT (ATTENDANCE) =====
 
+  // Summarises one member's attendance records inside [fromKey, toKey] —
+  // the single definition of these numbers, shared by the export sheet and
+  // the user-facing "My Attendance" view. daysMarked counts ONLY dates that
+  // actually carry a record: a pathshala meeting weekly leaves most
+  // calendar days with no record at all, and counting those as absences
+  // used to report a perfectly-attending member at roughly 14%. A day
+  // nobody was marked on means the class didn't meet — it is not an
+  // absence. Gathas are summed unconditionally, independent of daysMarked.
+  _summarizeAttendance(attendance, fromKey, toKey) {
+    let daysPresent = 0, daysAbsent = 0, totalGathas = 0;
+    Object.entries(attendance || {}).forEach(([dateKey, rec]) => {
+      if (!rec || dateKey < fromKey || dateKey > toKey) return;
+      totalGathas += (rec.gathas || 0);
+      if (rec.present) daysPresent++; else daysAbsent++;
+    });
+    const daysMarked = daysPresent + daysAbsent;
+    return {
+      daysPresent, daysAbsent, daysMarked, totalGathas,
+      pct: daysMarked > 0 ? Math.round((daysPresent / daysMarked) * 100) : 0,
+    };
+  }
+
   // Pure data step — no DOM, no network. Same authorization filter as the
   // points export (_eligibleSanghUsers()), plus a walked list of every
-  // calendar date in [fromKey, toKey] so all three export sheets stay
-  // column-for-column aligned regardless of which dates a member does or
-  // doesn't have an attendance/{date} node for (absence = never marked).
-  // Dates are parsed/re-formatted via LOCAL date components throughout
-  // (never toISOString(), which is UTC and can drift a day near midnight),
-  // matching the YYYY-MM-DD keys attendance/{date} is already stored under.
+  // calendar date in [fromKey, toKey] so the two grid sheets (Attendance,
+  // Gathas) stay column-for-column aligned regardless of which dates a
+  // member does or doesn't have an attendance/{date} node for. A date with
+  // no record at all prints '—' (the class didn't meet), never 'A' — only
+  // a date with an actual record can be an absence. Days Present/Absent/%
+  // on the Summary sheet come from _summarizeAttendance(), so the grid and
+  // the summary can never disagree. Dates are parsed/re-formatted via LOCAL
+  // date components throughout (never toISOString(), which is UTC and can
+  // drift a day near midnight), matching the YYYY-MM-DD keys
+  // attendance/{date} is already stored under.
   _collectAttendanceRows(allUsers, fromKey, toKey) {
     const dateKeys = [];
     const cursor = new Date(`${fromKey}T00:00:00`);
@@ -2697,24 +2727,20 @@ class KalyanMitra {
       const attendance = data.attendance || {};
       const presentCells = [];
       const gathaCells = [];
-      let daysPresent = 0;
-      let totalGathas = 0;
       dateKeys.forEach(dateKey => {
         const rec = attendance[dateKey];
-        const present = !!(rec && rec.present);
-        const gathas = (rec && rec.gathas) || 0;
-        if (present) daysPresent++;
-        totalGathas += gathas;
-        presentCells.push(present ? 'P' : 'A');
-        gathaCells.push(gathas);
+        presentCells.push(rec ? (rec.present ? 'P' : 'A') : '—');
+        gathaCells.push((rec && rec.gathas) || 0);
       });
+      const summary = this._summarizeAttendance(attendance, fromKey, toKey);
       return {
         name: data.name || uid,
         presentCells,
         gathaCells,
-        daysPresent,
-        daysAbsent: dateKeys.length - daysPresent,
-        totalGathas
+        daysPresent: summary.daysPresent,
+        daysAbsent: summary.daysAbsent,
+        totalGathas: summary.totalGathas,
+        pct: summary.pct,
       };
     });
 
@@ -2791,10 +2817,9 @@ class KalyanMitra {
       gathaWs['!cols'] = gathaHeader.map((h, i) => ({ wch: i === 0 ? 20 : 12 }));
 
       const summaryHeader = ['Name', 'Days Present', 'Days Absent', 'Total Gathas', 'Attendance %'];
-      const summaryAoa = [summaryHeader, ...rows.map(r => {
-        const pct = dateKeys.length > 0 ? Math.round((r.daysPresent / dateKeys.length) * 100) : 0;
-        return [r.name, r.daysPresent, r.daysAbsent, r.totalGathas, `${pct}%`];
-      })];
+      const summaryAoa = [summaryHeader, ...rows.map(r =>
+        [r.name, r.daysPresent, r.daysAbsent, r.totalGathas, `${r.pct}%`]
+      )];
       const summaryWs = XLSX.utils.aoa_to_sheet(summaryAoa);
       summaryWs['!cols'] = summaryHeader.map(h => ({ wch: Math.max(12, h.length + 2) }));
 
@@ -2828,6 +2853,11 @@ class KalyanMitra {
     // reset a niyam-stats/history read could momentarily reuse the
     // PREVIOUS user's cached logs before the new listener fires.
     this._cachedDailyLogs = null;
+    // Same reasoning — the attendance listener is also deliberately
+    // non-awaited (see setupRealtimeSync()), so without this an admin
+    // switching between members could briefly show one member's attendance
+    // under a different member's name.
+    this._cachedAttendance = null;
   }
 
   // Clears the admin's current user selection entirely — no lingering uid,
@@ -3581,6 +3611,18 @@ class KalyanMitra {
         }
       }
     }).catch(e => console.error('daily_logs (all) listener failed:', e));
+
+    // Attendance — user-facing "My Attendance" (History tab). Supplementary
+    // like daily_logs just above: deliberately NOT part of the awaited
+    // settle, so a denied/slow read here can never block first paint and
+    // can never raise the "your niyams may not save" banner (that list is
+    // built only from the critical listeners below). Own .catch() for the
+    // same reason as daily_logs — otherwise a rejection here would be an
+    // unhandled rejection instead of a logged, swallowed error.
+    this.listenToRef(`${userPath}/attendance`, val => {
+      this._cachedAttendance = val || {};
+      if (!this.initializing && this.currentRole === 'user') this.renderMyAttendance();
+    }).catch(e => console.error('attendance listener failed:', e));
 
     const p4 = this.listenToRef(`${userPath}/lock_status/${todayKey}`, val => {
       this.currentDayLocked = !!val;
@@ -4934,6 +4976,78 @@ class KalyanMitra {
     } catch (e) {
       listEl.innerHTML = '<div style="text-align:center; color:red;">Failed to load history.</div>';
     }
+
+    this.renderMyAttendance();
+  }
+
+  // Renders "My Attendance", the section below the progress list on the
+  // History tab. Deliberately shares _historyYear/_historyMonth (the SAME
+  // state the progress list above uses) rather than getting its own month
+  // stepper, so the two sections can never disagree on which month is
+  // shown — called both from renderHistory() (tab open, month change) and
+  // from the attendance listener in setupRealtimeSync() (live updates).
+  // A no-op if the containers aren't in the DOM (they always are inside
+  // #app, so this is really just a defensive guard) — in practice this
+  // never runs for an admin session, since both call sites are user-only.
+  renderMyAttendance() {
+    const summaryEl = document.getElementById('my-attendance-summary');
+    const listEl = document.getElementById('my-attendance-list');
+    if (!summaryEl || !listEl) return;
+
+    // Guards against the attendance listener firing before the History tab
+    // has ever been opened once — _historyYear/_historyMonth would
+    // otherwise be undefined here. Idempotent (only sets if unset), so
+    // calling it again from renderHistory() right after is a no-op.
+    this._initHistoryState();
+    const { fromKey, toKey } = this._monthKeyBounds(this._historyYear, this._historyMonth);
+
+    const paint = (attendance) => {
+      const { daysPresent, totalGathas, pct } = this._summarizeAttendance(attendance, fromKey, toKey);
+      const tiles = [
+        { value: daysPresent, label: 'Days Present' },
+        { value: totalGathas, label: 'Total Gathas' },
+        { value: `${pct}%`, label: 'Attendance' },
+      ];
+      summaryEl.innerHTML = tiles
+        .map(t => `<div class="stat-item"><span class="stat-value">${t.value}</span><span class="stat-label">${t.label}</span></div>`)
+        .join('');
+
+      // Newest first — matches Activity History's own ordering above.
+      const rows = Object.entries(attendance || {})
+        .filter(([dateKey, rec]) => rec && dateKey >= fromKey && dateKey <= toKey)
+        .sort(([a], [b]) => b.localeCompare(a));
+
+      listEl.innerHTML = rows.length > 0
+        ? rows.map(([dateKey, rec]) => {
+            const gathas = rec.gathas || 0;
+            return `
+            <div class="niyam-stat-row">
+              <span class="niyam-stat-icon">${rec.present ? '✅' : '❌'}</span>
+              <span class="niyam-stat-label">${this._formatHistoryDate(dateKey)}</span>
+              <span class="niyam-stat-value">${gathas} gatha${gathas === 1 ? '' : 's'}</span>
+            </div>`;
+          }).join('')
+        : '<div style="text-align:center; padding:20px; color:#795548;">No attendance recorded this month.</div>';
+    };
+
+    if (this._cachedAttendance) {
+      paint(this._cachedAttendance);
+      return;
+    }
+
+    // Listener hasn't fired yet (e.g. this runs before setupRealtimeSync()'s
+    // non-awaited attendance listener resolves) — one-shot fallback fetch,
+    // mirroring renderNiyamStats()'s identical _cachedDailyLogs fallback.
+    listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#795548;">Loading...</div>';
+    db.ref(`users/${this.uid}/attendance`).once('value')
+      .then(snap => {
+        this._cachedAttendance = snap.val() || {};
+        paint(this._cachedAttendance);
+      })
+      .catch(e => {
+        console.error('Failed to load attendance:', e);
+        listEl.innerHTML = '<div style="text-align:center; color:red;">Failed to load attendance.</div>';
+      });
   }
 
   // ===== PROFILE TAB =====

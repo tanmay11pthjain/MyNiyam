@@ -343,7 +343,7 @@
           </div>
           <div class="panchang-location" id="panchang-location"></div>
           <div class="tithi-display">
-            <span class="tithi-value" id="tithi-value">Loading Panchang...</span>
+            <!-- <span class="tithi-value" id="tithi-value">Loading Panchang...</span> -->
           </div>
           <div class="sun-times">
             <div class="time-item">
@@ -664,6 +664,16 @@
         <button id="btn-history-next" class="btn-history-nav">Next →</button>
       </div>
       <div class="history-list" id="history-list"></div>
+
+      <!-- My Attendance — shares the month stepper above (#btn-history-prev/
+           -next, #history-month-label) rather than getting its own, so the
+           two sections can never show different months. Populated by
+           renderMyAttendance() (app.js), called from renderHistory(). -->
+      <h2 class="section-heading">📋 My Attendance</h2>
+      <p class="admin-desc">Pathshala attendance for the month selected above.</p>
+      <div class="stats-grid" id="my-attendance-summary"></div>
+      <div class="niyam-stats-list" id="my-attendance-list"></div>
+
       <div class="bottom-spacer"></div>
     </div>
 
@@ -1297,6 +1307,6 @@
   <!-- Scripts -->
   <script src="data.js?v=48"></script>
   <script src="auth.js?v=48"></script>
-  <script src="app.js?v=51"></script>
+  <script src="app.js?v=52"></script>
 </body>
 </html>
