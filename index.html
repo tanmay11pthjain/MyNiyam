@@ -24,7 +24,7 @@
        <noscript> fallback covers the rare case of JS being disabled. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-  <link rel="stylesheet" href="styles.css?v=34">
+  <link rel="stylesheet" href="styles.css?v=35">
   <script>
     // Decide the boot state before <body> even exists, so no element lookup
     // is possible here — the previous version of this check ran mid-body and
@@ -263,6 +263,15 @@
         <div class="input-group">
           <label for="reg-dob">Date of Birth</label>
           <input type="date" id="reg-dob" name="dob">
+        </div>
+        <div class="input-group">
+          <label>Gender</label>
+          <div class="gender-pills" id="reg-gender-pills">
+            <button type="button" class="gender-pill" data-value="Male">Male</button>
+            <button type="button" class="gender-pill" data-value="Female">Female</button>
+            <button type="button" class="gender-pill" data-value="Other">Other</button>
+          </div>
+          <input type="hidden" id="reg-gender">
         </div>
         <div class="input-group">
           <label for="reg-phone">Phone Number</label>
@@ -703,6 +712,10 @@
       <div class="profile-readonly-row">
         <span class="profile-readonly-label">Date of Birth</span>
         <span class="profile-readonly-value" id="profile-view-dob"></span>
+      </div>
+      <div class="profile-readonly-row">
+        <span class="profile-readonly-label">Gender</span>
+        <span class="profile-readonly-value" id="profile-view-gender"></span>
       </div>
       <div class="profile-readonly-row">
         <span class="profile-readonly-label">Pathshala/ Sangh</span>
@@ -1306,7 +1319,7 @@
 
   <!-- Scripts -->
   <script src="data.js?v=48"></script>
-  <script src="auth.js?v=48"></script>
-  <script src="app.js?v=52"></script>
+  <script src="auth.js?v=49"></script>
+  <script src="app.js?v=53"></script>
 </body>
 </html>

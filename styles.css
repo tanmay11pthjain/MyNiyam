@@ -359,6 +359,34 @@ body {
   box-shadow: 0 0 0 3px rgba(232, 114, 42, 0.12);
 }
 
+/* Gender — tap-to-select pills (registration form), matching the sangh/photo
+   pickers on this same form rather than a native <select>, which would
+   render as unstyled browser chrome next to these rounded text inputs. */
+.gender-pills {
+  display: flex;
+  gap: 8px;
+}
+
+.gender-pill {
+  flex: 1;
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--text-primary);
+  border: 2px solid #e0d5c8;
+  border-radius: 12px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.gender-pill.is-selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
 /* Registration photo picker */
 .photo-picker-group {
   text-align: center;

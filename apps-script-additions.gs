@@ -42,13 +42,13 @@ const SANGH_SHEET_NAME  = 'Sanghs';
 // own text column for get_photo to serve. You can safely hide 'Photo Data' in
 // the Sheet; the script addresses columns by header name, not position.
 const USER_HEADERS = [
-  'UID', 'Name', 'Email', 'DOB', 'Phone', 'City', 'Area',
+  'UID', 'Name', 'Email', 'DOB', 'Gender', 'Phone', 'City', 'Area',
   'Sangh Code', 'Role', 'Sangh Codes', 'Registered At', 'Photo', 'Photo Data'
 ];
 
 // Logical field -> column header text (matched case-insensitively, trimmed).
 const USER_COLUMNS = {
-  uid: 'UID', name: 'Name', email: 'Email', dob: 'DOB', phone: 'Phone',
+  uid: 'UID', name: 'Name', email: 'Email', dob: 'DOB', gender: 'Gender', phone: 'Phone',
   city: 'City', area: 'Area', sanghCode: 'Sangh Code',
   role: 'Role', sanghCodes: 'Sangh Codes', registeredAt: 'Registered At',
   photo: 'Photo', photoData: 'Photo Data'
@@ -334,6 +334,7 @@ function handleRegister(params) {
   _setField_(sheet, colMap, row, 'name', params.name || '');
   _setField_(sheet, colMap, row, 'email', params.email || '');
   _setField_(sheet, colMap, row, 'dob', params.dob || '');
+  _setField_(sheet, colMap, row, 'gender', params.gender || '');
   _setField_(sheet, colMap, row, 'phone', params.phone || '');
   _setField_(sheet, colMap, row, 'city', params.city || '');
   _setField_(sheet, colMap, row, 'area', params.area || '');

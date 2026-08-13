@@ -580,6 +580,7 @@ const Auth = (() => {
         email,
         name: regData.name,
         dob: regData.dob,
+        gender: regData.gender || "",
         phone: regData.phone,
         city: regData.city,
         area: regData.area,

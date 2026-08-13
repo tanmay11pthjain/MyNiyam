@@ -48,7 +48,7 @@ const RAW_POINT_RULES = [
   { key: 'pooja', label: 'Jin Pooja', points: (log, P) => log.poojaDone ? P.pooja : 0 },
   { key: 'samayik', label: 'Samayik', points: (log, P) => (log.samayikDone || 0) * P.samayik },
   { key: 'devasiya', label: 'Devasiya', points: (log, P) => log.devasiyaDone ? P.devasiya : 0 },
-  { key: 'raysiya', label: 'Raysiya', points: (log, P) => log.raysiyaDone ? P.raysiya : 0 },
+  { key: 'raysiya', label: 'Raiya', points: (log, P) => log.raysiyaDone ? P.raysiya : 0 },
   { key: 'bookReading', label: 'Book Reading', points: (log, P) => Math.floor((log.bookReadingMins || 0) / 30) * P.bookReading },
   { key: 'ratriBhojan', label: 'Ratri Bhojan Tyag', points: (log, P) => log.ratriBhojanDone ? P.ratriBhojan : 0 },
   { key: 'kandmool', label: 'Kandmool Tyag', points: (log, P) => log.kandmoolDone ? P.kandmool : 0 },
@@ -1188,6 +1188,27 @@ class KalyanMitra {
       };
     }
 
+    // Gender pills — delegated on the container (assigned via .onclick, not
+    // addEventListener, so re-visiting this screen never double-binds) and
+    // reset on every visit, mirroring the photo picker just above: an
+    // abandoned "Add Profile" attempt must never carry a stale selection
+    // into the next registration.
+    const genderInput = document.getElementById('reg-gender');
+    const genderPillsEl = document.getElementById('reg-gender-pills');
+    if (genderInput) genderInput.value = '';
+    if (genderPillsEl) {
+      genderPillsEl.querySelectorAll('.gender-pill').forEach(p => p.classList.remove('is-selected'));
+      genderPillsEl.onclick = (e) => {
+        const pill = e.target.closest('.gender-pill');
+        if (!pill) return;
+        genderPillsEl.querySelectorAll('.gender-pill').forEach(p => p.classList.remove('is-selected'));
+        pill.classList.add('is-selected');
+        if (genderInput) genderInput.value = pill.dataset.value;
+        const errorEl = document.getElementById('register-error');
+        if (errorEl) errorEl.classList.add('hidden');
+      };
+    }
+
     // Wire button click directly (bypass form submit)
     const btn = document.getElementById('btn-register');
     btn.onclick = () => {
@@ -1311,6 +1332,7 @@ class KalyanMitra {
   async handleRegistration() {
     const name = document.getElementById('reg-name').value.trim();
     const dob = document.getElementById('reg-dob').value;
+    const gender = document.getElementById('reg-gender').value;
     const phone = document.getElementById('reg-phone').value.trim();
     const city = document.getElementById('reg-city').value.trim();
     const area = document.getElementById('reg-area').value.trim();
@@ -1318,7 +1340,7 @@ class KalyanMitra {
     const errorEl = document.getElementById('register-error');
     const btn = document.getElementById('btn-register');
 
-    if (!name || !dob || !phone || !city || !area) {
+    if (!name || !dob || !gender || !phone || !city || !area) {
       errorEl.textContent = 'Please fill all fields.';
       errorEl.classList.remove('hidden');
       return;
@@ -1347,7 +1369,7 @@ class KalyanMitra {
     errorEl.classList.add('hidden');
 
     const regData = {
-      name, dob, phone, city, area, sanghCode,
+      name, dob, gender, phone, city, area, sanghCode,
       sanghName: this._selectedSangh.name,
       sanghCity: this._selectedSangh.city,
       photo: this._registrationPhotoDataUrl
@@ -2557,21 +2579,20 @@ class KalyanMitra {
 
   // ===== EXCEL EXPORT (ADMIN LEADERBOARD) =====
 
-  // Pure data step — no DOM, no network. Mirrors the exact same authorization
-  // filter as _renderLeaderboardFromSnap() (admin role excluded, only uids in
-  // this._adminUserUids kept) so the export can never leak users outside the
-  // admin's own sangh(s). Per-niyam columns come from _computeNiyamRange() —
-  // the same "days followed" definition as the lifetime stats grid and the
-  // Monthly Niyam Stats overlay — so the sheet can never disagree with the
-  // app. `settings` is the one shared sangh-wide node, so every row is
-  // measured against the same enabled niyams in the same order.
+  // Pure data step — no DOM, no network. Uses _eligibleSanghUsers() (the
+  // same authorization + shape filter the attendance export and the poster
+  // already share) so the export can never leak users outside the admin's
+  // own sangh(s) — this used to duplicate that filter inline and was
+  // missing its "looks like a real user" shape check, so a malformed or
+  // orphaned node could slip into this sheet but not the others. Per-niyam
+  // columns come from _computeNiyamRange() — the same "days followed"
+  // definition as the lifetime stats grid and the Monthly Niyam Stats
+  // overlay — so the sheet can never disagree with the app. `settings` is
+  // the one shared sangh-wide node, so every row is measured against the
+  // same enabled niyams in the same order.
   _collectExportRows(allUsers, fromKey, toKey) {
     const s = this.settings || DEFAULT_SETTINGS;
-    const rows = [];
-    Object.entries(allUsers || {}).forEach(([uid, data]) => {
-      if (!data || data.role === 'admin') return;
-      if (!this._adminUserUids.includes(uid)) return;
-
+    const rows = this._eligibleSanghUsers(allUsers).map(({ uid, data }) => {
       const logs = data.daily_logs || {};
       // Each member scored at THEIR OWN sangh's point values — this export
       // can span an admin's several sanghs in one pass.
@@ -2579,7 +2600,22 @@ class KalyanMitra {
       const pointsMap = this._adminSanghPointMap(sanghCode);
       const { stats, daysLogged, perfectDays, totalAP } = this._computeNiyamRange(logs, fromKey, toKey, s, true, pointsMap);
 
-      rows.push({ name: data.name || uid, stats, totalAP, daysLogged, perfectDays });
+      // Days-followed summed across every niyam — unit-consistent even
+      // though the niyams themselves aren't (Samayik counts times, Book
+      // Reading/Screen Time count minutes): `days` is populated for ALL of
+      // them, and Screen Time (the one penalty) always contributes 0 here
+      // since its countsDay() is permanently false — see NIYAM_STATS.
+      const totalNiyams = stats.reduce((t, st) => t + st.days, 0);
+
+      const attendance = this._summarizeAttendance(data.attendance, fromKey, toKey);
+
+      return {
+        name: data.name || uid, stats, totalNiyams, totalAP, daysLogged, perfectDays,
+        daysPresent: attendance.daysPresent,
+        daysAbsent: attendance.daysAbsent,
+        totalGathas: attendance.totalGathas,
+        attendancePct: attendance.pct,
+      };
     });
 
     rows.sort((a, b) => b.totalAP - a.totalAP);
@@ -2649,14 +2685,42 @@ class KalyanMitra {
       // so the first row's stats safely define the column headers.
       const niyamLabels = rows[0].stats.map(st => `${st.label}${st.exportUnit ? ` (${st.exportUnit})` : ''}`);
       const noteRow = [
-        "Niyam columns show days followed in the selected range (or the total amount, for columns with a unit in their header)."
+        "Niyam columns show days followed in the selected range (or the total amount, for columns with a unit in their header). " +
+        "Total Niyams sums days-followed across every niyam (never the raw amount columns, which are in different units). " +
+        "The TOTAL row sums each column down; Attendance % on that row is the sangh-wide ratio, not a sum of percentages."
       ];
-      const header = ['Name', ...niyamLabels, 'Total AP', 'Days Logged', 'Perfect Days'];
+      const header = [
+        'Name', ...niyamLabels, 'Total Niyams', 'Total AP', 'Days Logged', 'Perfect Days',
+        'Days Present', 'Days Absent', 'Total Gathas', 'Attendance %'
+      ];
       const aoa = [noteRow, header];
       rows.forEach(r => {
         const niyamValues = r.stats.map(st => st.amount != null ? st.amount : st.days);
-        aoa.push([r.name, ...niyamValues, r.totalAP, r.daysLogged, r.perfectDays]);
+        aoa.push([
+          r.name, ...niyamValues, r.totalNiyams, r.totalAP, r.daysLogged, r.perfectDays,
+          r.daysPresent, r.daysAbsent, r.totalGathas, `${r.attendancePct}%`
+        ]);
       });
+
+      // TOTAL row — a plain sum down each column is always unit-safe WITHIN
+      // a column (e.g. total minutes the sangh read, total member-days a
+      // niyam was followed), even though summing ACROSS columns would mix
+      // units. Attendance % is recomputed sangh-wide from the summed
+      // present/absent counts rather than summed itself, so it stays a real
+      // percentage instead of a meaningless sum-of-percentages.
+      const sumCol = (fn) => rows.reduce((t, r) => t + fn(r), 0);
+      const niyamTotals = niyamLabels.map((_, i) =>
+        sumCol(r => (r.stats[i].amount != null ? r.stats[i].amount : r.stats[i].days))
+      );
+      const totalDaysPresent = sumCol(r => r.daysPresent);
+      const totalDaysAbsent = sumCol(r => r.daysAbsent);
+      const totalMarked = totalDaysPresent + totalDaysAbsent;
+      const sanghPct = totalMarked > 0 ? Math.round((totalDaysPresent / totalMarked) * 100) : 0;
+      aoa.push([
+        'TOTAL', ...niyamTotals, sumCol(r => r.totalNiyams), sumCol(r => r.totalAP),
+        sumCol(r => r.daysLogged), sumCol(r => r.perfectDays),
+        totalDaysPresent, totalDaysAbsent, sumCol(r => r.totalGathas), `${sanghPct}%`
+      ]);
 
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       ws['!cols'] = header.map((h, i) => ({ wch: i === 0 ? 20 : Math.max(10, h.length + 2) }));
@@ -2744,7 +2808,11 @@ class KalyanMitra {
       };
     });
 
-    rows.sort((a, b) => b.daysPresent - a.daysPresent || a.name.localeCompare(b.name));
+    // Alphabetical — matches the on-screen marking list (renderAttendance())
+    // and the new "Total Niyams"/attendance columns on the points export, so
+    // every register in this app reads the same way: a class list, not a
+    // leaderboard. The points export alone keeps its Total AP ranking.
+    rows.sort((a, b) => a.name.localeCompare(b.name));
     return { dateKeys, rows };
   }
 
@@ -5271,6 +5339,9 @@ class KalyanMitra {
     const dobEl = document.getElementById('profile-view-dob');
     if (dobEl) dobEl.textContent = data.dob ? this._formatDob(data.dob) : '—';
 
+    const genderEl = document.getElementById('profile-view-gender');
+    if (genderEl) genderEl.textContent = data.gender || '—';
+
     const phoneEl = document.getElementById('profile-phone');
     if (phoneEl && document.activeElement !== phoneEl) phoneEl.value = data.phone || '';
     const cityEl = document.getElementById('profile-city');
@@ -6705,6 +6776,7 @@ class KalyanMitra {
     const rows = [
       ['📞', 'Phone', reg.phone ? `<a href="tel:${this._escHtml(reg.phone)}">${this._escHtml(reg.phone)}</a>` : ''],
       ['🎂', 'Date of Birth', this._escHtml(reg.dob || '')],
+      ['⚧', 'Gender', this._escHtml(reg.gender || '')],
       ['📍', 'City / Area', this._escHtml(cityArea)],
       ['🛕', 'Sangh', this._escHtml(sangh)],
       ['📅', 'Joined', this._escHtml(joined)]
