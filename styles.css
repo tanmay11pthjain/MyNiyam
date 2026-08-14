@@ -1546,26 +1546,6 @@ body.landing-open {
   margin-bottom: 4px;
 }
 
-.tithi-display {
-  text-align: center;
-  padding: 10px 0 14px;
-}
-
-.tithi-label {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 2px;
-}
-
-.tithi-value {
-  font-family: 'Outfit', sans-serif;
-  font-weight: 700;
-  font-size: 1.35rem;
-  color: var(--primary);
-}
-
 .sun-times {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

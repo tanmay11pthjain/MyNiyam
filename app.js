@@ -1887,8 +1887,12 @@ class KalyanMitra {
     }
 
     // Render immediately from whatever location we have — never wait on a
-    // GPS prompt or the network to show a panchang card.
-    this.calculatePanchang();
+    // GPS prompt or the network to show a panchang card. Fire-and-forget is
+    // deliberate (see calculatePanchang()'s own comment); the .catch() only
+    // makes a future throw in there show up in the console instead of
+    // silently vanishing as an unhandled rejection, which is exactly how
+    // the tithi/timings bug went unnoticed.
+    this.calculatePanchang().catch(e => console.error('Panchang render failed:', e));
 
     if (!navigator.geolocation) return;
     try {
@@ -1911,7 +1915,7 @@ class KalyanMitra {
         source: 'gps',
         updatedAt: this.location.updatedAt
       });
-      this.calculatePanchang(); // re-render with the refined coordinates
+      this.calculatePanchang().catch(e => console.error('Panchang render failed:', e)); // re-render with the refined coordinates
     } catch (e) {
       console.warn('Geolocation denied or timed out — using last known location.', e);
     }
@@ -3830,7 +3834,7 @@ class KalyanMitra {
         // over to today; it is the single owner of back-locking.
         await this.checkDailyReset();
         this.renderDashboard();
-        this.calculatePanchang(); // roll the panchang card to the new day too
+        this.calculatePanchang().catch(e => console.error('Panchang render failed:', e)); // roll the panchang card to the new day too
       }
       // Update lock UI
       this.updateLockUI();
@@ -3947,7 +3951,6 @@ class KalyanMitra {
   async calculatePanchang() {
     const now = new Date();
     const loc = this.location || DEFAULT_LOCATION;
-    const tithiInfo = this.calculateTithi(now);
     const todayKey = this.getTodayKey();
 
     // Cache check — at most one Open-Meteo call per day per location.
@@ -3961,7 +3964,7 @@ class KalyanMitra {
     if (cached) {
       this.renderPanchang(
         { sunrise: new Date(cached.sunrise), sunset: new Date(cached.sunset) },
-        tithiInfo, now, cached.timezone
+        now, cached.timezone
       );
       return;
     }
@@ -3969,7 +3972,7 @@ class KalyanMitra {
     // Render the local calculation immediately — the card must never be
     // blank or stalled on a network round trip.
     const local = SunTimes.sunTimesFor(loc.lat, loc.lng, loc.elevation, now, loc.timezone);
-    this.renderPanchang(local, tithiInfo, now, loc.timezone);
+    this.renderPanchang(local, now, loc.timezone);
 
     // Refine via Open-Meteo in the background (not awaited by any caller —
     // calculatePanchang() itself is fire-and-forget from every call site).
@@ -4017,7 +4020,7 @@ class KalyanMitra {
         }));
       } catch (e) { /* storage full/unavailable — non-fatal, just skip caching */ }
 
-      this.renderPanchang(sunTimes, tithiInfo, now, timezone);
+      this.renderPanchang(sunTimes, now, timezone);
     } catch (e) {
       console.warn('Open-Meteo fetch failed — keeping the local calculation on screen.', e);
     }
@@ -4037,34 +4040,16 @@ class KalyanMitra {
     }
   }
 
-  calculateTithi(date) {
-    // Aligned to start of Kartik in 2025 to fix Adhik Maas drift
-    const refNewMoon = new Date(Date.UTC(2025, 9, 22, 23, 0, 0));
-    const synodicMonth = 29.53059;
-    const daysSinceRef = (date.getTime() - refNewMoon.getTime()) / (1000 * 60 * 60 * 24);
-    const moonAge = ((daysSinceRef % synodicMonth) + synodicMonth) % synodicMonth;
-    const tithiDuration = synodicMonth / 30;
-    const tithiIndex = Math.floor(moonAge / tithiDuration);
-    let paksha, tithiName;
-    if (tithiIndex < 15) {
-      paksha = 'Shukla Paksha';
-      tithiName = TITHI_NAMES[tithiIndex];
-    } else {
-      paksha = 'Krishna Paksha';
-      tithiName = TITHI_NAMES_KRISHNA[tithiIndex - 15];
-    }
-    const lunarMonth = Math.floor(((daysSinceRef / synodicMonth) % 12 + 12) % 12);
-    return { paksha, tithiName, jainMonth: JAIN_MONTHS[lunarMonth], tithiIndex };
-  }
-
   // ===== RENDERING =====
-  renderPanchang(sunTimes, tithiInfo, now, timezone) {
+  // Every write here is independently null-guarded, including ones that
+  // "should" always exist — a commented-out row (like #tithi-value used to
+  // be) must degrade that one line, never abort the whole function and
+  // strand the rest of the card. See renderHeader()'s identical pattern and
+  // its comment on the streak markup outage this mirrors.
+  renderPanchang(sunTimes, now, timezone) {
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    document.getElementById('panchang-date').textContent = now.toLocaleDateString('en-IN', options);
-
-    const pakshaName = tithiInfo.paksha === 'Shukla Paksha' ? 'Shukla' : 'Krushna';
-    const tithiNum = (tithiInfo.tithiIndex % 15) + 1;
-    document.getElementById('tithi-value').textContent = `${tithiInfo.jainMonth} ${pakshaName} ${tithiNum}`;
+    const dateEl = document.getElementById('panchang-date');
+    if (dateEl) dateEl.textContent = now.toLocaleDateString('en-IN', options);
 
     const sunriseEl = document.getElementById('sunrise-time');
     const navkarsiEl = document.getElementById('navkarsi-time');
@@ -4072,17 +4057,17 @@ class KalyanMitra {
 
     if (sunTimes && sunTimes.sunrise) {
       const navkarsi = new Date(sunTimes.sunrise.getTime() + 48 * 60000);
-      sunriseEl.textContent = this._formatClockTime(sunTimes.sunrise, timezone);
-      navkarsiEl.textContent = this._formatClockTime(navkarsi, timezone);
+      if (sunriseEl) sunriseEl.textContent = this._formatClockTime(sunTimes.sunrise, timezone);
+      if (navkarsiEl) navkarsiEl.textContent = this._formatClockTime(navkarsi, timezone);
     } else {
-      sunriseEl.textContent = '--:--';
-      navkarsiEl.textContent = '--:--';
+      if (sunriseEl) sunriseEl.textContent = '--:--';
+      if (navkarsiEl) navkarsiEl.textContent = '--:--';
     }
 
     if (sunTimes && sunTimes.sunset) {
-      sunsetEl.textContent = this._formatClockTime(sunTimes.sunset, timezone);
+      if (sunsetEl) sunsetEl.textContent = this._formatClockTime(sunTimes.sunset, timezone);
     } else {
-      sunsetEl.textContent = '--:--';
+      if (sunsetEl) sunsetEl.textContent = '--:--';
     }
 
     // No reverse-geocoding exists, so show the raw coordinates + elevation +

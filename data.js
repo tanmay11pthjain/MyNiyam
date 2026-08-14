@@ -1,31 +1,5 @@
 // ===== KALYAN MITRA — STATIC DATA =====
 
-// ===== TITHI NAMES =====
-const TITHI_NAMES = [
-  'Pratipada', 'Dwitiya', 'Tritiya', 'Chaturthi', 'Panchami',
-  'Shashthi', 'Saptami', 'Ashtami', 'Navami', 'Dashami',
-  'Ekadashi', 'Dwadashi', 'Trayodashi', 'Chaturdashi', 'Purnima'
-];
-
-const TITHI_NAMES_KRISHNA = [
-  'Pratipada', 'Dwitiya', 'Tritiya', 'Chaturthi', 'Panchami',
-  'Shashthi', 'Saptami', 'Ashtami', 'Navami', 'Dashami',
-  'Ekadashi', 'Dwadashi', 'Trayodashi', 'Chaturdashi', 'Amavasya'
-];
-
-// ===== PAKSHA =====
-const PAKSHA = {
-  SHUKLA: 'Shukla Paksha',
-  KRISHNA: 'Krishna Paksha'
-};
-
-// ===== JAIN MONTHS =====
-const JAIN_MONTHS = [
-  'Kartik', 'Margshirsh', 'Paush', 'Magha',
-  'Falgun', 'Chaitra', 'Vaishakh', 'Jyeshth',
-  'Ashadh', 'Shravan', 'Bhadrapad', 'Ashwin'
-];
-
 // ===== ACHIEVEMENT BADGES =====
 const BADGES = [
   { id: 'early_riser', name: 'Early Riser', icon: '🌅', desc: 'Complete Pooja before 7 AM, 5 times', rarity: 'Common', condition: 'earlyPooja', threshold: 5 },
