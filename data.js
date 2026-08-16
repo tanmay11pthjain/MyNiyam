@@ -189,7 +189,7 @@ const DEFAULT_DAILY_LOG = {
   navkarsiDone: false,
   pranamDone: false,
   devasiyaDone: false,
-  raysiyaDone: false,
+  raiyaDone: false,
   bookReadingMins: 0,
   ratriBhojanDone: false,
   kandmoolDone: false,
@@ -213,7 +213,7 @@ const POINTS = {
   navkarsi: 10,
   pranam: 20,
   devasiya: 30,
-  raysiya: 30,
+  raiya: 30,
   bookReading: 20, // per 30 mins
   ratriBhojan: 20,
   kandmool: 20,

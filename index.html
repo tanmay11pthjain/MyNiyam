@@ -8,6 +8,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>MyNiyam - Aapka Adhyatmik Saathi 🙏</title>
+  <!-- Inline data-URI favicon — matches .mn-hands from the logo wordmark
+       (styles.css's MYNIYAM LOGO WORDMARK section), cuff-less like the
+       header's --sm variant, on the app's own cream (--bg) tile. No file,
+       no extra request. -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23FFF9F0'/%3E%3Cg transform='translate(0,-5)'%3E%3Cpath fill='%23F4A261' d='M32,6 C26,14 18,20 14,34 C11,46 12,58 18,68 C22,64 26,52 29,40 C30,28 31,16 32,6 Z'/%3E%3Cpath fill='%23F4A261' d='M32,6 C38,14 46,20 50,34 C53,46 52,58 46,68 C42,64 38,52 35,40 C34,28 33,16 32,6 Z'/%3E%3C/g%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- The app no longer READS from Sheets (Firebase is master — see
@@ -24,7 +29,7 @@
        <noscript> fallback covers the rare case of JS being disabled. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-  <link rel="stylesheet" href="styles.css?v=36">
+  <link rel="stylesheet" href="styles.css?v=37">
   <script>
     // Decide the boot state before <body> even exists, so no element lookup
     // is possible here — the previous version of this check ran mid-body and
@@ -73,7 +78,21 @@
           <div class="lotus-petal p8"></div>
           <div class="lotus-center"></div>
         </div>
-        <h1 class="landing-title">🙏 MyNiyam</h1>
+        <h1 class="landing-title">
+          <span class="mn-logo" role="img" aria-label="MyNiyam">
+            <span class="mn-c mn-c1" aria-hidden="true">M</span>
+            <span class="mn-c mn-c2" aria-hidden="true">y</span>
+            <span class="mn-c mn-c3" aria-hidden="true">n</span>
+            <span class="mn-c mn-c4" aria-hidden="true">i</span>
+            <span class="mn-c mn-c5" aria-hidden="true">y</span>
+            <svg class="mn-hands" viewBox="0 0 64 80" aria-hidden="true" focusable="false">
+              <path class="mn-hand" d="M32,6 C26,14 18,20 14,34 C11,46 12,58 18,68 C22,64 26,52 29,40 C30,28 31,16 32,6 Z"></path>
+              <path class="mn-hand" d="M32,6 C38,14 46,20 50,34 C53,46 52,58 46,68 C42,64 38,52 35,40 C34,28 33,16 32,6 Z"></path>
+              <path class="mn-cuff" d="M12,66 Q32,74 52,66 L52,72 Q32,80 12,72 Z"></path>
+            </svg>
+            <span class="mn-c mn-c7" aria-hidden="true">m</span>
+          </span>
+        </h1>
         <p class="landing-subtitle">Aapka Adhyatmik Saathi</p>
         <p class="landing-tagline">Your daily companion for Jain sadhana — Navkarsi, Samayik, Pratikraman and Swadhyay, tracked and celebrated with your Sangh.</p>
         <button class="landing-cta landing-cta-primary">🙏 Fill My Niyam</button>
@@ -190,6 +209,19 @@
         <div class="lotus-petal p8"></div>
         <div class="lotus-center"></div>
       </div>
+      <span class="mn-logo mn-logo--animate" role="img" aria-label="MyNiyam">
+        <span class="mn-c mn-c1" aria-hidden="true">M</span>
+        <span class="mn-c mn-c2" aria-hidden="true">y</span>
+        <span class="mn-c mn-c3" aria-hidden="true">n</span>
+        <span class="mn-c mn-c4" aria-hidden="true">i</span>
+        <span class="mn-c mn-c5" aria-hidden="true">y</span>
+        <svg class="mn-hands" viewBox="0 0 64 80" aria-hidden="true" focusable="false">
+          <path class="mn-hand" d="M32,6 C26,14 18,20 14,34 C11,46 12,58 18,68 C22,64 26,52 29,40 C30,28 31,16 32,6 Z"></path>
+          <path class="mn-hand" d="M32,6 C38,14 46,20 50,34 C53,46 52,58 46,68 C42,64 38,52 35,40 C34,28 33,16 32,6 Z"></path>
+          <path class="mn-cuff" d="M12,66 Q32,74 52,66 L52,72 Q32,80 12,72 Z"></path>
+        </svg>
+        <span class="mn-c mn-c7" aria-hidden="true">m</span>
+      </span>
       <div class="loading-spinner"></div>
       <p class="loading-text">Loading your niyams…</p>
       <button type="button" class="loading-retry-btn hidden" id="btn-loading-retry">Retry</button>
@@ -230,7 +262,21 @@
         <div class="lotus-petal p8"></div>
         <div class="lotus-center"></div>
       </div>
-      <h1 class="login-title">🙏 MyNiyam</h1>
+      <h1 class="login-title">
+        <span class="mn-logo" role="img" aria-label="MyNiyam">
+          <span class="mn-c mn-c1" aria-hidden="true">M</span>
+          <span class="mn-c mn-c2" aria-hidden="true">y</span>
+          <span class="mn-c mn-c3" aria-hidden="true">n</span>
+          <span class="mn-c mn-c4" aria-hidden="true">i</span>
+          <span class="mn-c mn-c5" aria-hidden="true">y</span>
+          <svg class="mn-hands" viewBox="0 0 64 80" aria-hidden="true" focusable="false">
+            <path class="mn-hand" d="M32,6 C26,14 18,20 14,34 C11,46 12,58 18,68 C22,64 26,52 29,40 C30,28 31,16 32,6 Z"></path>
+            <path class="mn-hand" d="M32,6 C38,14 46,20 50,34 C53,46 52,58 46,68 C42,64 38,52 35,40 C34,28 33,16 32,6 Z"></path>
+            <path class="mn-cuff" d="M12,66 Q32,74 52,66 L52,72 Q32,80 12,72 Z"></path>
+          </svg>
+          <span class="mn-c mn-c7" aria-hidden="true">m</span>
+        </span>
+      </h1>
       <p class="login-subtitle">Aapka Adhyatmik Saathi</p>
       <div class="login-error hidden" id="login-error"></div>
       <button class="btn-google-signin" id="btn-google-signin">
@@ -311,7 +357,7 @@
     <!-- Header: Brand + Sangh + Points + Streak + Logout -->
     <header id="app-header">
       <div class="header-brand">
-        <span class="brand-name">🙏 MyNiyam</span>
+        <span class="brand-name"><span class="mn-logo mn-logo--sm" role="img" aria-label="MyNiyam"><span class="mn-c mn-c1" aria-hidden="true">M</span><span class="mn-c mn-c2" aria-hidden="true">y</span><span class="mn-c mn-c3" aria-hidden="true">n</span><span class="mn-c mn-c4" aria-hidden="true">i</span><span class="mn-c mn-c5" aria-hidden="true">y</span><svg class="mn-hands" viewBox="0 0 64 80" aria-hidden="true" focusable="false"><path class="mn-hand" d="M32,6 C26,14 18,20 14,34 C11,46 12,58 18,68 C22,64 26,52 29,40 C30,28 31,16 32,6 Z"></path><path class="mn-hand" d="M32,6 C38,14 46,20 50,34 C53,46 52,58 46,68 C42,64 38,52 35,40 C34,28 33,16 32,6 Z"></path><path class="mn-cuff" d="M12,66 Q32,74 52,66 L52,72 Q32,80 12,72 Z"></path></svg><span class="mn-c mn-c7" aria-hidden="true">m</span></span></span>
         <span class="brand-sangh" id="brand-sangh"></span>
       </div>
       <div class="header-top">
@@ -513,7 +559,7 @@
                 <button class="slot-btn" id="pratikraman-evening" onclick="app.completePratikraman('evening')">
                   <span class="slot-icon">🌙</span>
                   <span class="slot-label">Evening</span>
-                  <span class="card-kp" data-point-key="raysiya" data-point-format="+{n} AP">+30 AP</span>
+                  <span class="card-kp" data-point-key="raiya" data-point-format="+{n} AP">+30 AP</span>
                   <span class="slot-check" id="pratikraman-evening-check">○</span>
                 </button>
               </div>
@@ -769,7 +815,7 @@
     <header id="admin-header">
       <div class="admin-header-content">
         <div class="admin-brand-top">
-          <span class="brand-name">🙏 MyNiyam</span>
+          <span class="brand-name"><span class="mn-logo mn-logo--sm" role="img" aria-label="MyNiyam"><span class="mn-c mn-c1" aria-hidden="true">M</span><span class="mn-c mn-c2" aria-hidden="true">y</span><span class="mn-c mn-c3" aria-hidden="true">n</span><span class="mn-c mn-c4" aria-hidden="true">i</span><span class="mn-c mn-c5" aria-hidden="true">y</span><svg class="mn-hands" viewBox="0 0 64 80" aria-hidden="true" focusable="false"><path class="mn-hand" d="M32,6 C26,14 18,20 14,34 C11,46 12,58 18,68 C22,64 26,52 29,40 C30,28 31,16 32,6 Z"></path><path class="mn-hand" d="M32,6 C38,14 46,20 50,34 C53,46 52,58 46,68 C42,64 38,52 35,40 C34,28 33,16 32,6 Z"></path><path class="mn-cuff" d="M12,66 Q32,74 52,66 L52,72 Q32,80 12,72 Z"></path></svg><span class="mn-c mn-c7" aria-hidden="true">m</span></span></span>
           <div class="admin-brand-right">
             <span class="admin-role-tag">👑 Admin</span>
             <!-- Same markup/CSS as the user header's #header-avatar-btn —
@@ -892,9 +938,9 @@
             </div>
           </div>
           <div class="setting-item niyam-row niyam-row-sub" data-toggle-id="admin-toggle-pratikraman">
-            <div class="niyam-row-label"><label for="admin-points-raysiya">↳ Raysiya</label></div>
+            <div class="niyam-row-label"><label for="admin-points-raiya">↳ Raysiya</label></div>
             <div class="niyam-row-controls">
-              <input type="number" min="0" step="1" id="admin-points-raysiya" placeholder="30">
+              <input type="number" min="0" step="1" id="admin-points-raiya" placeholder="30">
               <span class="niyam-toggle-spacer" aria-hidden="true"></span>
             </div>
           </div>
