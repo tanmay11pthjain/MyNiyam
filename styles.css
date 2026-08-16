@@ -302,129 +302,61 @@ body {
 }
 
 /* ============================================================
-   MYNIYAM LOGO WORDMARK — see .mn-logo in index.html (5 surfaces:
-   loading screen, login card, landing hero, user header, admin
-   header) and the inline SVG favicon in <head>.
-
-   Colors are drawn entirely from the app's own :root palette via
-   the per-letter --mn-c-* vars below. Two background families need
-   an override because a palette color would otherwise sit on top
-   of itself: the user header is an ORANGE gradient (var(--primary)),
-   so the orange M/i letters would vanish into it; the admin header
-   and both dark screens (loading/landing) are dark brown or near-
-   black — var(--text-primary) is literally the admin header's own
-   background start color — so the brown n/m letters would vanish
-   into those instead. Each override below fixes exactly one such
-   collision; see its own comment.
+   MYNIYAM LOGO — the actual artwork (logo.png, transparent), used
+   as-is on 5 surfaces: loading screen, login card, landing hero,
+   user header, admin header. See .mn-logo-img in index.html and
+   favicon.png (cropped from the same artwork) in <head>.
    ============================================================ */
 
-.mn-logo {
-  /* Defaults suit a light background (the login card) — every
-     override below changes only the one channel that would
-     otherwise blend into that surface's own background. */
-  --mn-c-warm: var(--primary);        /* M, i */
-  --mn-c-gold: var(--accent);         /* the two y's */
-  --mn-c-dark: var(--text-primary);   /* n, m */
-  --mn-hand-fill: var(--primary-light);
-  --mn-hand-cuff: var(--accent);
-  display: inline-flex;
-  align-items: baseline;
-  font-family: 'Outfit', sans-serif;
-  font-weight: 800;
-  line-height: 1;
-  white-space: nowrap;
+.mn-logo-img {
+  display: block;
+  width: auto;
+  /* object-fit/contain isn't needed — an <img> with only `height` set
+     and no explicit `width` preserves its own aspect ratio natively. */
 }
 
-.mn-c { display: inline-block; }
-.mn-c1, .mn-c4 { color: var(--mn-c-warm); }
-.mn-c2, .mn-c5 { color: var(--mn-c-gold); }
-.mn-c3, .mn-c7 { color: var(--mn-c-dark); }
-
-/* The folded-hands "a" — palms plus a sleeve cuff. Sized in em so
-   it scales with whatever font-size the surrounding surface already
-   sets (header 1.1rem, login 1.6rem, landing 2.4rem/3rem — see
-   those rules elsewhere in this file, all untouched). */
-.mn-hands {
-  display: inline-block;
-  width: 0.48em;
-  height: 0.6em;
-  overflow: visible;
-  flex-shrink: 0;
+/* Sized per surface to match the text row it replaces. */
+.login-title .mn-logo-img { height: 2.1rem; }
+.landing-title .mn-logo-img { height: 3.4rem; }
+@media (min-width: 640px) {
+  .landing-title .mn-logo-img { height: 4.2rem; } /* mirrors .landing-title's own 2.4rem->3rem step above */
 }
-.mn-hand { fill: var(--mn-hand-fill); }
-.mn-cuff { fill: var(--mn-hand-cuff); }
+#loading-screen .mn-logo-img { height: 2.6rem; }
+.header-brand .mn-logo-img,
+.admin-brand-top .mn-logo-img { height: 1.4rem; }
 
-/* Both headers use this — the cuff band is only ~3px tall at
-   1.1rem and reads as a smudge rather than a shape there, so it's
-   dropped; the palms alone still read fine at that size. */
-.mn-logo--sm .mn-cuff { display: none; }
-
-/* ----- Per-surface contrast fixes (see banner comment above) ----- */
-
-#app-header .mn-logo {
-  --mn-c-warm: #fff;
-  --mn-c-gold: var(--xp-start);
-  --mn-hand-fill: #fff;
-}
-
-#admin-header .mn-logo { --mn-c-dark: #fff; }
-#landing-screen .mn-logo { --mn-c-dark: #fff; }
-#loading-screen .mn-logo { --mn-c-dark: #FFE9D2; } /* matches .loading-text's own color */
-
-@keyframes mnLetterPop {
-  0%   { opacity: 0; transform: translateY(10px) scale(0.5); }
-  60%  { opacity: 1; transform: translateY(-2px) scale(1.08); }
+/* Loading-screen entrance — scoped to .mn-logo-img--animate, which
+   ONLY the loading screen's copy carries. Deliberately narrow: the
+   header copies re-render on every dashboard update (submit a day,
+   switch tabs, …), and an unscoped entrance animation would make the
+   header logo twitch on every one of those. Picks up right after the
+   lotus above it finishes blooming (.lotus-petal runs 0.1s-0.9s — see
+   above). Pure decoration on a screen that can vanish mid-animation
+   the moment auth resolves (_hideLoadingScreen() in app.js) — nothing
+   waits on it finishing. */
+@keyframes mnLogoPop {
+  0%   { opacity: 0; transform: translateY(10px) scale(0.72); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
-
-@keyframes mnHandsRise {
-  0%   { opacity: 0; transform: translateY(8px) scale(0.6); }
-  70%  { opacity: 1; transform: translateY(-1px) scale(1.05); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
+.mn-logo-img--animate {
+  animation: mnLogoPop 0.65s 1.0s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-/* Entrance sequence — scoped to .mn-logo--animate, which ONLY the
-   loading screen's copy carries. Deliberately narrow: the header
-   copies re-render on every dashboard update (submit a day, switch
-   tabs, …), and an unscoped entrance animation would make the
-   header logo twitch on every one of those. Picks up right after
-   the lotus above it finishes blooming (.lotus-petal runs 0.1s-0.9s
-   — see above). This is pure decoration on a screen that can vanish
-   mid-sequence the moment auth resolves (_hideLoadingScreen() in
-   app.js) — nothing waits on it finishing. */
-.mn-logo--animate .mn-c,
-.mn-logo--animate .mn-hands {
-  opacity: 0;
-}
-.mn-logo--animate .mn-c1    { animation: mnLetterPop 0.5s 1.00s ease-out forwards; }
-.mn-logo--animate .mn-c2    { animation: mnLetterPop 0.5s 1.06s ease-out forwards; }
-.mn-logo--animate .mn-c3    { animation: mnLetterPop 0.5s 1.12s ease-out forwards; }
-.mn-logo--animate .mn-c4    { animation: mnLetterPop 0.5s 1.18s ease-out forwards; }
-.mn-logo--animate .mn-c5    { animation: mnLetterPop 0.5s 1.24s ease-out forwards; }
-.mn-logo--animate .mn-hands { animation: mnHandsRise 0.45s 1.30s ease-out forwards; }
-.mn-logo--animate .mn-c7    { animation: mnLetterPop 0.5s 1.36s ease-out forwards; }
-
-/* Login screen's glow used to be glowPulse's text-shadow, straight
-   on .login-title — but text-shadow doesn't reach the SVG hands, so
-   the letters would glow while the hands sat flat beside them.
-   filter:drop-shadow() applies uniformly to text AND the SVG child,
-   so the glow moves here, onto the whole .mn-logo, with the exact
-   same shadow stops glowPulse used (glowPulse itself is untouched —
-   .intro-title still uses it). */
+/* Login screen's glow — filter:drop-shadow() respects the PNG's own
+   alpha channel, so it glows around the actual letterforms rather
+   than a rectangular box (text-shadow can't apply to an <img> at
+   all). Same shadow stops as glowPulse, which is untouched elsewhere
+   (.intro-title still uses it as text-shadow). */
 @keyframes mnGlowPulse {
   0%, 100% { filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.4)) drop-shadow(0 0 20px rgba(255, 153, 51, 0.15)); }
   50%      { filter: drop-shadow(0 0 18px rgba(255, 215, 0, 0.9)) drop-shadow(0 0 40px rgba(255, 153, 51, 0.5)) drop-shadow(0 0 60px rgba(255, 140, 0, 0.2)); }
 }
-.login-title .mn-logo {
+.login-title .mn-logo-img {
   animation: mnGlowPulse 2.5s 1s ease-in-out infinite;
 }
 
 /* Login Title */
 .login-title {
-  font-family: 'Outfit', sans-serif;
-  font-weight: 700;
-  font-size: 1.6rem;
-  color: #E8722A;
   margin-bottom: 4px;
 }
 
@@ -673,10 +605,10 @@ html.booting-session #loading-screen {
   font-size: 0.95rem;
   color: #FFE9D2;
   opacity: 0;
-  /* Retimed to land after the .mn-logo wordmark above it finishes
-     writing on (see .mn-logo--animate's 1.00s-1.86s sequence),
-     instead of fading in underneath it. */
-  animation: fadeIn 0.6s 1.55s ease forwards;
+  /* Retimed to land after the logo above it finishes popping in
+     (see .mn-logo-img--animate's 1.0s-1.65s sequence), instead of
+     fading in underneath it. */
+  animation: fadeIn 0.6s 1.5s ease forwards;
 }
 
 .loading-retry-btn {
@@ -1157,17 +1089,15 @@ body.landing-open {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Without this, .mn-logo--animate's letters/hands would sit stuck
-     at their 0% keyframe (opacity: 0) forever — the whole wordmark
-     would render invisible instead of skipping straight to fully
-     formed and static. */
-  .mn-logo--animate .mn-c,
-  .mn-logo--animate .mn-hands {
+  /* Without this, .mn-logo-img--animate would sit stuck at its 0%
+     keyframe (opacity: 0) forever — the logo would render invisible
+     instead of skipping straight to fully formed and static. */
+  .mn-logo-img--animate {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
   }
-  .login-title .mn-logo {
+  .login-title .mn-logo-img {
     animation: none !important;
     filter: none !important;
   }

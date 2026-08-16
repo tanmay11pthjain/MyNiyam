@@ -38,7 +38,7 @@ const db = firebase.database();
 //
 // Ashta Prakari only ever scores alongside Pooja — matching the live award
 // path (completePooja()/toggleAshtaPrakari()) and the day-edit dependsOn
-// rule (DAY_EDIT_FIELDS above). Raysiya has its OWN key (not devasiya's) so
+// rule (DAY_EDIT_FIELDS above). Raiya has its OWN key (not devasiya's) so
 // the two can be priced independently — see completePratikraman() below.
 const RAW_POINT_RULES = [
   { key: 'navkarsi', label: 'Navkarsi', points: (log, P) => log.navkarsiDone ? P.navkarsi : 0 },
@@ -132,7 +132,7 @@ const DAY_EDIT_FIELDS = [
   { key: 'enablePooja', prop: 'ashtaPrakariDone', icon: '🍽️', label: 'Ashta Prakari', type: 'toggle', dependsOn: 'poojaDone' },
   { key: 'enableSamayik', prop: 'samayikDone', icon: '🧘', label: 'Samayik', type: 'counter', step: 1 },
   { key: 'enablePratikraman', prop: 'devasiyaDone', icon: '🌅', label: 'Devasiya', type: 'toggle' },
-  { key: 'enablePratikraman', prop: 'raiyaDone', icon: '🌙', label: 'Raysiya', type: 'toggle' },
+  { key: 'enablePratikraman', prop: 'raiyaDone', icon: '🌙', label: 'Raiya', type: 'toggle' },
   { key: 'enableBookReading', prop: 'bookReadingMins', icon: '📖', label: 'Book Reading', type: 'counter', step: 30, unit: 'min' },
   { key: 'enableRatriBhojan', prop: 'ratriBhojanDone', icon: '🍽️', label: 'Ratri Bhojan Tyag', type: 'toggle' },
   { key: 'enableKandmool', prop: 'kandmoolDone', icon: '🌱', label: 'Kandmool Tyag', type: 'toggle' },
@@ -165,7 +165,7 @@ const NIYAM_STATS = [
     formatAmount: total => `${total} time${total === 1 ? '' : 's'}`
   },
   { flag: 'enablePratikraman', icon: '🌅', label: 'Devasiya', countsDay: log => !!log.devasiyaDone },
-  { flag: 'enablePratikraman', icon: '🌙', label: 'Raysiya', countsDay: log => !!log.raiyaDone },
+  { flag: 'enablePratikraman', icon: '🌙', label: 'Raiya', countsDay: log => !!log.raiyaDone },
   {
     flag: 'enableBookReading', icon: '📖', label: 'Book Reading', exportUnit: 'mins',
     countsDay: log => (log.bookReadingMins || 0) >= 30,
@@ -2078,7 +2078,7 @@ class KalyanMitra {
       pooja: { icon: '🪔', name: 'Jin Pooja', count: 0 },
       samayik: { icon: '🧘', name: 'Samayik', count: 0 },
       devasiya: { icon: '🌅', name: 'Devasiya', count: 0 },
-      raiya: { icon: '🌙', name: 'Raysiya', count: 0 },
+      raiya: { icon: '🌙', name: 'Raiya', count: 0 },
       book: { icon: '📖', name: 'Book Reading', count: 0 },
       ratribhojan: { icon: '🍽️', name: 'Ratri Bhojan Tyag', count: 0 },
       kandmool: { icon: '🌱', name: 'Kandmool Tyag', count: 0 },
@@ -3127,7 +3127,7 @@ class KalyanMitra {
   // independently by an admin at any time, even if their coded defaults
   // happen to start equal, so a shared header could otherwise go stale the
   // moment one is overridden without the other (same reasoning as the
-  // built-in Pratikraman card's Devasiya/Raysiya split).
+  // built-in Pratikraman card's Devasiya/Raiya split).
   _buildRegistrySlotCardHtml(entry, isExclusive) {
     const [a, b] = entry.items;
     const slotHtml = (item, idx) => `
@@ -4448,7 +4448,7 @@ class KalyanMitra {
     const statKey = slot === 'morning' ? 'totalDevasiya' : 'totalRaysiya';
     const wasDone = !!this.dailyLog[prop];
     this.dailyLog[prop] = !wasDone;
-    // Each slot is priced independently (RAW_POINT_RULES gives Raysiya its
+    // Each slot is priced independently (RAW_POINT_RULES gives Raiya its
     // OWN key rather than reusing Devasiya's) so an admin can set them
     // differently — this used to always price both off POINTS.devasiya,
     // which happened to agree with RAW_POINT_RULES only because the two
@@ -6202,7 +6202,7 @@ class KalyanMitra {
       { key: 'enablePooja', icon: '🪔', name: 'Jin Pooja', done: !!log.poojaDone, extra: log.ashtaPrakariDone ? '+Ashta' : '' },
       { key: 'enableSamayik', icon: '🧘', name: 'Samayik', done: (log.samayikDone || 0) > 0, val: `${log.samayikDone || 0}` },
       { key: 'enablePratikraman', icon: '🌅', name: 'Devasiya', done: !!log.devasiyaDone },
-      { key: 'enablePratikraman', icon: '🌙', name: 'Raysiya', done: !!log.raiyaDone },
+      { key: 'enablePratikraman', icon: '🌙', name: 'Raiya', done: !!log.raiyaDone },
       { key: 'enableBookReading', icon: '📖', name: 'Book Reading', done: (log.bookReadingMins || 0) >= 30, val: `${log.bookReadingMins || 0} min` },
       { key: 'enableRatriBhojan', icon: '🍽️', name: 'Ratri Bhojan Tyag', done: !!log.ratriBhojanDone },
       { key: 'enableKandmool', icon: '🌱', name: 'Kandmool Tyag', done: !!log.kandmoolDone },
@@ -6481,7 +6481,7 @@ class KalyanMitra {
   // scoring items (navkarJaap, devDarshan, guruVandan) get a second,
   // indented "sub" row for items[1] — points only, no toggle of its own,
   // same pattern as the hardcoded Jin Pooja/Ashta Prakari and
-  // Pratikraman/Raysiya pairs. Idempotent (checks a data-built marker) so a
+  // Pratikraman/Raiya pairs. Idempotent (checks a data-built marker) so a
   // repeated loadAdminSettingsUI() call (tab switches, the settings
   // listener firing mid-edit) never rebuilds it — that would drop whatever
   // the admin was mid-typing.
