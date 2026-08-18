@@ -136,6 +136,15 @@ const DEFAULT_SETTINGS = {
   enableSleep: true,
   enableScreenTime: true,
   enableDailyNiyam: true,
+  // Sub-niyam toggles — independent of their parent's flag above. Default
+  // true (unlike registry parent flags, which default false) because these
+  // two have been live under their parent for every existing sangh; `true`
+  // is what a settings object merged as {...DEFAULT_SETTINGS, ...snap.val()}
+  // falls back to for any sangh saved before this change, so nothing
+  // disappears from an existing dashboard. See _syncNiyamRowStates() in
+  // app.js for how the admin row ANDs this with the parent's own flag.
+  enableAshtaPrakari: true,
+  enableRaiya: true,
   currentDailyNiyamId: 0, // Index of PACHCHAKHANS array
   samayikTarget: 1,
   introSeen: false,
@@ -265,14 +274,14 @@ const NIYAM_REGISTRY = [
     section: 'bhakti', layout: 'dependent',
     items: [
       { prop: 'devDarshanDone', label: 'Dev Darshan', labelHindi: 'देव दर्शन', icon: '🛕', points: 10 },
-      { prop: 'chaityaVandanDone', label: 'Vidhi Sahit Chaitya Vandan', labelHindi: 'विधि सहित चैत्य वंदन', icon: '🙏', points: 20, dependsOn: 'devDarshanDone' },
+      { prop: 'chaityaVandanDone', label: 'Vidhi Sahit Chaitya Vandan', labelHindi: 'विधि सहित चैत्यवंदन', icon: '🙏', points: 20, dependsOn: 'devDarshanDone' },
     ]
   },
   {
     id: 'guruVandan', label: 'Guru Vandan', labelHindi: 'गुरु वंदन', icon: '🙇',
     section: 'bhakti', layout: 'exclusive',
     items: [
-      { prop: 'guruVandanHajirDone', label: 'Hajir', labelHindi: 'हाज़िर होकर', icon: '🙇', points: 20 },
+      { prop: 'guruVandanHajirDone', label: 'Hajir', labelHindi: 'हाजिर होकर', icon: '🙇', points: 20 },
       { prop: 'guruVandanMurtiDone', label: 'Murti/Photo', labelHindi: 'मूर्ति/फोटो द्वारा', icon: '🖼️', points: 10 },
     ]
   },
@@ -282,15 +291,15 @@ const NIYAM_REGISTRY = [
     items: [{ prop: 'shaamAartiDone', label: 'Shaam Aarti', labelHindi: 'शाम आरती', icon: '🪔', points: 20 }]
   },
   {
-    id: 'khamasmne', label: 'Gyaan ke 5 Khamasmne', labelHindi: 'ज्ञान के ५ खमासमणा', icon: '🙌',
+    id: 'khamasmne', label: 'Gyaan ke 5 Khamasmne', labelHindi: 'ज्ञान के 5 खमासमणा', icon: '🙌',
     section: 'bhakti', layout: 'simple',
-    items: [{ prop: 'khamasmneDone', label: 'Gyaan ke 5 Khamasmne', labelHindi: 'ज्ञान के ५ खमासमणा', icon: '🙌', points: 10 }]
+    items: [{ prop: 'khamasmneDone', label: 'Gyaan ke 5 Khamasmne', labelHindi: 'ज्ञान के 5 खमासमणा', icon: '🙌', points: 10 }]
   },
   // ----- ⭐ Aachar -----
   {
-    id: 'katasna', label: 'Katasna & Thavni', labelHindi: 'कटासना व ठवणी', icon: '🪵',
+    id: 'katasna', label: 'Katasna & Thavni', labelHindi: 'कटासणा व ठवणी', icon: '🪵',
     section: 'aachar', layout: 'simple',
-    items: [{ prop: 'katasnaDone', label: 'Katasna & Thavni', labelHindi: 'कटासना व ठवणी', icon: '🪵', points: 10 }]
+    items: [{ prop: 'katasnaDone', label: 'Katasna & Thavni', labelHindi: 'कटासणा व ठवणी', icon: '🪵', points: 10 }]
   },
   {
     id: 'supatraDaan', label: 'Supatra Daan', labelHindi: 'सुपात्र दान', icon: '🤲',

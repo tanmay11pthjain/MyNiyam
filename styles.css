@@ -669,6 +669,118 @@ html.booting-session #loading-screen {
 }
 
 /* ============================================================
+   PWA INSTALL BANNER — see #pwa-install-banner in index.html and
+   _updateInstallBanner() in app.js
+   ============================================================ */
+
+/* Bottom banner — #db-error-banner above owns the top; z-index 900 sits
+   comfortably above ordinary dashboard content (header is 50, dropdowns
+   top out around 200) but below .overlay's 999, so any modal (badges, day
+   detail, day-edit, …) naturally covers it rather than fighting for
+   attention with it. */
+#pwa-install-banner {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 28px rgba(62, 39, 35, 0.22);
+  border: 1px solid rgba(232, 114, 42, 0.15);
+  animation: fadeInUp 0.35s ease both;
+}
+
+.pwa-install-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pwa-install-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pwa-install-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pwa-install-text strong {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.pwa-install-text span {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+.pwa-install-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pwa-install-btn {
+  padding: 8px 16px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform var(--transition-fast), opacity var(--transition-fast);
+}
+
+.pwa-install-btn:hover { transform: scale(1.03); }
+.pwa-install-btn:active { transform: scale(0.97); }
+.pwa-install-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+.pwa-install-dismiss {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast);
+}
+.pwa-install-dismiss:hover { background: rgba(62, 39, 35, 0.08); }
+
+@media (min-width: 640px) {
+  #pwa-install-banner {
+    left: auto;
+    right: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    max-width: 380px;
+  }
+}
+
+/* ============================================================
    LANDING PAGE — first-look marketing overlay
    ============================================================ */
 
@@ -1100,6 +1212,9 @@ body.landing-open {
   .login-title .mn-logo-img {
     animation: none !important;
     filter: none !important;
+  }
+  #pwa-install-banner {
+    animation: none !important;
   }
   .landing-reveal {
     opacity: 1 !important;

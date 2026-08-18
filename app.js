@@ -129,10 +129,10 @@ const DAY_EDIT_FIELDS = [
   { key: 'enableSleep', prop: 'sleepDone', icon: '🌙', label: 'Sleep < 12AM', type: 'toggle' },
   { key: 'enablePranam', prop: 'pranamDone', icon: '🙇', label: 'Pranam', type: 'toggle' },
   { key: 'enablePooja', prop: 'poojaDone', icon: '🪔', label: 'Jin Pooja', type: 'toggle' },
-  { key: 'enablePooja', prop: 'ashtaPrakariDone', icon: '🍽️', label: 'Ashta Prakari', type: 'toggle', dependsOn: 'poojaDone' },
+  { key: 'enableAshtaPrakari', parentFlag: 'enablePooja', prop: 'ashtaPrakariDone', icon: '🍽️', label: 'Ashta Prakari', type: 'toggle', dependsOn: 'poojaDone' },
   { key: 'enableSamayik', prop: 'samayikDone', icon: '🧘', label: 'Samayik', type: 'counter', step: 1 },
   { key: 'enablePratikraman', prop: 'devasiyaDone', icon: '🌅', label: 'Devasiya', type: 'toggle' },
-  { key: 'enablePratikraman', prop: 'raiyaDone', icon: '🌙', label: 'Raiya', type: 'toggle' },
+  { key: 'enableRaiya', parentFlag: 'enablePratikraman', prop: 'raiyaDone', icon: '🌙', label: 'Raiya', type: 'toggle' },
   { key: 'enableBookReading', prop: 'bookReadingMins', icon: '📖', label: 'Book Reading', type: 'counter', step: 30, unit: 'min' },
   { key: 'enableRatriBhojan', prop: 'ratriBhojanDone', icon: '🍽️', label: 'Ratri Bhojan Tyag', type: 'toggle' },
   { key: 'enableKandmool', prop: 'kandmoolDone', icon: '🌱', label: 'Kandmool Tyag', type: 'toggle' },
@@ -165,7 +165,7 @@ const NIYAM_STATS = [
     formatAmount: total => `${total} time${total === 1 ? '' : 's'}`
   },
   { flag: 'enablePratikraman', icon: '🌅', label: 'Devasiya', countsDay: log => !!log.devasiyaDone },
-  { flag: 'enablePratikraman', icon: '🌙', label: 'Raiya', countsDay: log => !!log.raiyaDone },
+  { flag: 'enableRaiya', parentFlag: 'enablePratikraman', icon: '🌙', label: 'Raiya', countsDay: log => !!log.raiyaDone },
   {
     flag: 'enableBookReading', icon: '📖', label: 'Book Reading', exportUnit: 'mins',
     countsDay: log => (log.bookReadingMins || 0) >= 30,
@@ -178,8 +178,7 @@ const NIYAM_STATS = [
   { flag: 'enableRatriBhojan', icon: '🍽️', label: 'Ratri Bhojan Tyag', countsDay: log => !!log.ratriBhojanDone },
   { flag: 'enableKandmool', icon: '🌱', label: 'Kandmool Tyag', countsDay: log => !!log.kandmoolDone },
   { flag: 'enableDailyNiyam', icon: '✨', label: 'Daily Niyam', countsDay: log => !!log.dailyNiyamDone },
-  // Rides on the Pooja setting — there is no separate enable flag, matching DAY_EDIT_FIELDS.
-  { flag: 'enablePooja', icon: '🍽️', label: 'Ashta Prakari', countsDay: log => !!log.ashtaPrakariDone },
+  { flag: 'enableAshtaPrakari', parentFlag: 'enablePooja', icon: '🍽️', label: 'Ashta Prakari', countsDay: log => !!log.ashtaPrakariDone },
   {
     flag: 'enableScreenTime', icon: '📱', label: 'Screen Time', penalty: true, exportUnit: 'mins',
     countsDay: () => false, // a penalty is never "followed"
@@ -252,8 +251,25 @@ function registerNiyams() {
       seenPropsThisEntry.forEach(p => usedProps.add(p));
       entry.flag = 'enable' + entry.id.charAt(0).toUpperCase() + entry.id.slice(1);
 
-      entry.items.forEach(item => {
+      entry.items.forEach((item, idx) => {
         DEFAULT_DAILY_LOG[item.prop] = false;
+
+        // The second item of a 2-item entry (dependent/dual/exclusive) is
+        // the "sub" niyam _renderAdminNiyamRows() renders as an indented
+        // row — give it its OWN flag so an admin can switch it off
+        // independently of the parent, instead of it riding entry.flag.
+        // Defaults true (unlike entry.flag below, which defaults false) —
+        // these have been live under their parent for every existing
+        // sangh, so a settings object merged as {...DEFAULT_SETTINGS,
+        // ...snap.val()} must fall back to "still on" for a sangh saved
+        // before this change. Mirrors enableAshtaPrakari/enableRaiya's
+        // identical reasoning in data.js.
+        if (idx === 1) {
+          const base = item.prop.slice(0, -4); // strip trailing "Done"
+          item.flag = 'enable' + base.charAt(0).toUpperCase() + base.slice(1);
+          item.parentFlag = entry.flag;
+          DEFAULT_SETTINGS[item.flag] = true;
+        }
 
         RAW_POINT_RULES.push({
           key: item.prop,
@@ -266,12 +282,14 @@ function registerNiyams() {
         });
 
         DAY_EDIT_FIELDS.push({
-          key: entry.flag, prop: item.prop, icon: item.icon || entry.icon,
+          key: item.flag || entry.flag, parentFlag: item.flag ? item.parentFlag : undefined,
+          prop: item.prop, icon: item.icon || entry.icon,
           label: item.label, type: 'toggle', dependsOn: item.dependsOn
         });
 
         NIYAM_STATS.push({
-          flag: entry.flag, icon: item.icon || entry.icon, label: item.label,
+          flag: item.flag || entry.flag, parentFlag: item.flag ? item.parentFlag : undefined,
+          icon: item.icon || entry.icon, label: item.label,
           countsDay: log => !!log[item.prop] && (!item.dependsOn || !!log[item.dependsOn])
         });
       });
@@ -454,6 +472,11 @@ class KalyanMitra {
     } catch (e) {
       console.error('Profile switcher setup failed (non-fatal):', e);
     }
+    try {
+      this._initInstallBanner();
+    } catch (e) {
+      console.error('Install banner setup failed (non-fatal):', e);
+    }
   }
 
   // Binds the shared logout-confirmation overlay's Cancel/Confirm buttons
@@ -483,6 +506,108 @@ class KalyanMitra {
   closeLogoutConfirm() {
     const overlay = document.getElementById('logout-confirm-overlay');
     if (overlay) { overlay.classList.remove('show'); overlay.classList.add('hidden'); }
+  }
+
+  // ===== PWA INSTALL REMINDER =====
+  // See #pwa-install-banner in index.html and its CSS in styles.css — a
+  // dismissible BOTTOM banner (never top — #db-error-banner already owns
+  // the top at z-index 1090, and the two must never collide) nudging a
+  // phone visitor to install the app. Deliberately has no service worker
+  // behind it (see manifest.json's own comment) — Chrome may not fire
+  // beforeinstallprompt without one, in which case Android falls back to
+  // the same manual "Add to Home Screen" instructions iOS always needs,
+  // rather than showing a button that would do nothing.
+  _isStandaloneDisplay() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }
+
+  _isIOSDevice() {
+    // iPadOS 13+ reports as "MacIntel" but is touch-capable, unlike a real Mac.
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  _isLikelyPhone() {
+    return window.matchMedia('(pointer: coarse)').matches && window.innerWidth < 768;
+  }
+
+  // Binds the banner's buttons once, here (constructor time) — mirrors
+  // _initLogoutConfirm() just above. beforeinstallprompt can fire before OR
+  // after the dashboard is visible, so it's captured here regardless of
+  // role/screen, and _updateInstallBanner() (called separately once the
+  // dashboard actually renders — see initUser()) is what decides whether to
+  // actually show anything.
+  _initInstallBanner() {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      this._deferredInstallPrompt = e;
+      this._updateInstallBanner();
+    });
+    window.addEventListener('appinstalled', () => {
+      this._deferredInstallPrompt = null;
+      const banner = document.getElementById('pwa-install-banner');
+      if (banner) banner.classList.add('hidden');
+    });
+
+    const installBtn = document.getElementById('btn-pwa-install');
+    if (installBtn) {
+      installBtn.addEventListener('click', async () => {
+        if (!this._deferredInstallPrompt) return;
+        const promptEvent = this._deferredInstallPrompt;
+        this._deferredInstallPrompt = null;
+        installBtn.disabled = true;
+        try {
+          promptEvent.prompt();
+          await promptEvent.userChoice;
+        } catch (e) { /* native prompt dismissed/failed — non-fatal */ }
+        installBtn.disabled = false;
+        this._updateInstallBanner();
+      });
+    }
+
+    const dismissBtn = document.getElementById('btn-pwa-dismiss');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', () => {
+        try { localStorage.setItem('myniyam_installBannerDismissedAt', String(Date.now())); } catch (e) { /* storage full/unavailable — non-fatal */ }
+        const banner = document.getElementById('pwa-install-banner');
+        if (banner) banner.classList.add('hidden');
+      });
+    }
+  }
+
+  // Called once the dashboard is actually visible (initUser()) and again
+  // whenever beforeinstallprompt fires (it can arrive after that first
+  // call). Every DOM lookup is independently null-guarded — this must
+  // never be able to throw and take the dashboard down with it, matching
+  // renderPanchang()/renderHeader()'s established pattern.
+  _updateInstallBanner() {
+    const banner = document.getElementById('pwa-install-banner');
+    if (!banner) return;
+
+    if (this._isStandaloneDisplay() || !this._isLikelyPhone() || this.currentRole !== 'user') {
+      banner.classList.add('hidden');
+      return;
+    }
+
+    const dismissedAt = parseInt(localStorage.getItem('myniyam_installBannerDismissedAt') || '0', 10);
+    if (dismissedAt && (Date.now() - dismissedAt) < 14 * 24 * 60 * 60 * 1000) {
+      banner.classList.add('hidden');
+      return;
+    }
+
+    const installBtn = document.getElementById('btn-pwa-install');
+    const subtext = document.getElementById('pwa-install-subtext');
+    if (this._deferredInstallPrompt) {
+      if (installBtn) installBtn.classList.remove('hidden');
+      if (subtext) subtext.textContent = 'Add to your home screen for quick access';
+    } else if (this._isIOSDevice()) {
+      if (installBtn) installBtn.classList.add('hidden');
+      if (subtext) subtext.textContent = 'Tap Share, then "Add to Home Screen"';
+    } else {
+      if (installBtn) installBtn.classList.add('hidden');
+      if (subtext) subtext.textContent = 'Open your browser menu and tap "Add to Home Screen"';
+    }
+    banner.classList.remove('hidden');
   }
 
   // Binds the shared profile-switcher overlay's entry points and controls
@@ -1523,6 +1648,14 @@ class KalyanMitra {
     // background — never blocks the dashboard on a Sheet round-trip.
     this._loadHeaderAvatar();
     this._loadAccountProfiles();
+    // Dashboard is now visible and this.currentRole is 'user' — the one
+    // point _updateInstallBanner()'s role check can actually pass. Wrapped
+    // separately so a throw here can never take any of the above down.
+    try {
+      this._updateInstallBanner();
+    } catch (e) {
+      console.error('Install banner update failed (non-fatal):', e);
+    }
   }
 
   // Recomputes every day's kpEarned from RAW_POINT_RULES (the same rules the
@@ -1952,6 +2085,10 @@ class KalyanMitra {
     document.getElementById('admin-panel').classList.remove('hidden');
     document.getElementById('app').classList.add('app-hidden');
     document.getElementById('app').classList.remove('app-visible');
+    // Covers a user->admin profile switch without a full reload — nothing
+    // else would re-run _updateInstallBanner()'s currentRole check here.
+    const pwaBannerAdmin = document.getElementById('pwa-install-banner');
+    if (pwaBannerAdmin) pwaBannerAdmin.classList.add('hidden');
     // Establishes the root history entry (see _initNavHistory()) — matches
     // the "active" class index.html already ships admin-tab-leaderboard
     // with. Back from here leaves the app rather than being trapped.
@@ -4213,15 +4350,24 @@ class KalyanMitra {
       }
       if (checkMorning) checkMorning.textContent = d.devasiyaDone ? '●' : '○';
 
-      if (btnEvening) {
-        if (d.raiyaDone) btnEvening.classList.add('done');
-        else btnEvening.classList.remove('done');
-        btnEvening.disabled = locked;
+      // Raiya has its own sub-flag (see registerNiyams()'s reasoning) —
+      // hide the evening slot independently of the parent Pratikraman
+      // toggle, and size "X/N completed" to whichever slots are actually
+      // showing so it never gets stuck reading "…/2" with only one slot on
+      // screen.
+      if (btnEvening) btnEvening.style.display = s.enableRaiya ? '' : 'none';
+      if (s.enableRaiya) {
+        if (btnEvening) {
+          if (d.raiyaDone) btnEvening.classList.add('done');
+          else btnEvening.classList.remove('done');
+          btnEvening.disabled = locked;
+        }
+        if (checkEvening) checkEvening.textContent = d.raiyaDone ? '●' : '○';
       }
-      if (checkEvening) checkEvening.textContent = d.raiyaDone ? '●' : '○';
 
-      const pCount = (d.devasiyaDone ? 1 : 0) + (d.raiyaDone ? 1 : 0);
-      if (pStatus) pStatus.textContent = `${pCount}/2 completed`;
+      const pSlotTotal = 1 + (s.enableRaiya ? 1 : 0);
+      const pCount = (d.devasiyaDone ? 1 : 0) + (s.enableRaiya && d.raiyaDone ? 1 : 0);
+      if (pStatus) pStatus.textContent = `${pCount}/${pSlotTotal} completed`;
       if (pCard) {
         if (pCount > 0) pCard.classList.add('completed');
         else pCard.classList.remove('completed');
@@ -4233,7 +4379,11 @@ class KalyanMitra {
     // Pooja
     updateSimpleCard('pooja', d.poojaDone);
     const ashtaCheck = document.getElementById('ashta-checkbox');
-    if (ashtaCheck) {
+    // Ashta Prakari has its own sub-flag — hide the whole toggle (checkbox
+    // + its points label) independently of the parent Jin Pooja toggle.
+    const ashtaToggle = ashtaCheck && ashtaCheck.closest('.ashta-toggle');
+    if (ashtaToggle) ashtaToggle.style.display = s.enableAshtaPrakari ? '' : 'none';
+    if (ashtaCheck && s.enableAshtaPrakari) {
       ashtaCheck.checked = d.ashtaPrakariDone || false;
       ashtaCheck.disabled = locked;
     }
@@ -4290,18 +4440,33 @@ class KalyanMitra {
         const [parent, child] = entry.items;
         updateSimpleCard(entry.id, !!d[parent.prop]);
         const checkbox = document.getElementById(`${entry.id}-child-checkbox`);
-        if (checkbox) {
+        // The child can carry its own sub-flag (registerNiyams()) — hide
+        // its toggle independently of the parent, same as the built-in
+        // Ashta Prakari/Jin Pooja pair.
+        const childEnabled = !child.flag || s[child.flag];
+        const childToggle = checkbox && checkbox.closest('.ashta-toggle');
+        if (childToggle) childToggle.style.display = childEnabled ? '' : 'none';
+        if (checkbox && childEnabled) {
           checkbox.checked = !!d[child.prop];
           checkbox.disabled = locked;
         }
       } else {
-        // 'dual' and 'exclusive' — two independent slot buttons
+        // 'dual' and 'exclusive' — two independent slot buttons. A sub-
+        // item's own flag can hide its slot independently of the parent —
+        // mirrors the built-in Pratikraman card's Raiya handling, and
+        // "X/N completed" counts only the slots actually showing so it
+        // never gets stuck reading "…/2" with one slot hidden.
         let doneCount = 0;
         let doneItem = null;
+        let enabledCount = 0;
         entry.items.forEach((item, idx) => {
+          const itemEnabled = !item.flag || s[item.flag];
+          const slotBtn = document.getElementById(`${entry.id}-opt${idx}`);
+          if (slotBtn) slotBtn.style.display = itemEnabled ? '' : 'none';
+          if (!itemEnabled) return;
+          enabledCount++;
           const isDone = !!d[item.prop];
           if (isDone) { doneCount++; doneItem = item; }
-          const slotBtn = document.getElementById(`${entry.id}-opt${idx}`);
           if (slotBtn) {
             slotBtn.classList.toggle('done', isDone);
             slotBtn.disabled = locked;
@@ -4313,7 +4478,7 @@ class KalyanMitra {
         if (statusEl) {
           statusEl.textContent = entry.layout === 'exclusive'
             ? (doneItem ? `${doneItem.label} selected` : 'None selected')
-            : `${doneCount}/${entry.items.length} completed`;
+            : `${doneCount}/${enabledCount} completed`;
         }
         card.classList.toggle('completed', doneCount > 0);
       }
@@ -4335,12 +4500,22 @@ class KalyanMitra {
     (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
       if (!entry.flag || !s[entry.flag]) return;
       if (entry.layout === 'exclusive') {
+        // A disabled option's own button is already hidden (§1.6 dashboard
+        // gating), so `some(...)` can only ever see the enabled option(s)
+        // in practice — no extra check needed here for the pair to still
+        // count as one satisfiable task.
         total++;
         if (entry.items.some(item => !!d[item.prop])) completed++;
         return;
       }
       entry.items.forEach(item => {
         if (item.dependsOn) return;
+        // 'dual' layout's second item (e.g. Navkar Jaap — Night) can carry
+        // its own independent flag (see registerNiyams()) — skip it from
+        // the total entirely when switched off, exactly like Raiya is
+        // skipped in getTotalTasksCount()/_isLogComplete(), so disabling it
+        // can never make Perfect Day unreachable.
+        if (item.flag && !s[item.flag]) return;
         total++;
         if (d[item.prop]) completed++;
       });
@@ -4377,7 +4552,8 @@ class KalyanMitra {
     if (s.enablePranam) total++;
     if (s.enablePooja) total++;
     if (s.enableSamayik) total++;
-    if (s.enablePratikraman) total += 2;
+    if (s.enablePratikraman) total++; // Devasiya — no independent sub-flag
+    if (s.enablePratikraman && s.enableRaiya) total++;
     if (s.enableBookReading) total++;
     if (s.enableRatriBhojan) total++;
     if (s.enableKandmool) total++;
@@ -4741,7 +4917,7 @@ class KalyanMitra {
     if (s.enablePooja && !d.poojaDone) return false;
     if (s.enableSamayik && (d.samayikDone || 0) < parseInt(s.samayikTarget || 1)) return false;
     if (s.enablePratikraman && !d.devasiyaDone) return false;
-    if (s.enablePratikraman && !d.raiyaDone) return false;
+    if (s.enablePratikraman && s.enableRaiya && !d.raiyaDone) return false;
     if (s.enableBookReading && (d.bookReadingMins || 0) < 30) return false;
     if (s.enableRatriBhojan && !d.ratriBhojanDone) return false;
     if (s.enableKandmool && !d.kandmoolDone) return false;
@@ -4761,7 +4937,7 @@ class KalyanMitra {
     if (s.enablePooja && d.poojaDone) c++;
     if (s.enableSamayik && (d.samayikDone || 0) >= parseInt(s.samayikTarget)) c++;
     if (s.enablePratikraman && d.devasiyaDone) c++;
-    if (s.enablePratikraman && d.raiyaDone) c++;
+    if (s.enablePratikraman && s.enableRaiya && d.raiyaDone) c++;
     if (s.enableBookReading && (d.bookReadingMins || 0) >= 30) c++;
     if (s.enableRatriBhojan && d.ratriBhojanDone) c++;
     if (s.enableKandmool && d.kandmoolDone) c++;
@@ -5495,7 +5671,7 @@ class KalyanMitra {
         { enabled: s.enablePooja, val: log.poojaDone },
         { enabled: s.enableSamayik, val: (log.samayikDone || 0) >= parseInt(s.samayikTarget || 1) },
         { enabled: s.enablePratikraman, val: !!log.devasiyaDone },
-        { enabled: s.enablePratikraman, val: !!log.raiyaDone },
+        { enabled: s.enablePratikraman && s.enableRaiya, val: !!log.raiyaDone },
         { enabled: s.enableBookReading, val: (log.bookReadingMins || 0) >= 30 },
         { enabled: s.enableRatriBhojan, val: log.ratriBhojanDone },
         { enabled: s.enableKandmool, val: log.kandmoolDone },
@@ -5516,7 +5692,7 @@ class KalyanMitra {
       if (s.enablePooja && log.poojaDone) icons.push('🪔');
       if (s.enableSamayik && (log.samayikDone || 0) > 0) icons.push('🧘');
       if (s.enablePratikraman && log.devasiyaDone) icons.push('🌅');
-      if (s.enablePratikraman && log.raiyaDone) icons.push('🌙');
+      if (s.enablePratikraman && s.enableRaiya && log.raiyaDone) icons.push('🌙');
       if (s.enableBookReading && (log.bookReadingMins || 0) >= 30) icons.push('📖');
       if (s.enableRatriBhojan && log.ratriBhojanDone) icons.push('🍽️');
       if (s.enableKandmool && log.kandmoolDone) icons.push('🌱');
@@ -5587,7 +5763,7 @@ class KalyanMitra {
   // site (the lifetime grid, the Monthly Niyam Stats overlay) wants.
   _computeNiyamRange(logs, fromKey, toKey, settings, includePenalties = true, pointsMap) {
     const s = settings || DEFAULT_SETTINGS;
-    const enabled = NIYAM_STATS.filter(n => s[n.flag] && (includePenalties || !n.penalty));
+    const enabled = NIYAM_STATS.filter(n => s[n.flag] && (!n.parentFlag || s[n.parentFlag]) && (includePenalties || !n.penalty));
     const stats = enabled.map(n => ({
       icon: n.icon, label: n.label, days: 0,
       amount: n.amount ? 0 : null, formatAmount: n.formatAmount || null,
@@ -6202,7 +6378,7 @@ class KalyanMitra {
       { key: 'enablePooja', icon: '🪔', name: 'Jin Pooja', done: !!log.poojaDone, extra: log.ashtaPrakariDone ? '+Ashta' : '' },
       { key: 'enableSamayik', icon: '🧘', name: 'Samayik', done: (log.samayikDone || 0) > 0, val: `${log.samayikDone || 0}` },
       { key: 'enablePratikraman', icon: '🌅', name: 'Devasiya', done: !!log.devasiyaDone },
-      { key: 'enablePratikraman', icon: '🌙', name: 'Raiya', done: !!log.raiyaDone },
+      { key: 'enableRaiya', parentFlag: 'enablePratikraman', icon: '🌙', name: 'Raiya', done: !!log.raiyaDone },
       { key: 'enableBookReading', icon: '📖', name: 'Book Reading', done: (log.bookReadingMins || 0) >= 30, val: `${log.bookReadingMins || 0} min` },
       { key: 'enableRatriBhojan', icon: '🍽️', name: 'Ratri Bhojan Tyag', done: !!log.ratriBhojanDone },
       { key: 'enableKandmool', icon: '🌱', name: 'Kandmool Tyag', done: !!log.kandmoolDone },
@@ -6212,12 +6388,12 @@ class KalyanMitra {
     (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
       if (!entry.flag) return;
       entry.items.forEach(item => {
-        activities.push({ key: entry.flag, icon: item.icon || entry.icon || '', name: item.label, done: !!log[item.prop] });
+        activities.push({ key: item.flag || entry.flag, parentFlag: item.flag ? item.parentFlag : undefined, icon: item.icon || entry.icon || '', name: item.label, done: !!log[item.prop] });
       });
     });
 
     gridEl.innerHTML = activities
-      .filter(a => s[a.key])
+      .filter(a => s[a.key] && (!a.parentFlag || s[a.parentFlag]))
       .map(a => `
         <div class="day-detail-item ${a.done ? 'done' : 'missed'}">
           <span class="day-detail-icon">${a.icon}</span>
@@ -6280,7 +6456,7 @@ class KalyanMitra {
     if (!gridEl || !draft) return;
     const s = this.settings || DEFAULT_SETTINGS;
 
-    gridEl.innerHTML = DAY_EDIT_FIELDS.filter(f => s[f.key]).map(f => {
+    gridEl.innerHTML = DAY_EDIT_FIELDS.filter(f => s[f.key] && (!f.parentFlag || s[f.parentFlag])).map(f => {
       if (f.type === 'toggle') {
         const disabled = !!(f.dependsOn && !draft[f.dependsOn]);
         const checked = !disabled && !!draft[f.prop];
@@ -6513,12 +6689,16 @@ class KalyanMitra {
           </div>`;
         if (entry.items.length > 1) {
           const sub = entry.items[1];
+          // sub.flag (registerNiyams()) is this item's own independent
+          // toggle — id follows the same admin-toggle-{prop minus "Done"}
+          // convention as the hand-written Ashta Prakari/Raiya rows.
+          const subToggleId = `admin-toggle-${sub.prop.slice(0, -4)}`;
           html += `
-          <div class="setting-item niyam-row niyam-row-sub" data-toggle-id="${toggleId}">
-            <div class="niyam-row-label"><label for="admin-points-${sub.prop}">↳ ${sub.label}</label></div>
+          <div class="setting-item niyam-row niyam-row-sub" data-toggle-id="${subToggleId}" data-parent-toggle-id="${toggleId}">
+            <div class="niyam-row-label"><label for="${subToggleId}">↳ ${sub.label}</label></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-${sub.prop}" placeholder="${sub.points}">
-              <span class="niyam-toggle-spacer" aria-hidden="true"></span>
+              <input type="checkbox" id="${subToggleId}">
             </div>
           </div>`;
         }
@@ -6572,7 +6752,13 @@ class KalyanMitra {
   _syncNiyamRowStates() {
     document.querySelectorAll('#admin-tab-settings .niyam-row[data-toggle-id]').forEach(row => {
       const toggle = document.getElementById(row.dataset.toggleId);
-      const on = !!(toggle && toggle.checked);
+      // A sub-row (Ashta Prakari, Raiya, and the 3 registry-generated
+      // sub-niyams) also carries data-parent-toggle-id — it only reads as
+      // "on" when BOTH its own checkbox and its parent's are checked, so a
+      // switched-off parent visibly dims + locks the child too, even
+      // though the child's own flag was never touched.
+      const parentToggle = row.dataset.parentToggleId ? document.getElementById(row.dataset.parentToggleId) : null;
+      const on = !!(toggle && toggle.checked) && (!parentToggle || parentToggle.checked);
       row.classList.toggle('is-off', !on);
       const numEl = row.querySelector('input[type="number"]');
       if (numEl) numEl.disabled = !on;
@@ -6586,8 +6772,10 @@ class KalyanMitra {
     document.getElementById('admin-toggle-sleep').checked = s.enableSleep;
     document.getElementById('admin-toggle-pranam').checked = s.enablePranam;
     document.getElementById('admin-toggle-pooja').checked = s.enablePooja;
+    document.getElementById('admin-toggle-ashtaPrakari').checked = s.enableAshtaPrakari;
     document.getElementById('admin-toggle-samayik').checked = s.enableSamayik;
     document.getElementById('admin-toggle-pratikraman').checked = s.enablePratikraman;
+    document.getElementById('admin-toggle-raiya').checked = s.enableRaiya;
     document.getElementById('admin-toggle-book').checked = s.enableBookReading;
     document.getElementById('admin-toggle-ratribhojan').checked = s.enableRatriBhojan;
     document.getElementById('admin-toggle-kandmool').checked = s.enableKandmool;
@@ -6599,6 +6787,13 @@ class KalyanMitra {
       if (!entry.flag) return;
       const el = document.getElementById(`admin-toggle-${entry.id}`);
       if (el) el.checked = !!s[entry.flag];
+      // Sub-item (items[1]) with its own flag — see registerNiyams() and
+      // _renderAdminNiyamRows()'s subToggleId, same id convention.
+      const sub = entry.items && entry.items[1];
+      if (sub && sub.flag) {
+        const subEl = document.getElementById(`admin-toggle-${sub.prop.slice(0, -4)}`);
+        if (subEl) subEl.checked = !!s[sub.flag];
+      }
     });
 
     const niyamSelect = document.getElementById('admin-select-niyam');
@@ -6627,8 +6822,10 @@ class KalyanMitra {
     s.enableSleep = document.getElementById('admin-toggle-sleep').checked;
     s.enablePranam = document.getElementById('admin-toggle-pranam').checked;
     s.enablePooja = document.getElementById('admin-toggle-pooja').checked;
+    s.enableAshtaPrakari = document.getElementById('admin-toggle-ashtaPrakari').checked;
     s.enableSamayik = document.getElementById('admin-toggle-samayik').checked;
     s.enablePratikraman = document.getElementById('admin-toggle-pratikraman').checked;
+    s.enableRaiya = document.getElementById('admin-toggle-raiya').checked;
     s.enableBookReading = document.getElementById('admin-toggle-book').checked;
     s.enableRatriBhojan = document.getElementById('admin-toggle-ratribhojan').checked;
     s.enableKandmool = document.getElementById('admin-toggle-kandmool').checked;
@@ -6640,6 +6837,11 @@ class KalyanMitra {
       if (!entry.flag) return;
       const el = document.getElementById(`admin-toggle-${entry.id}`);
       if (el) s[entry.flag] = el.checked;
+      const sub = entry.items && entry.items[1];
+      if (sub && sub.flag) {
+        const subEl = document.getElementById(`admin-toggle-${sub.prop.slice(0, -4)}`);
+        if (subEl) s[sub.flag] = subEl.checked;
+      }
     });
 
     // Location removed from admin UI - fetched via Geolocation
@@ -6905,6 +7107,11 @@ class KalyanMitra {
     document.getElementById('app').classList.remove('app-visible');
     document.getElementById('admin-panel').classList.add('hidden');
     document.getElementById('login-screen').classList.remove('hidden');
+    // currentRole is already null (set at the top of this function) — force
+    // the install banner hidden rather than leaving it floating over the
+    // login/landing screen it would otherwise still be sitting on top of.
+    const pwaBanner = document.getElementById('pwa-install-banner');
+    if (pwaBanner) pwaBanner.classList.add('hidden');
 
     // Clear error
     const loginErr = document.getElementById('login-error');
