@@ -116,6 +116,24 @@ function setLivePoints(map) {
   _livePointMap = map;
 }
 
+// Resolves a sangh's effective niyam settings: DEFAULT_SETTINGS, overlaid by
+// the legacy global `settings` node (the single shared node this app used
+// before per-sangh settings existed), then overlaid by that sangh's OWN
+// sangh_settings/{code}/settings. Order is load-bearing — registry niyam
+// flags (Navkar Jaap, Dev Darshan, Guru Vandan, …) default to false in
+// DEFAULT_SETTINGS ([registerNiyams()]), so without the legacy layer in the
+// middle, every sangh would lose all of them from every member's dashboard
+// the moment per-sangh settings ship, until an admin happens to re-save.
+// A sangh that HAS saved its own settings simply overrides both layers —
+// no migration write needed, this just self-heals on read.
+function resolveSettings(sanghNode, legacyGlobal) {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...(legacyGlobal || {}),
+    ...((sanghNode && sanghNode.settings) || {}),
+  };
+}
+
 // ===== STREAK SAVER — PAST-DAY EDIT FIELD SPEC =====
 // Drives the day-edit overlay's rows. 'toggle' fields flip a boolean prop;
 // 'counter' fields step a numeric prop by `step`; 'screentime' steps whole
@@ -443,6 +461,7 @@ class KalyanMitra {
     this._loadingRetryTimer = null;
     this._openOverlayStack = []; // overlay ids currently open, most-recently-opened last
     this._navHandlingPop = false; // true only while _navOnPopState() itself is running
+    this._adminSettingsDirty = false; // true while the admin Settings tab has an unsaved edit — see loadAdminSettingsUI()
     // init() is the critical path (auth) and must start first, unconditionally.
     // _initLanding() is purely decorative — wrapped so any exception in it can
     // never prevent auth from running.
@@ -2068,6 +2087,11 @@ class KalyanMitra {
     this._adminSanghCodes = this._currentAuthUser.sanghCodes || [];
     this._adminUserUids = []; // UIDs this admin manages
     this._adminSanghPoints = {}; // code -> raw stored sangh_settings value (or null), kept fresh by the listeners started below
+    // A stale `true` left over from a PREVIOUS admin session (this app
+    // instance survives a logout/login cycle without a page reload) would
+    // otherwise permanently block loadAdminSettingsUI() from ever painting
+    // anything in this new session.
+    this._adminSettingsDirty = false;
     this.renderAdminHeaderBrand();
     // Not awaited: paints the admin header avatar from cache immediately
     // (inside the function itself) and reconciles the profile-switcher list
@@ -2097,33 +2121,40 @@ class KalyanMitra {
     // Setup Admin Event Listeners (Tabs, Logout, etc.)
     this.setupAdminEventListeners();
 
-    // Start global settings listener so Settings tab works immediately
+    // Legacy global settings — now a read-only FALLBACK layer only (see
+    // resolveSettings()), for any sangh that hasn't saved its own settings
+    // yet. Nothing writes here anymore; still listened live for symmetry
+    // with the per-sangh listeners below.
     this._settingsRef = db.ref('settings');
     this._settingsListener = this._settingsRef.on('value', snap => {
-      this.settings = snap.val() ? { ...DEFAULT_SETTINGS, ...snap.val() } : { ...DEFAULT_SETTINGS };
+      this._legacyGlobalSettings = snap.val() || {};
       this.loadAdminSettingsUI();
     }, err => {
-      // this.settings already defaulted a few lines up, so a denied read
-      // here just means Settings won't reflect the sangh's saved values —
-      // never a crash, and the admin panel is already visible either way.
+      // The fallback layer just stays empty on a denied read — Settings
+      // still resolves from DEFAULT_SETTINGS and whatever the sangh itself
+      // has saved. Never a crash, and the admin panel is already visible
+      // either way.
       console.error('Firebase read failed for "settings":', err);
       this._showDbErrorBanner(['settings']);
     });
 
-    // Per-sangh niyam point overrides — one listener per managed sangh, so
-    // the points UI and every aggregate (_adminSanghPointMap(), used by the
-    // export/poster) always reflect the latest stored value. Cached RAW
-    // (not merged with defaults) so _adminSanghPointMap()/_loadAdminPointInputs()
-    // can resolve it fresh on demand.
+    // One listener per managed sangh, caching the WHOLE raw node — points,
+    // pointsVersion AND settings (see resolveSettings()) — so the points
+    // UI, the toggles, and every aggregate (_adminSanghPointMap(), used by
+    // the export/poster) always reflect the latest stored value. Cached RAW
+    // (not merged with defaults) so resolveSettings()/_adminSanghPointMap()/
+    // _loadAdminPointInputs() can each resolve it fresh on demand.
     this._adminSanghCodes.forEach(code => {
       db.ref(`sangh_settings/${code}`).on('value', snap => {
         this._adminSanghPoints[code] = snap.val() || null;
-        // Only repaints if the points UI is currently showing THIS sangh —
-        // a background sangh's listener firing must never clobber whatever
-        // sangh the admin has selected in the dropdown right now.
+        // Only repaints if the Settings tab is currently showing THIS
+        // sangh — a background sangh's listener firing must never clobber
+        // whatever sangh the admin has selected in the dropdown right now.
+        // loadAdminSettingsUI() itself also guards against clobbering an
+        // in-progress edit (see this._adminSettingsDirty).
         const sel = document.getElementById('admin-points-sangh');
         const activeCode = (sel && sel.value) || this._adminSanghCodes[0];
-        if (activeCode === code) this._loadAdminPointInputs();
+        if (activeCode === code) this.loadAdminSettingsUI();
       }, err => console.error(`Firebase read failed for "sangh_settings/${code}":`, err));
     });
 
@@ -2289,6 +2320,24 @@ class KalyanMitra {
   _adminSanghPointMap(sanghCode) {
     const stored = sanghCode ? (this._adminSanghPoints || {})[sanghCode] : null;
     return resolvePointMap(stored && stored.points);
+  }
+
+  // Resolves ONE managed member's own sangh's niyam settings — for admin
+  // drill-down views of a SPECIFIC member (History, Day Detail, Day Edit,
+  // their row of the Monthly Stats overlay). Before per-sangh settings
+  // existed, this.settings (the global node) was accurate for every member
+  // regardless of sangh, since there was only one settings state in the
+  // whole app — these views all read it directly. Now that sanghs can
+  // genuinely differ, they must resolve THIS member's own sangh instead, or
+  // an admin reviewing a Sangh B member would see Sangh A's (or their own
+  // default) niyam set. Falls back to this.settings — the same value these
+  // call sites always used — if the member's record or sangh code isn't
+  // resolvable yet (e.g. selected before the leaderboard snapshot lands).
+  _settingsForMember(uid) {
+    const record = (this._adminUserRecords || {})[uid];
+    const sanghCode = record && record.registration && record.registration.sanghCode;
+    if (!sanghCode) return this.settings || DEFAULT_SETTINGS;
+    return resolveSettings((this._adminSanghPoints || {})[sanghCode], this._legacyGlobalSettings);
   }
 
   // Self-healing photo migration. users/{uid}/photo has been mandatory at
@@ -3579,20 +3628,40 @@ class KalyanMitra {
 
     // Niyam points/toggle merged rows — delegated on the whole tab since the
     // registry rows are generated later by _renderAdminNiyamRows() and a
-    // per-checkbox listener would miss them.
+    // per-checkbox listener would miss them. Also marks the tab dirty (see
+    // loadAdminSettingsUI()'s guard) — a toggle flip must survive a
+    // listener repaint racing in before Save is pressed, exactly like an
+    // in-progress points edit does via the input listener just below.
     const settingsTabEl = document.getElementById('admin-tab-settings');
     if (settingsTabEl) settingsTabEl.addEventListener('change', (e) => {
       if (e.target && e.target.matches('input[type="checkbox"][id^="admin-toggle-"]')) {
+        this._adminSettingsDirty = true;
         this._syncNiyamRowStates();
       }
     });
+    // Points inputs use 'input' (fires per keystroke), not 'change' (fires
+    // only on blur) — an admin who types a value and hits Save without
+    // ever blurring the field must still be protected from a repaint
+    // wiping it mid-edit.
+    if (settingsTabEl) settingsTabEl.addEventListener('input', (e) => {
+      if (e.target && e.target.matches('input[type="number"][id^="admin-points-"]')) {
+        this._adminSettingsDirty = true;
+      }
+    });
 
-    // Repaints the points inputs when a multi-sangh admin switches which
-    // sangh they're editing — without this, switching the dropdown left the
-    // PREVIOUS sangh's values on screen, and saving then wrote them onto
-    // the newly-selected sangh.
+    // Repaints the whole tab (toggles + points, not just points) when a
+    // multi-sangh admin switches which sangh they're editing — without
+    // this, switching the dropdown left the PREVIOUS sangh's values on
+    // screen, and saving then wrote them onto the newly-selected sangh.
+    // Explicitly clears the dirty flag first — switching sangh means the
+    // admin is intentionally abandoning any in-progress edit on the sangh
+    // they're leaving, so the guard that protects a mid-edit must not also
+    // block this deliberate repaint.
     const pointsSanghEl = document.getElementById('admin-points-sangh');
-    if (pointsSanghEl) pointsSanghEl.addEventListener('change', () => this._loadAdminPointInputs());
+    if (pointsSanghEl) pointsSanghEl.addEventListener('change', () => {
+      this._adminSettingsDirty = false;
+      this.loadAdminSettingsUI();
+    });
 
     // Unlock (now lives in the member drill-down, not a dedicated tab)
     const btnUnlockDay = document.getElementById('btn-unlock-day');
@@ -3760,8 +3829,14 @@ class KalyanMitra {
     const todayKey = this.getTodayKey();
     const userPath = `users/${this.uid}`;
 
+    // Legacy global settings — now a read-only FALLBACK layer only (see
+    // resolveSettings()). Nothing writes here anymore (saveAdminSettings()
+    // writes sangh_settings/{code}/settings instead), but it's still worth
+    // listening live rather than a one-time read, purely for symmetry with
+    // the sangh_settings listener below — both feed the same resolve.
     const p1 = this.listenToRef('settings', val => {
-      this.settings = val ? { ...DEFAULT_SETTINGS, ...val } : { ...DEFAULT_SETTINGS };
+      this._legacyGlobalSettings = val || {};
+      this.settings = resolveSettings(this._sanghSettingsNode, this._legacyGlobalSettings);
       if (!this.initializing) {
         if (this.currentRole === 'user') {
           // Deliberately NOT calling calculatePanchang() here — location now
@@ -3857,6 +3932,16 @@ class KalyanMitra {
         p5 = this.listenToRef(`sangh_settings/${sanghCode}`, val => {
           setLivePoints(resolvePointMap(val && val.points));
           this._sanghPointsVersion = (val && val.pointsVersion) || 0;
+          // Cache the raw node's `settings` child too, and re-resolve
+          // this.settings (see resolveSettings()) — this is this sangh's
+          // own saved config, the highest-precedence layer. Whichever of
+          // this listener or the legacy `settings` one (p1, above) fires
+          // first leaves the other's cached value at its own default
+          // (undefined _sanghSettingsNode / undefined _legacyGlobalSettings)
+          // — resolveSettings() guards both with `|| {}`, so neither
+          // ordering can throw or produce a wrong-shaped settings object.
+          this._sanghSettingsNode = val;
+          this.settings = resolveSettings(this._sanghSettingsNode, this._legacyGlobalSettings);
           // renderDashboard() itself calls _refreshPointLabels() — no need
           // to call it separately here.
           if (!this.initializing) this.renderDashboard();
@@ -5143,10 +5228,14 @@ class KalyanMitra {
   // daily_logs history via _computeNiyamRange() — most niyams have no
   // profile counter at all, and the few that do can drift from a
   // streak-saver edit. Renders only into gridEl; caller owns visibility.
-  _renderLifetimeStats(gridEl) {
+  // `settingsOverride` (optional) mirrors _renderHistoryDays()'s — an admin
+  // drill-down passes the specific member's own resolved settings; the
+  // user-side call (renderAchievements()) omits it and keeps using
+  // this.settings, already that user's own.
+  _renderLifetimeStats(gridEl, settingsOverride) {
     if (!gridEl) return;
     const p = this.profile || DEFAULT_PROFILE;
-    const s = this.settings || DEFAULT_SETTINGS;
+    const s = settingsOverride || this.settings || DEFAULT_SETTINGS;
     const logs = this._cachedDailyLogs || {};
     const today = this.getTodayKey();
 
@@ -5623,18 +5712,28 @@ class KalyanMitra {
     labelEl.textContent = `${monthNames[this._adminHistoryMonth]} ${this._adminHistoryYear}`;
 
     const allLogs = this._cachedDailyLogs || {};
-    this._renderHistoryDays(listEl, allLogs, this._adminHistoryYear, this._adminHistoryMonth, true);
+    // This member's OWN sangh settings, not the admin's — see
+    // _settingsForMember(). Passed explicitly so _renderHistoryDays() never
+    // has to guess which member it's being called for.
+    const memberSettings = this._settingsForMember(this._adminSelectedUid);
+    this._renderHistoryDays(listEl, allLogs, this._adminHistoryYear, this._adminHistoryMonth, true, memberSettings);
 
     // Lifetime stats for the currently-viewed user, at the bottom of the
     // History section — shares _renderLifetimeStats() with the user's own
     // Badges tab so the two can never disagree.
-    this._renderLifetimeStats(document.getElementById('admin-stats-grid'));
+    this._renderLifetimeStats(document.getElementById('admin-stats-grid'), memberSettings);
   }
 
-  _renderHistoryDays(container, allLogs, year, month, isAdmin) {
+  // `settingsOverride` (optional, trailing) lets an admin drill-down pass
+  // the specific member's OWN resolved settings (see renderAdminHistory())
+  // instead of falling back to this.settings — which, for an admin session,
+  // is never any particular member's sangh (see resolveSettings()). The
+  // user-side call site (renderMyAttendance()) omits it, so this.settings
+  // (already that user's own) keeps working exactly as before.
+  _renderHistoryDays(container, allLogs, year, month, isAdmin, settingsOverride) {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const today = this.getTodayKey();
-    const s = this.settings || DEFAULT_SETTINGS;
+    const s = settingsOverride || this.settings || DEFAULT_SETTINGS;
     // Note: `isAdmin` is passed `true` from both call sites (user + admin
     // history), so it cannot be used as a role signal. currentRole is the
     // only trustworthy check — streak saver editing is user-only.
@@ -5803,7 +5902,10 @@ class KalyanMitra {
     return { fromKey, toKey };
   }
 
-  _computeNiyamStats(logs, year, month) {
+  // `settingsOverride` (optional) mirrors _renderHistoryDays()'s — the
+  // admin call site (renderNiyamStats()) passes the specific member's own
+  // resolved settings; the user-side call keeps using this.settings.
+  _computeNiyamStats(logs, year, month, settingsOverride) {
     const today = this.getTodayKey();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
@@ -5825,7 +5927,7 @@ class KalyanMitra {
     // total (Ashta and the screen-time penalty included), matching what the
     // History day cards add up to.
     const { stats, daysLogged, perfectDays, totalAP } =
-      this._computeNiyamRange(logs, fromKey, toKey, this.settings, false);
+      this._computeNiyamRange(logs, fromKey, toKey, settingsOverride || this.settings, false);
 
     return { stats, daysElapsed, daysRecorded: daysLogged, perfectDays, totalAP };
   }
@@ -6316,8 +6418,12 @@ class KalyanMitra {
       }
     }
 
+    // This member's OWN sangh settings for an admin drill-down (see
+    // _settingsForMember()); this.settings (already correct) for the
+    // user's own Achievements-tab entry point.
+    const statsSettings = this.currentRole === 'admin' ? this._settingsForMember(this._adminSelectedUid) : this.settings;
     const { stats, daysElapsed, daysRecorded, perfectDays, totalAP } =
-      this._computeNiyamStats(logs, this._niyamStatsYear, this._niyamStatsMonth);
+      this._computeNiyamStats(logs, this._niyamStatsYear, this._niyamStatsMonth, statsSettings);
 
     if (totalEl) {
       totalEl.textContent = `⭐ ${(totalAP || 0).toLocaleString()} AP this month`;
@@ -6348,7 +6454,12 @@ class KalyanMitra {
     const log = logs[dateKey];
     if (!log) return;
 
-    const s = this.settings || DEFAULT_SETTINGS;
+    // Shared between a user's own "My Attendance" and an admin's member
+    // drill-down (see the click listener in _renderHistoryDays()) — an
+    // admin session must resolve THIS specific member's own sangh settings
+    // (_settingsForMember()), not their own defaults, or a member whose
+    // sangh has customised niyams would show the wrong set here.
+    const s = this.currentRole === 'admin' ? this._settingsForMember(this._adminSelectedUid) : (this.settings || DEFAULT_SETTINGS);
     const overlay = document.getElementById('day-detail-overlay');
     const userEl = document.getElementById('day-detail-user');
     const dateEl = document.getElementById('day-detail-date');
@@ -6681,7 +6792,7 @@ class KalyanMitra {
         const main = entry.items[0];
         html += `
           <div class="setting-item niyam-row" data-toggle-id="${toggleId}">
-            <div class="niyam-row-label"><label for="${toggleId}">${entry.label}</label></div>
+            <div class="niyam-row-label"><label for="${toggleId}">${entry.label}</label><span class="niyam-row-hindi">${entry.labelHindi || ''}</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-${main.prop}" placeholder="${main.points}">
               <input type="checkbox" id="${toggleId}">
@@ -6695,7 +6806,7 @@ class KalyanMitra {
           const subToggleId = `admin-toggle-${sub.prop.slice(0, -4)}`;
           html += `
           <div class="setting-item niyam-row niyam-row-sub" data-toggle-id="${subToggleId}" data-parent-toggle-id="${toggleId}">
-            <div class="niyam-row-label"><label for="${subToggleId}">↳ ${sub.label}</label></div>
+            <div class="niyam-row-label"><label for="${subToggleId}">↳ ${sub.label}</label><span class="niyam-row-hindi">${sub.labelHindi || ''}</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-${sub.prop}" placeholder="${sub.points}">
               <input type="checkbox" id="${subToggleId}">
@@ -6744,7 +6855,7 @@ class KalyanMitra {
   // toggle is currently off — a niyam nobody is scoring shouldn't look
   // editable. Purely visual/UI-state: the stored number itself is never
   // touched, so switching a niyam off and back on leaves its points exactly
-  // as they were (both _loadAdminPointInputs() and _saveAdminPoints() read
+  // as they were (both _loadAdminPointInputs() and saveAdminSettings() read
   // .value directly regardless of .disabled). Called once after every
   // toggle/points repaint (loadAdminSettingsUI()) and again on every
   // individual toggle flip (see the delegated listener in
@@ -6766,7 +6877,27 @@ class KalyanMitra {
   }
 
   loadAdminSettingsUI() {
-    const s = this.settings;
+    // An admin's own in-progress edit must never be silently overwritten by
+    // a listener repaint racing in behind it — their own save echoing back
+    // through the sangh_settings listener, another admin saving the same
+    // sangh concurrently, or the legacy-global listener firing. Cleared on
+    // successful save and on sangh-switch (setupAdminEventListeners()) —
+    // both of which intentionally WANT a fresh repaint.
+    if (this._adminSettingsDirty) return;
+
+    // Populates/syncs the sangh <select> and paints its points inputs
+    // FIRST — resolving `activeCode` just below depends on the select
+    // already reflecting the current this._adminSanghCodes.
+    this._loadAdminPointInputs();
+
+    const sel = document.getElementById('admin-points-sangh');
+    const activeCode = (sel && sel.value) || (this._adminSanghCodes || [])[0];
+    // Same precedence as the user-side resolve (see resolveSettings()) —
+    // this sangh's own saved settings, over the legacy global fallback,
+    // over coded defaults. A sangh nobody is currently editing (no active
+    // code) still resolves to a sane value via the `null` passed here.
+    const s = resolveSettings(activeCode ? (this._adminSanghPoints || {})[activeCode] : null, this._legacyGlobalSettings);
+
     document.getElementById('admin-toggle-navkarsi').checked = s.enableNavkarsi;
     document.getElementById('admin-toggle-wakeup').checked = s.enableWakeup;
     document.getElementById('admin-toggle-sleep').checked = s.enableSleep;
@@ -6806,88 +6937,90 @@ class KalyanMitra {
     });
     niyamSelect.value = s.currentDailyNiyamId || 0;
 
-    // admin-location removed
-
-    this._loadAdminPointInputs();
     // Dims + locks every points input whose niyam is currently off — must
-    // run AFTER both the toggles above and _loadAdminPointInputs() so a
+    // run AFTER the toggles above (points inputs themselves were already
+    // painted by _loadAdminPointInputs() at the top of this function) so a
     // freshly-painted row is never left enabled for a niyam that is off.
     this._syncNiyamRowStates();
   }
 
+  // Reads every toggle + points input for the currently-selected sangh and
+  // writes them BOTH in one atomic update() to sangh_settings/{code} — a
+  // single write means settings and points can never half-save. Builds a
+  // fresh LOCAL object rather than mutating this.settings in place:
+  // this.settings is this ADMIN'S OWN session settings (all-defaults,
+  // since an admin role never scores anything — see resolveSettings()),
+  // entirely separate from whichever sangh is being edited here, which may
+  // not even be one the admin belongs to. Mutating this.settings used to
+  // conflate the two.
   async saveAdminSettings() {
-    const s = this.settings;
-    s.enableNavkarsi = document.getElementById('admin-toggle-navkarsi').checked;
-    s.enableWakeup = document.getElementById('admin-toggle-wakeup').checked;
-    s.enableSleep = document.getElementById('admin-toggle-sleep').checked;
-    s.enablePranam = document.getElementById('admin-toggle-pranam').checked;
-    s.enablePooja = document.getElementById('admin-toggle-pooja').checked;
-    s.enableAshtaPrakari = document.getElementById('admin-toggle-ashtaPrakari').checked;
-    s.enableSamayik = document.getElementById('admin-toggle-samayik').checked;
-    s.enablePratikraman = document.getElementById('admin-toggle-pratikraman').checked;
-    s.enableRaiya = document.getElementById('admin-toggle-raiya').checked;
-    s.enableBookReading = document.getElementById('admin-toggle-book').checked;
-    s.enableRatriBhojan = document.getElementById('admin-toggle-ratribhojan').checked;
-    s.enableKandmool = document.getElementById('admin-toggle-kandmool').checked;
-    s.enableScreenTime = document.getElementById('admin-toggle-screentime').checked;
-    s.enableDailyNiyam = document.getElementById('admin-toggle-niyam').checked;
-    s.currentDailyNiyamId = parseInt(document.getElementById('admin-select-niyam').value);
+    const sel = document.getElementById('admin-points-sangh');
+    const code = (sel && sel.value) || (this._adminSanghCodes || [])[0];
+    if (!code) return; // admin manages no sangh — nothing to save against
 
+    const settings = {
+      enableNavkarsi: document.getElementById('admin-toggle-navkarsi').checked,
+      enableWakeup: document.getElementById('admin-toggle-wakeup').checked,
+      enableSleep: document.getElementById('admin-toggle-sleep').checked,
+      enablePranam: document.getElementById('admin-toggle-pranam').checked,
+      enablePooja: document.getElementById('admin-toggle-pooja').checked,
+      enableAshtaPrakari: document.getElementById('admin-toggle-ashtaPrakari').checked,
+      enableSamayik: document.getElementById('admin-toggle-samayik').checked,
+      enablePratikraman: document.getElementById('admin-toggle-pratikraman').checked,
+      enableRaiya: document.getElementById('admin-toggle-raiya').checked,
+      enableBookReading: document.getElementById('admin-toggle-book').checked,
+      enableRatriBhojan: document.getElementById('admin-toggle-ratribhojan').checked,
+      enableKandmool: document.getElementById('admin-toggle-kandmool').checked,
+      enableScreenTime: document.getElementById('admin-toggle-screentime').checked,
+      enableDailyNiyam: document.getElementById('admin-toggle-niyam').checked,
+      currentDailyNiyamId: parseInt(document.getElementById('admin-select-niyam').value) || 0,
+    };
     (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
       if (!entry.flag) return;
       const el = document.getElementById(`admin-toggle-${entry.id}`);
-      if (el) s[entry.flag] = el.checked;
+      if (el) settings[entry.flag] = el.checked;
       const sub = entry.items && entry.items[1];
       if (sub && sub.flag) {
         const subEl = document.getElementById(`admin-toggle-${sub.prop.slice(0, -4)}`);
-        if (subEl) s[sub.flag] = subEl.checked;
+        if (subEl) settings[sub.flag] = subEl.checked;
       }
     });
 
-    // Location removed from admin UI - fetched via Geolocation
-    this.saveSettings();
-
-    // Niyam points — a SEPARATE per-sangh path (sangh_settings/{code}), not
-    // part of the global `settings` node saved just above. Awaited so the
-    // confirmation checkmark only appears once the retroactive recompute
-    // (_recomputeSanghPoints(), inside _saveAdminPoints()) has actually run.
-    await this._saveAdminPoints();
-
-    const conf = document.getElementById('save-confirmation');
-    conf.classList.remove('hidden');
-    setTimeout(() => conf.classList.add('hidden'), 2000);
-  }
-
-  // Reads every admin-points-{key} input for the currently-selected sangh,
-  // writes the overrides + a bumped pointsVersion to sangh_settings/{code},
-  // then fans the change out to that sangh's members — see
-  // _recomputeSanghPoints(). A sangh nobody is currently editing against
-  // (no sangh at all) is a safe no-op.
-  async _saveAdminPoints() {
-    const sel = document.getElementById('admin-points-sangh');
-    const code = (sel && sel.value) || (this._adminSanghCodes || [])[0];
-    if (!code) return;
-
-    const overrides = {};
+    // Points — formerly the separate _saveAdminPoints(), now folded in so
+    // both land in the same write. Blank input = "use the coded default",
+    // omitted entirely rather than fabricated as an explicit value.
+    const points = {};
     Object.keys(DEFAULT_POINT_MAP).forEach(key => {
       const el = document.getElementById(`admin-points-${key}`);
       if (!el) return;
       const raw = el.value;
-      if (raw === '') return; // blank = "use the default" — omit entirely
+      if (raw === '') return;
       const n = Number(raw);
-      if (Number.isFinite(n) && n >= 0) overrides[key] = n;
+      if (Number.isFinite(n) && n >= 0) points[key] = n;
     });
 
     const pointsVersion = Date.now();
     try {
-      await db.ref(`sangh_settings/${code}`).update({ points: overrides, pointsVersion });
+      await db.ref(`sangh_settings/${code}`).update({ settings, points, pointsVersion });
       if (!this._adminSanghPoints) this._adminSanghPoints = {};
-      this._adminSanghPoints[code] = { points: overrides, pointsVersion };
+      this._adminSanghPoints[code] = { settings, points, pointsVersion };
+      // Only cleared on a SUCCESSFUL save — a failed write must not be
+      // treated as clean, or the next repaint would silently discard the
+      // admin's edits along with the write that never landed.
+      this._adminSettingsDirty = false;
+      // Retroactively rescores every member at the just-saved point values
+      // — unchanged from the old _saveAdminPoints(). Awaited so the
+      // confirmation checkmark only appears once this has actually run.
       await this._recomputeSanghPoints(code, pointsVersion);
     } catch (e) {
-      console.error('Failed to save niyam points:', e);
-      alert('Failed to save niyam points. Please check your connection and try again.');
+      console.error('Failed to save settings:', e);
+      alert('Failed to save settings. Please check your connection and try again.');
+      return; // dirty flag stays set — nothing below should imply success
     }
+
+    const conf = document.getElementById('save-confirmation');
+    conf.classList.remove('hidden');
+    setTimeout(() => conf.classList.add('hidden'), 2000);
   }
 
   // Retroactively rescores every member of `code` at the just-saved point

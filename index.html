@@ -32,7 +32,7 @@
        <noscript> fallback covers the rare case of JS being disabled. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-  <link rel="stylesheet" href="styles.css?v=39">
+  <link rel="stylesheet" href="styles.css?v=40">
   <script>
     // Decide the boot state before <body> even exists, so no element lookup
     // is possible here — the previous version of this check ran mid-body and
@@ -304,7 +304,6 @@
           <div class="gender-pills" id="reg-gender-pills">
             <button type="button" class="gender-pill" data-value="Male">Male</button>
             <button type="button" class="gender-pill" data-value="Female">Female</button>
-            <button type="button" class="gender-pill" data-value="Other">Other</button>
           </div>
           <input type="hidden" id="reg-gender">
         </div>
@@ -852,7 +851,7 @@
              inputs, not just a block further down. Saved together with
              everything else in Save Settings; see _saveAdminPoints(). -->
         <div class="settings-group hidden" id="admin-points-sangh-group">
-          <h3 class="settings-group-title">🕌 Editing Points For</h3>
+          <h3 class="settings-group-title">🕌 Editing Settings For</h3>
           <div class="setting-item">
             <label for="admin-points-sangh" style="flex:0 0 100px;">Sangh</label>
             <select id="admin-points-sangh" style="flex:1; max-width:200px;">
@@ -864,28 +863,28 @@
         <div class="settings-group">
           <h3 class="settings-group-title">🌅 Morning Rituals</h3>
           <div class="setting-item niyam-row" data-toggle-id="admin-toggle-navkarsi">
-            <div class="niyam-row-label"><label for="admin-toggle-navkarsi">Navkarsi</label></div>
+            <div class="niyam-row-label"><label for="admin-toggle-navkarsi">Navkarsi</label><span class="niyam-row-hindi">नवकारसी</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-navkarsi" placeholder="10">
               <input type="checkbox" id="admin-toggle-navkarsi">
             </div>
           </div>
           <div class="setting-item niyam-row" data-toggle-id="admin-toggle-wakeup">
-            <div class="niyam-row-label"><label for="admin-toggle-wakeup">Wake up &lt; 7AM</label></div>
+            <div class="niyam-row-label"><label for="admin-toggle-wakeup">Wake up &lt; 7AM</label><span class="niyam-row-hindi">7AM से पहले उठें</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-wakeUpEarly" placeholder="10">
               <input type="checkbox" id="admin-toggle-wakeup">
             </div>
           </div>
           <div class="setting-item niyam-row" data-toggle-id="admin-toggle-sleep">
-            <div class="niyam-row-label"><label for="admin-toggle-sleep">Sleep &lt; 12AM</label></div>
+            <div class="niyam-row-label"><label for="admin-toggle-sleep">Sleep &lt; 12AM</label><span class="niyam-row-hindi">12AM से पहले सो जाएं</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-sleepEarly" placeholder="10">
               <input type="checkbox" id="admin-toggle-sleep">
             </div>
           </div>
           <div class="setting-item niyam-row" data-toggle-id="admin-toggle-pranam">
-            <div class="niyam-row-label"><label for="admin-toggle-pranam">Mata Pita Pranam</label></div>
+            <div class="niyam-row-label"><label for="admin-toggle-pranam">Mata Pita Pranam</label><span class="niyam-row-hindi">माता पिता प्रणाम</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-pranam" placeholder="20">
               <input type="checkbox" id="admin-toggle-pranam">
@@ -896,14 +895,14 @@
         <div class="settings-group">
           <h3 class="settings-group-title">🧘 Sadhana</h3>
           <div class="setting-item niyam-row" data-toggle-id="admin-toggle-pooja">
-            <div class="niyam-row-label"><label for="admin-toggle-pooja">Jin Pooja</label></div>
+            <div class="niyam-row-label"><label for="admin-toggle-pooja">Jin Pooja</label><span class="niyam-row-hindi">जिन पूजा</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-pooja" placeholder="10">
               <input type="checkbox" id="admin-toggle-pooja">
             </div>
           </div>
           <div class="setting-item niyam-row niyam-row-sub" data-toggle-id="admin-toggle-ashtaPrakari" data-parent-toggle-id="admin-toggle-pooja">
-            <div class="niyam-row-label"><label for="admin-toggle-ashtaPrakari">↳ Ashta Prakari</label></div>
+            <div class="niyam-row-label"><label for="admin-toggle-ashtaPrakari">↳ Ashta Prakari</label><span class="niyam-row-hindi">अष्टप्रकारी पूजा</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-ashtaPrakari" placeholder="50">
               <input type="checkbox" id="admin-toggle-ashtaPrakari">
@@ -912,6 +911,7 @@
           <div class="setting-item niyam-row" data-toggle-id="admin-toggle-samayik">
             <div class="niyam-row-label">
               <label for="admin-toggle-samayik">Samayik</label>
+              <span class="niyam-row-hindi">सामायिक</span>
               <span class="niyam-row-hint">per samayik</span>
             </div>
             <div class="niyam-row-controls">
@@ -920,14 +920,14 @@
             </div>
           </div>
           <div class="setting-item niyam-row" data-toggle-id="admin-toggle-pratikraman">
-            <div class="niyam-row-label"><label for="admin-toggle-pratikraman">Pratikraman</label></div>
+            <div class="niyam-row-label"><label for="admin-toggle-pratikraman">Pratikraman</label><span class="niyam-row-hindi">प्रतिक्रमण — देवसि</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-devasiya" placeholder="30">
               <input type="checkbox" id="admin-toggle-pratikraman">
             </div>
           </div>
           <div class="setting-item niyam-row niyam-row-sub" data-toggle-id="admin-toggle-raiya" data-parent-toggle-id="admin-toggle-pratikraman">
-            <div class="niyam-row-label"><label for="admin-toggle-raiya">↳ Raiya</label></div>
+            <div class="niyam-row-label"><label for="admin-toggle-raiya">↳ Raiya</label><span class="niyam-row-hindi">राइअ</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-raiya" placeholder="30">
               <input type="checkbox" id="admin-toggle-raiya">
@@ -936,6 +936,7 @@
           <div class="setting-item niyam-row" data-toggle-id="admin-toggle-book">
             <div class="niyam-row-label">
               <label for="admin-toggle-book">Book Reading</label>
+              <span class="niyam-row-hindi">धार्मिक पुस्तक पढ़ना</span>
               <span class="niyam-row-hint">per 30 min</span>
             </div>
             <div class="niyam-row-controls">
@@ -948,14 +949,14 @@
         <div class="settings-group">
           <h3 class="settings-group-title">🛡️ Tyag &amp; Discipline</h3>
           <div class="setting-item niyam-row" data-toggle-id="admin-toggle-ratribhojan">
-            <div class="niyam-row-label"><label for="admin-toggle-ratribhojan">Ratri Bhojan Tyag</label></div>
+            <div class="niyam-row-label"><label for="admin-toggle-ratribhojan">Ratri Bhojan Tyag</label><span class="niyam-row-hindi">रात्रि भोजन त्याग</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-ratriBhojan" placeholder="20">
               <input type="checkbox" id="admin-toggle-ratribhojan">
             </div>
           </div>
           <div class="setting-item niyam-row" data-toggle-id="admin-toggle-kandmool">
-            <div class="niyam-row-label"><label for="admin-toggle-kandmool">Kandmool Tyag</label></div>
+            <div class="niyam-row-label"><label for="admin-toggle-kandmool">Kandmool Tyag</label><span class="niyam-row-hindi">कंदमूल त्याग</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-kandmool" placeholder="20">
               <input type="checkbox" id="admin-toggle-kandmool">
@@ -964,6 +965,7 @@
           <div class="setting-item niyam-row" data-toggle-id="admin-toggle-screentime">
             <div class="niyam-row-label">
               <label for="admin-toggle-screentime">Screen Time Tracking</label>
+              <span class="niyam-row-hindi">स्क्रीन टाइम</span>
               <span class="niyam-row-hint">penalty per hour</span>
             </div>
             <div class="niyam-row-controls">
@@ -976,7 +978,7 @@
         <div class="settings-group">
           <h3 class="settings-group-title">✨ Daily Niyam</h3>
           <div class="setting-item niyam-row" data-toggle-id="admin-toggle-niyam">
-            <div class="niyam-row-label"><label for="admin-toggle-niyam">Enable Daily Niyam</label></div>
+            <div class="niyam-row-label"><label for="admin-toggle-niyam">Enable Daily Niyam</label><span class="niyam-row-hindi">दैनिक नियम</span></div>
             <div class="niyam-row-controls">
               <input type="number" min="0" step="1" id="admin-points-dailyNiyam" placeholder="10">
               <input type="checkbox" id="admin-toggle-niyam">
@@ -1352,6 +1354,6 @@
   <!-- Scripts -->
   <script src="data.js?v=50"></script>
   <script src="auth.js?v=49"></script>
-  <script src="app.js?v=55"></script>
+  <script src="app.js?v=56"></script>
 </body>
 </html>
