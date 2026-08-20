@@ -7002,25 +7002,84 @@ class KalyanMitra {
     const pointsVersion = Date.now();
     try {
       await db.ref(`sangh_settings/${code}`).update({ settings, points, pointsVersion });
-      if (!this._adminSanghPoints) this._adminSanghPoints = {};
-      this._adminSanghPoints[code] = { settings, points, pointsVersion };
-      // Only cleared on a SUCCESSFUL save — a failed write must not be
-      // treated as clean, or the next repaint would silently discard the
-      // admin's edits along with the write that never landed.
-      this._adminSettingsDirty = false;
-      // Retroactively rescores every member at the just-saved point values
-      // — unchanged from the old _saveAdminPoints(). Awaited so the
-      // confirmation checkmark only appears once this has actually run.
-      await this._recomputeSanghPoints(code, pointsVersion);
     } catch (e) {
       console.error('Failed to save settings:', e);
-      alert('Failed to save settings. Please check your connection and try again.');
+      let message = `Failed to save settings (${e.code || e.message || 'unknown error'}).`;
+      if (e.code === 'PERMISSION_DENIED') {
+        message += '\n\n' + await this._diagnoseAdminPermissionError();
+      } else {
+        message += ' Please check your connection and try again.';
+      }
+      alert(message);
       return; // dirty flag stays set — nothing below should imply success
     }
+
+    // The write above is the one the admin is actually waiting on, and it
+    // succeeded — commit and confirm now, BEFORE the separate (and
+    // non-fatal) member rescore below, so a rescore hiccup can never make a
+    // genuinely successful settings save look like it failed.
+    if (!this._adminSanghPoints) this._adminSanghPoints = {};
+    this._adminSanghPoints[code] = { settings, points, pointsVersion };
+    // Only cleared on a SUCCESSFUL save — a failed write must not be
+    // treated as clean, or the next repaint would silently discard the
+    // admin's edits along with the write that never landed.
+    this._adminSettingsDirty = false;
 
     const conf = document.getElementById('save-confirmation');
     conf.classList.remove('hidden');
     setTimeout(() => conf.classList.add('hidden'), 2000);
+
+    // Retroactively rescores every member at the just-saved point values —
+    // unchanged from the old _saveAdminPoints(). Deliberately its OWN
+    // try/catch: this targets a completely different multi-path write
+    // (every member's users/{uid}/…, not sangh_settings/{code}) under a
+    // different rule, and its failure must never be reported as "settings
+    // failed to save" when they plainly just did. Non-fatal by design —
+    // _migrateToRawPoints()'s pointsVersion guard re-scores each member on
+    // their own next login if this fan-out misses them (offline admin, a
+    // very large sangh, etc.), so a console warning is enough here.
+    try {
+      await this._recomputeSanghPoints(code, pointsVersion);
+    } catch (e) {
+      console.warn('Settings saved, but rescoring members\' historical points failed — this self-heals on each member\'s next login:', e);
+    }
+  }
+
+  // Reads the values that decide whether an admin write is allowed, and
+  // returns a plain-language explanation of why they disagree — see the
+  // root cause note above saveAdminSettings(): this app is multi-profile
+  // (auth.js's baseUid/__pN slots), but Firebase rules can only see
+  // auth.uid, which is always the BASE account, never the active profile.
+  // An admin signed into a non-primary slot has role='admin' on THEIR
+  // profile but not on auth.uid, so every admin write is silently denied
+  // by rules that only check auth.uid directly. Only called on an actual
+  // PERMISSION_DENIED (a real network round trip), never speculatively.
+  async _diagnoseAdminPermissionError() {
+    try {
+      const fbUser = firebase.auth().currentUser;
+      const authUid = fbUser && fbUser.uid;
+      if (!authUid) return 'No active Firebase sign-in was found — please sign in again.';
+
+      const activeUid = this._currentAuthUser && this._currentAuthUser.uid;
+      const roleSnap = await db.ref(`users/${authUid}/role`).once('value');
+      const authUidRole = roleSnap.val() || '(none)';
+
+      if (activeUid && activeUid !== authUid) {
+        return `Your admin role is on profile "${activeUid}", but Firebase rules check account `
+          + `"${authUid}" (role there: "${authUidRole}"). The database rules need to recognise `
+          + `admins on every profile slot for this account — see firebase-rules.json.`;
+      }
+      if (authUidRole !== 'admin') {
+        return `Firebase rules see account "${authUid}" with role "${authUidRole}", not "admin". `
+          + `Either the database rules aren't deployed yet, or this account's role isn't set to `
+          + `"admin" in the users/${authUid}/role field.`;
+      }
+      return `Firebase denied the write even though "${authUid}" has role "admin" — check that `
+        + `the rules deployed in the Firebase console exactly match firebase-rules.json.`;
+    } catch (diagErr) {
+      console.error('Permission diagnostic itself failed:', diagErr);
+      return 'Could not run the permission diagnostic (a separate read failed) — check your connection.';
+    }
   }
 
   // Retroactively rescores every member of `code` at the just-saved point

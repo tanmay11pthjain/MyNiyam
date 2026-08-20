@@ -2,20 +2,20 @@
   "rules": {
     "settings": {
       ".read": "auth != null",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p2').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p3').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p4').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p5').child('role').val() === 'admin')"
     },
     "sangh_settings": {
       ".read": "auth != null",
       "$code": {
-        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p2').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p3').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p4').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p5').child('role').val() === 'admin')"
       }
     },
     "users": {
       ".read": "auth != null",
       "$uid": {
-        ".write": "auth != null && (auth.uid === $uid || $uid.beginsWith(auth.uid + '__p') || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".write": "auth != null && (auth.uid === $uid || $uid.beginsWith(auth.uid + '__p') || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p2').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p3').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p4').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p5').child('role').val() === 'admin')",
         "role": {
-          ".validate": "newData.val() === 'user' || root.child('users').child(auth.uid).child('role').val() === 'admin'"
+          ".validate": "newData.val() === 'user' || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p2').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p3').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p4').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p5').child('role').val() === 'admin'"
         },
         "sanghCodes": {
           ".validate": false
@@ -36,7 +36,7 @@
     },
     "stats": {
       ".read": true,
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p2').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p3').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p4').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p5').child('role').val() === 'admin')"
     }
   }
 }
