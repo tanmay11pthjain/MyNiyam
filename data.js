@@ -284,15 +284,15 @@ const NIYAM_REGISTRY = [
     items: [{ prop: 'sleepDone', pointsKey: 'sleepEarly', label: 'Sleep < 12AM', labelHindi: '12AM से पहले सो जाएं', icon: '🌙', points: 10 }]
   },
   {
-    id: 'pranam', label: 'Mata Pita Pranam', labelHindi: 'माता पिता प्रणाम', icon: '🙇',
+    id: 'pranam', label: 'Mata Pita Pranam', labelHindi: 'माता-पिता प्रणाम', icon: '🙇',
     section: 'morning', layout: 'simple', builtIn: true,
     flag: 'enablePranam', defaultEnabled: true,
-    items: [{ prop: 'pranamDone', pointsKey: 'pranam', label: 'Pranam', labelHindi: 'माता पिता प्रणाम', icon: '🙇', points: 20 }]
+    items: [{ prop: 'pranamDone', pointsKey: 'pranam', label: 'Pranam', labelHindi: 'माता पिता प्रणाम', icon: '🙇', points: 10 }]
   },
 
   // ----- 🧘 Sadhana -----
   {
-    id: 'pooja', label: 'Jin Pooja', labelHindi: 'जिन पूजा', icon: '🪔',
+    id: 'pooja', label: 'Jin Pooja', labelHindi: 'जिनपूजा', icon: '🪔',
     section: 'sadhana', layout: 'dependent', builtIn: true,
     flag: 'enablePooja', defaultEnabled: true,
     items: [
@@ -308,15 +308,15 @@ const NIYAM_REGISTRY = [
     id: 'samayik', label: 'Samayik', labelHindi: 'सामायिक', icon: '🧘',
     section: 'sadhana', layout: 'simple', builtIn: true,
     flag: 'enableSamayik', defaultEnabled: true, hint: 'per samayik',
-    items: [{ prop: 'samayikDone', pointsKey: 'samayik', type: 'counter', targetSetting: 'samayikTarget', step: 1, label: 'Samayik', labelHindi: 'सामायिक', icon: '🧘', points: 20 }]
+    items: [{ prop: 'samayikDone', pointsKey: 'samayik', type: 'counter', targetSetting: 'samayikTarget', step: 1, label: 'Samayik', labelHindi: 'सामायिक', icon: '🧘', points: 10 }]
   },
   {
-    id: 'pratikraman', label: 'Pratikraman', labelHindi: 'प्रतिक्रमण', adminLabelHindi: 'प्रतिक्रमण — देवसि', icon: '🙏',
+    id: 'pratikraman', label: 'Pratikraman', labelHindi: 'प्रतिक्रमण', adminLabelHindi: 'प्रतिक्रमण — देवसिय', icon: '🙏',
     section: 'sadhana', layout: 'dual', builtIn: true,
     flag: 'enablePratikraman', defaultEnabled: true,
     items: [
-      { prop: 'devasiyaDone', pointsKey: 'devasiya', label: 'Devasiya', labelHindi: 'देवसि', icon: '🌅', points: 30 },
-      { prop: 'raiyaDone', pointsKey: 'raiya', flag: 'enableRaiya', label: 'Raiya', labelHindi: 'राइअ', icon: '🌙', points: 30 },
+      { prop: 'devasiyaDone', pointsKey: 'devasiya', label: 'Devasiya', labelHindi: 'देवसिय', icon: '🌅', points: 10 },
+      { prop: 'raiyaDone', pointsKey: 'raiya', flag: 'enableRaiya', label: 'Raiya', labelHindi: 'राईअ', icon: '🌙', points: 10 },
     ]
   },
   {
@@ -331,13 +331,13 @@ const NIYAM_REGISTRY = [
     id: 'ratribhojan', label: 'Ratri Bhojan Tyag', labelHindi: 'रात्रि भोजन त्याग', icon: '🚫',
     section: 'tyag', layout: 'simple', builtIn: true,
     flag: 'enableRatriBhojan', defaultEnabled: true,
-    items: [{ prop: 'ratriBhojanDone', pointsKey: 'ratriBhojan', label: 'Ratri Bhojan Tyag', labelHindi: 'रात्रि भोजन त्याग', icon: '🍽️', points: 20 }]
+    items: [{ prop: 'ratriBhojanDone', pointsKey: 'ratriBhojan', label: 'Ratri Bhojan Tyag', labelHindi: 'रात्रि भोजन त्याग', icon: '🍽️', points: 10 }]
   },
   {
     id: 'kandmool', label: 'Kandmool Tyag', labelHindi: 'कंदमूल त्याग', icon: '🥔',
     section: 'tyag', layout: 'simple', builtIn: true,
     flag: 'enableKandmool', defaultEnabled: true,
-    items: [{ prop: 'kandmoolDone', pointsKey: 'kandmool', label: 'Kandmool Tyag', labelHindi: 'कंदमूल त्याग', icon: '🌱', points: 20 }]
+    items: [{ prop: 'kandmoolDone', pointsKey: 'kandmool', label: 'Kandmool Tyag', labelHindi: 'कंदमूल त्याग', icon: '🌱', points: 10 }]
   },
   {
     id: 'screentime', label: 'Screen Time', adminLabel: 'Screen Time Tracking', labelHindi: 'स्क्रीन टाइम', icon: '📱',
@@ -362,8 +362,8 @@ const NIYAM_REGISTRY = [
     id: 'navkarJaap', label: 'Navkar Jaap', labelHindi: 'नवकार जाप', icon: '📿',
     section: 'bhakti', layout: 'dual',
     items: [
-      { prop: 'navkarJaapMorningDone', label: 'Morning', labelHindi: 'सुबह', icon: '🌅', points: 10 },
-      { prop: 'navkarJaapNightDone', label: 'Night', labelHindi: 'रात', icon: '🌙', points: 10 },
+      { prop: 'navkarJaapMorningDone', label: 'Morning (8)', labelHindi: 'सुबह', icon: '🌅', points: 10 },
+      { prop: 'navkarJaapNightDone', label: 'Night (7)', labelHindi: 'रात', icon: '🌙', points: 10 },
     ]
   },
   {
@@ -378,25 +378,30 @@ const NIYAM_REGISTRY = [
     id: 'guruVandan', label: 'Guru Vandan', labelHindi: 'गुरु वंदन', icon: '🙇',
     section: 'bhakti', layout: 'exclusive',
     items: [
-      { prop: 'guruVandanHajirDone', label: 'Hajir', labelHindi: 'हाजिर होकर', icon: '🙇', points: 20 },
+      { prop: 'guruVandanHajirDone', label: 'Hajir', labelHindi: 'हाजिर साधु भगवंत को', icon: '🙇', points: 20 },
       { prop: 'guruVandanMurtiDone', label: 'Murti/Photo', labelHindi: 'मूर्ति/फोटो द्वारा', icon: '🖼️', points: 10 },
     ]
   },
   {
-    id: 'shaamAarti', label: 'Shaam Aarti', labelHindi: 'शाम आरती', icon: '🪔',
+    id: 'shaamAarti', label: 'Shaam ki Aarti', labelHindi: 'शाम की आरती', icon: '🪔',
     section: 'bhakti', layout: 'simple',
-    items: [{ prop: 'shaamAartiDone', label: 'Shaam Aarti', labelHindi: 'शाम आरती', icon: '🪔', points: 20 }]
+    items: [{ prop: 'shaamAartiDone', label: 'Shaam ki Aarti', labelHindi: 'शाम की आरती', icon: '🪔', points: 20 }]
   },
   {
-    id: 'khamasmne', label: 'Gyaan ke 5 Khamasmne', labelHindi: 'ज्ञान के 5 खमासमणा', icon: '🙌',
+    id: 'khamasmne', label: 'Pathshala me padne ke purv Gyaan ke 5 Khamasmne', labelHindi: 'पाठशाला में पढ़ने के पूर्व ज्ञान के 5 खमासमणा', icon: '🙌',
     section: 'bhakti', layout: 'simple',
-    items: [{ prop: 'khamasmneDone', label: 'Gyaan ke 5 Khamasmne', labelHindi: 'ज्ञान के 5 खमासमणा', icon: '🙌', points: 10 }]
+    items: [{ prop: 'khamasmneDone', label: 'Pathshala me padne ke purv Gyaan ke 5 Khamasmne', labelHindi: 'पाठशाला में पढ़ने के पूर्व ज्ञान के 5 खमासमणा', icon: '🙌', points: 10 }]
   },
   // ----- ⭐ Aachar -----
   {
-    id: 'katasna', label: 'Katasna & Thavni', labelHindi: 'कटासणा व ठवणी', icon: '🪵',
+    id: 'katasna', label: 'Pathshala me Katasna & Thavni ka upyog', labelHindi: 'पाठशाला में कटासणा व ठवणी का उपयोग', icon: '🪵',
     section: 'aachar', layout: 'simple',
-    items: [{ prop: 'katasnaDone', label: 'Katasna & Thavni', labelHindi: 'कटासणा व ठवणी', icon: '🪵', points: 10 }]
+    items: [{ prop: 'katasnaDone', label: 'Pathshala me Katasna & Thavni ka upyog', labelHindi: 'पाठशाला में कटासणा व ठवणी का उपयोग', icon: '🪵', points: 10 }]
+  },
+  {
+    id: 'annadaan', label: 'Din me kam se kam ek baar kisi ko dene ke baad khana', labelHindi: 'दिन में कम से कम एक बार किसी को देके खाना', icon: '🍎',
+    section: 'aachar', layout: 'simple',
+    items: [{ prop: 'annadaanDone', label: 'Din me kam se kam ek baar kisi ko dene ke baad khana', labelHindi: 'दिन में कम से कम एक बार किसी को देके खाना', icon: '🍎', points: 10 }]
   },
   {
     id: 'supatraDaan', label: 'Supatra Daan', labelHindi: 'सुपात्र दान', icon: '🤲',
@@ -404,39 +409,51 @@ const NIYAM_REGISTRY = [
     items: [{ prop: 'supatraDaanDone', label: 'Supatra Daan', labelHindi: 'सुपात्र दान', icon: '🤲', points: 10 }]
   },
   {
-    id: 'aksharTyag', label: 'Akshar Kapde / Paper Tyag', labelHindi: 'अक्षरवाले कपड़े व पेपर त्याग', icon: '👕',
+    id: 'aksharTyag', label: 'Aksharwale kapde nahi pehnana aur paper me nahi khana', labelHindi: 'अक्षरवाले कपडे नहीं पहनना और पेपर में नहीं खाना', icon: '👕',
     section: 'aachar', layout: 'simple',
-    items: [{ prop: 'aksharTyagDone', label: 'Akshar Kapde / Paper Tyag', labelHindi: 'अक्षरवाले कपड़े व पेपर त्याग', icon: '👕', points: 10 }]
+    items: [{ prop: 'aksharTyagDone', label: 'Aksharwale kapde nahi pehnana aur paper me nahi khana', labelHindi: 'अक्षरवाले कपडे नहीं पहनना और पेपर में नहीं खाना', icon: '👕', points: 10 }]
   },
   {
-    id: 'bhojanVivek', label: 'Bina TV/Mobile Bhojan', labelHindi: 'बिना टीवी/मोबाइल भोजन', icon: '🍽️',
+    id: 'bhojanVivek', label: 'Bina TV/Mobile dekhe Bhojan karna', labelHindi: 'बिना टीवी/मोबाइल देखे भोजन करना', icon: '🍽️',
     section: 'aachar', layout: 'simple',
-    items: [{ prop: 'bhojanVivekDone', label: 'Bina TV/Mobile Bhojan', labelHindi: 'बिना टीवी/मोबाइल भोजन', icon: '🍽️', points: 20 }]
+    items: [{ prop: 'bhojanVivekDone', label: 'Bina TV/Mobile dekhe Bhojan karna', labelHindi: 'बिना टीवी/मोबाइल देखे भोजन करना', icon: '🍽️', points: 20 }]
   },
   {
-    id: 'thaliDhona', label: 'Thali Katori Dhokar Peena', labelHindi: 'थाली कटोरी धोकर पीना', icon: '🥣',
+    id: 'thaliDhona', label: 'Thali Katori Dhokar Peena-Luchna', labelHindi: 'थाली कटोरी धोकर पीना-लुंछना', icon: '🥣',
     section: 'aachar', layout: 'simple',
-    items: [{ prop: 'thaliDhonaDone', label: 'Thali Katori Dhokar Peena', labelHindi: 'थाली कटोरी धोकर पीना', icon: '🥣', points: 20 }]
+    items: [{ prop: 'thaliDhonaDone', label: 'Thali Katori Dhokar Peena-Luchna', labelHindi: 'थाली कटोरी धोकर पीना-लुंछना', icon: '🥣', points: 20 }]
   },
   {
-    id: 'dharmikKahani', label: 'Dharmik Kahani (15 min)', labelHindi: 'परिवार के साथ धार्मिक कहानी', icon: '👪',
+    id: 'dharmikKahani', label: 'Dharmik Kahani sunana (15 min)', labelHindi: 'धार्मिक कहानी सुनना', icon: '👪',
     section: 'aachar', layout: 'simple',
-    items: [{ prop: 'dharmikKahaniDone', label: 'Dharmik Kahani (15 min)', labelHindi: 'परिवार के साथ धार्मिक कहानी', icon: '👪', points: 20 }]
+    items: [{ prop: 'dharmikKahaniDone', label: 'Dharmik Kahani sunana (15 min)', labelHindi: 'धार्मिक कहानी सुनना', icon: '👪', points: 20 }]
   },
   {
-    id: 'packagedTyag', label: 'Bread/Pizza/Cheese Tyag', labelHindi: 'ब्रेड-पाव-पिज़्ज़ा-चीज़ त्याग', icon: '🍕',
+    id: 'packagedTyag', label: 'Bread/Pizza/Cheese/Pav/Butter/Honey/Mayonnaise/Chocolate/Ice-cream ka Tyag', labelHindi: 'ब्रेड-पाव-पिज़्ज़ा-चीज़-बटर-शहद-चॉकलेट-आइस क्रीम का त्याग', icon: '🍕',
     section: 'aachar', layout: 'simple',
-    items: [{ prop: 'packagedTyagDone', label: 'Bread/Pizza/Cheese Tyag', labelHindi: 'ब्रेड-पाव-पिज़्ज़ा-चीज़ त्याग', icon: '🍕', points: 20 }]
+    items: [{ prop: 'packagedTyagDone', label: 'Bread/Pizza/Cheese/Pav/Butter/Honey/Mayonnaise/Chocolate/Ice-cream ka Tyag', labelHindi: 'ब्रेड-पाव-पिज़्ज़ा-चीज़-बटर-शहद-चॉकलेट-आइस क्रीम का त्याग', icon: '🍕', points: 20 }]
   },
   {
-    id: 'vyavastha', label: 'Cheezein Sahi Jagah', labelHindi: 'चीज़ें सही जगह रखना', icon: '🧹',
+    id: 'vyavastha', label: 'Cheezein Sahi Jagah par rakhe', labelHindi: 'चीज़ें सही जगह रखना', icon: '🧹',
     section: 'aachar', layout: 'simple',
-    items: [{ prop: 'vyavasthaDone', label: 'Cheezein Sahi Jagah', labelHindi: 'चीज़ें सही जगह रखना', icon: '🧹', points: 10 }]
+    items: [{ prop: 'vyavasthaDone', label: 'Cheezein Sahi Jagah par rakhe', labelHindi: 'चीज़ें सही जगह रखना', icon: '🧹', points: 10 }]
   },
   {
     id: 'badoKiSeva', label: 'Bado ki Seva (15 min)', labelHindi: 'बड़ों की सेवा', icon: '👵',
     section: 'aachar', layout: 'simple',
     items: [{ prop: 'badoKiSevaDone', label: 'Bado ki Seva (15 min)', labelHindi: 'बड़ों की सेवा', icon: '👵', points: 20 }]
+  },
+
+  // ------Tap--------
+  {
+    id: 'tap', label: 'Tapasya', labelHindi: 'तपस्या', icon: '🧘',
+    section: 'aachar', layout: 'exclusive',
+    items: [
+      { prop: 'BiyasanaDone', label: 'Biyasana', labelHindi: 'बियासना', icon: '2️⃣', points: 20 },
+      { prop: 'EkasanaDone', label: 'Ekasana', labelHindi: 'एकसाना', icon: '1️⃣', points: 30 },
+      { prop: 'AyambilDone', label: 'Ayambil', labelHindi: 'आयम्बिल', icon: '🧂', points: 40 },
+      { prop: 'UpvasDone', label: 'Upvas', labelHindi: 'उपवास', icon: '⭐', points: 50 },
+    ]
   },
 ];
 
