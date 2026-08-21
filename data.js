@@ -429,7 +429,7 @@ const NIYAM_REGISTRY = [
     items: [{ prop: 'dharmikKahaniDone', label: 'Dharmik Kahani sunana (15 min)', labelHindi: 'धार्मिक कहानी सुनना', icon: '👪', points: 20 }]
   },
   {
-    id: 'packagedTyag', label: 'Bread/Pizza/Cheese/Pav/Butter/Honey/Mayonnaise/Chocolate/Ice-cream ka Tyag', labelHindi: 'ब्रेड-पाव-पिज़्ज़ा-चीज़-बटर-शहद-चॉकलेट-आइस क्रीम का त्याग', icon: '🍕',
+    id: 'packagedTyag', label: 'Bread/Pizza/Cheese/Pav/Butter/Honey/\nMayonnaise/Chocolate/Ice-cream ka Tyag', labelHindi: 'ब्रेड-पाव-पिज़्ज़ा-चीज़-बटर-शहद-चॉकलेट-आइस क्रीम का त्याग', icon: '🍕',
     section: 'aachar', layout: 'simple',
     items: [{ prop: 'packagedTyagDone', label: 'Bread/Pizza/Cheese/Pav/Butter/Honey/Mayonnaise/Chocolate/Ice-cream ka Tyag', labelHindi: 'ब्रेड-पाव-पिज़्ज़ा-चीज़-बटर-शहद-चॉकलेट-आइस क्रीम का त्याग', icon: '🍕', points: 20 }]
   },
