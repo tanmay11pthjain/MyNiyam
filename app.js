@@ -40,22 +40,11 @@ const db = firebase.database();
 // path (completePooja()/toggleAshtaPrakari()) and the day-edit dependsOn
 // rule (DAY_EDIT_FIELDS above). Raiya has its OWN key (not devasiya's) so
 // the two can be priced independently — see completePratikraman() below.
-const RAW_POINT_RULES = [
-  { key: 'navkarsi', label: 'Navkarsi', points: (log, P) => log.navkarsiDone ? P.navkarsi : 0 },
-  { key: 'wakeUpEarly', label: 'Wake < 7AM', points: (log, P) => log.wakeUpDone ? P.wakeUpEarly : 0 },
-  { key: 'sleepEarly', label: 'Sleep < 12AM', points: (log, P) => log.sleepDone ? P.sleepEarly : 0 },
-  { key: 'pranam', label: 'Pranam', points: (log, P) => log.pranamDone ? P.pranam : 0 },
-  { key: 'pooja', label: 'Jin Pooja', points: (log, P) => log.poojaDone ? P.pooja : 0 },
-  { key: 'samayik', label: 'Samayik', points: (log, P) => (log.samayikDone || 0) * P.samayik },
-  { key: 'devasiya', label: 'Devasiya', points: (log, P) => log.devasiyaDone ? P.devasiya : 0 },
-  { key: 'raiya', label: 'Raiya', points: (log, P) => log.raiyaDone ? P.raiya : 0 },
-  { key: 'bookReading', label: 'Book Reading', points: (log, P) => Math.floor((log.bookReadingMins || 0) / 30) * P.bookReading },
-  { key: 'ratriBhojan', label: 'Ratri Bhojan Tyag', points: (log, P) => log.ratriBhojanDone ? P.ratriBhojan : 0 },
-  { key: 'kandmool', label: 'Kandmool Tyag', points: (log, P) => log.kandmoolDone ? P.kandmool : 0 },
-  { key: 'dailyNiyam', label: 'Daily Niyam', points: (log, P) => log.dailyNiyamDone ? P.dailyNiyam : 0 },
-  { key: 'ashtaPrakari', label: 'Ashta Prakari', points: (log, P) => (log.ashtaPrakariDone && log.poojaDone) ? P.ashtaPrakari : 0 },
-  { key: 'screenTimePenalty', label: 'Screen Time Penalty', points: (log, P) => -(Math.floor((((log.screenTimeHours || 0) * 60) + (log.screenTimeMins || 0)) / 60) * P.screenTimePenalty) },
-];
+// Populated entirely by registerNiyams() from NIYAM_REGISTRY (data.js) —
+// every niyam, built-in and custom alike. Nothing is hand-written here: a
+// niyam's scoring shape comes from its item's `type` (toggle / counter /
+// duration / screentime), so adding one can never leave it unscored.
+const RAW_POINT_RULES = [];
 
 // A day's total raw points — the same figure used for kpEarned everywhere.
 // `P` defaults to the caller's own live point map (see livePoints()) so
@@ -83,7 +72,10 @@ function _buildDefaultPointMap() {
   const map = { ...POINTS };
   (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
     if (!entry.flag) return; // failed registerNiyams() validation — no rule exists for it
-    entry.items.forEach(item => { map[item.prop] = item.points; });
+    // Keyed by pointsKey (registerNiyams() normalises it to `prop` when the
+    // entry doesn't pin one), because that is what a sangh's stored point
+    // overrides and the admin-points-{key} inputs are keyed by.
+    entry.items.forEach(item => { map[item.pointsKey || item.prop] = item.points; });
   });
   return map;
 }
@@ -141,22 +133,7 @@ function resolveSettings(sanghNode, legacyGlobal) {
 // there either, so raw-point math stays identical between an edited day and
 // a live one). Ashta Prakari's `dependsOn` mirrors the live rule that it
 // only ever scores alongside Pooja (toggleAshtaPrakari()).
-const DAY_EDIT_FIELDS = [
-  { key: 'enableNavkarsi', prop: 'navkarsiDone', icon: '🌅', label: 'Navkarsi', type: 'toggle' },
-  { key: 'enableWakeup', prop: 'wakeUpDone', icon: '⏰', label: 'Wake < 7AM', type: 'toggle' },
-  { key: 'enableSleep', prop: 'sleepDone', icon: '🌙', label: 'Sleep < 12AM', type: 'toggle' },
-  { key: 'enablePranam', prop: 'pranamDone', icon: '🙇', label: 'Pranam', type: 'toggle' },
-  { key: 'enablePooja', prop: 'poojaDone', icon: '🪔', label: 'Jin Pooja', type: 'toggle' },
-  { key: 'enableAshtaPrakari', parentFlag: 'enablePooja', prop: 'ashtaPrakariDone', icon: '🍽️', label: 'Ashta Prakari', type: 'toggle', dependsOn: 'poojaDone' },
-  { key: 'enableSamayik', prop: 'samayikDone', icon: '🧘', label: 'Samayik', type: 'counter', step: 1 },
-  { key: 'enablePratikraman', prop: 'devasiyaDone', icon: '🌅', label: 'Devasiya', type: 'toggle' },
-  { key: 'enableRaiya', parentFlag: 'enablePratikraman', prop: 'raiyaDone', icon: '🌙', label: 'Raiya', type: 'toggle' },
-  { key: 'enableBookReading', prop: 'bookReadingMins', icon: '📖', label: 'Book Reading', type: 'counter', step: 30, unit: 'min' },
-  { key: 'enableRatriBhojan', prop: 'ratriBhojanDone', icon: '🍽️', label: 'Ratri Bhojan Tyag', type: 'toggle' },
-  { key: 'enableKandmool', prop: 'kandmoolDone', icon: '🌱', label: 'Kandmool Tyag', type: 'toggle' },
-  { key: 'enableDailyNiyam', prop: 'dailyNiyamDone', icon: '✨', label: 'Daily Niyam', type: 'toggle' },
-  { key: 'enableScreenTime', prop: 'screenTimeHours', icon: '📱', label: 'Screen Time', type: 'screentime' },
-];
+const DAY_EDIT_FIELDS = [];
 
 // ===== MONTHLY NIYAM STATS — pure per-niyam spec =====
 // Single source of truth for "days/times followed" — shared by the Monthly
@@ -170,43 +147,7 @@ const DAY_EDIT_FIELDS = [
 // appear in the lifetime grid and the export, where the raw amount is still
 // useful context. A spec with `amount` displays that amount everywhere;
 // otherwise it displays `days`.
-const NIYAM_STATS = [
-  { flag: 'enableNavkarsi', icon: '🌅', label: 'Navkarsi', countsDay: log => !!log.navkarsiDone },
-  { flag: 'enableWakeup', icon: '⏰', label: 'Wake < 7AM', countsDay: log => !!log.wakeUpDone },
-  { flag: 'enableSleep', icon: '🌙', label: 'Sleep < 12AM', countsDay: log => !!log.sleepDone },
-  { flag: 'enablePranam', icon: '🙇', label: 'Pranam', countsDay: log => !!log.pranamDone },
-  { flag: 'enablePooja', icon: '🪔', label: 'Jin Pooja', countsDay: log => !!log.poojaDone },
-  {
-    flag: 'enableSamayik', icon: '🧘', label: 'Samayik', exportUnit: 'times',
-    countsDay: (log, s) => (log.samayikDone || 0) >= parseInt((s && s.samayikTarget) || 1, 10),
-    amount: log => log.samayikDone || 0,
-    formatAmount: total => `${total} time${total === 1 ? '' : 's'}`
-  },
-  { flag: 'enablePratikraman', icon: '🌅', label: 'Devasiya', countsDay: log => !!log.devasiyaDone },
-  { flag: 'enableRaiya', parentFlag: 'enablePratikraman', icon: '🌙', label: 'Raiya', countsDay: log => !!log.raiyaDone },
-  {
-    flag: 'enableBookReading', icon: '📖', label: 'Book Reading', exportUnit: 'mins',
-    countsDay: log => (log.bookReadingMins || 0) >= 30,
-    amount: log => log.bookReadingMins || 0,
-    formatAmount: totalMins => {
-      const h = Math.floor(totalMins / 60), m = totalMins % 60;
-      return h > 0 ? `${h}h${m > 0 ? ' ' + m + 'm' : ''}` : `${m}m`;
-    }
-  },
-  { flag: 'enableRatriBhojan', icon: '🍽️', label: 'Ratri Bhojan Tyag', countsDay: log => !!log.ratriBhojanDone },
-  { flag: 'enableKandmool', icon: '🌱', label: 'Kandmool Tyag', countsDay: log => !!log.kandmoolDone },
-  { flag: 'enableDailyNiyam', icon: '✨', label: 'Daily Niyam', countsDay: log => !!log.dailyNiyamDone },
-  { flag: 'enableAshtaPrakari', parentFlag: 'enablePooja', icon: '🍽️', label: 'Ashta Prakari', countsDay: log => !!log.ashtaPrakariDone },
-  {
-    flag: 'enableScreenTime', icon: '📱', label: 'Screen Time', penalty: true, exportUnit: 'mins',
-    countsDay: () => false, // a penalty is never "followed"
-    amount: log => ((log.screenTimeHours || 0) * 60) + (log.screenTimeMins || 0),
-    formatAmount: totalMins => {
-      const h = Math.floor(totalMins / 60), m = totalMins % 60;
-      return h > 0 ? `${h}h${m > 0 ? ' ' + m + 'm' : ''}` : `${m}m`;
-    }
-  },
-];
+const NIYAM_STATS = [];
 
 // ===== NIYAM REGISTRY — derive every wiring from NIYAM_REGISTRY (data.js) =====
 // Registering a niyam there makes it participate in scoring (RAW_POINT_RULES),
@@ -223,13 +164,33 @@ const NIYAM_STATS = [
 // down the whole dashboard is exactly the outage class this guards against
 // (see renderHeader()'s history with the removed streak markup) — every
 // entry here is independently either fully wired or fully ignored.
+// Shared by the 'duration' and 'screentime' item types — both report an
+// amount in minutes and must format it identically wherever it surfaces
+// (Monthly Stats, the lifetime grid, the Excel export).
+function _formatMinutes(totalMins) {
+  const h = Math.floor(totalMins / 60), m = totalMins % 60;
+  return h > 0 ? `${h}h${m > 0 ? ' ' + m + 'm' : ''}` : `${m}m`;
+}
+
+// Total screen-time minutes across an item's hours prop and its sibling
+// minutes prop — the penalty is charged per WHOLE hour of the combined
+// figure, so 59m costs nothing and 1h30m costs exactly one hour's penalty.
+function _screenTimeMinutes(item, log) {
+  return ((log[item.prop] || 0) * 60) + ((item.minsProp ? log[item.minsProp] : 0) || 0);
+}
+
 function registerNiyams() {
   const usedIds = new Set();
+  // DEFAULT_DAILY_LOG now ships with only the non-niyam bookkeeping fields
+  // (date/kpEarned/perfectDay/…), so this is exactly the reserved set a
+  // niyam prop must not collide with.
   const usedProps = new Set(Object.keys(DEFAULT_DAILY_LOG));
   const ID_RE = /^[a-zA-Z][a-zA-Z0-9]*$/;
-  const PROP_RE = /^[a-zA-Z][a-zA-Z0-9]*Done$/;
+  const DONE_PROP_RE = /^[a-zA-Z][a-zA-Z0-9]*Done$/;
+  const PLAIN_PROP_RE = /^[a-zA-Z][a-zA-Z0-9]*$/;
   const LAYOUTS = ['simple', 'dual', 'dependent', 'exclusive'];
-  const SECTIONS = ['bhakti', 'aachar'];
+  const SECTIONS = ['bhakti', 'aachar', 'morning', 'sadhana', 'tyag'];
+  const TYPES = ['toggle', 'counter', 'duration', 'screentime'];
 
   (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
     try {
@@ -249,11 +210,29 @@ function registerNiyams() {
       const seenPropsThisEntry = new Set();
       entry.items.forEach(item => {
         if (!item || typeof item !== 'object') throw new Error('item is not an object');
-        if (!PROP_RE.test(item.prop || '')) throw new Error(`invalid prop "${item.prop}"`);
+        const type = item.type || 'toggle';
+        if (!TYPES.includes(type)) throw new Error(`invalid type "${type}" for "${item.prop}"`);
+        // Boolean niyams keep the strict "…Done" convention — that suffix is
+        // what marks a prop as a toggle at a glance across the whole log.
+        // The numeric types (a count, minutes, screen-time hours) legitimately
+        // don't end in "Done", so they only have to be a plain identifier.
+        const re = type === 'toggle' ? DONE_PROP_RE : PLAIN_PROP_RE;
+        if (!re.test(item.prop || '')) throw new Error(`invalid prop "${item.prop}" for type "${type}"`);
         if (usedProps.has(item.prop)) throw new Error(`duplicate/reserved prop "${item.prop}"`);
+        if (item.minsProp) {
+          if (!PLAIN_PROP_RE.test(item.minsProp)) throw new Error(`invalid minsProp "${item.minsProp}"`);
+          if (usedProps.has(item.minsProp)) throw new Error(`duplicate/reserved minsProp "${item.minsProp}"`);
+        }
+        if (type === 'duration' && !(Number.isFinite(item.divisor) && item.divisor > 0)) {
+          throw new Error(`type "duration" requires a positive divisor for "${item.prop}"`);
+        }
+        if (type === 'screentime' && !item.minsProp) {
+          throw new Error(`type "screentime" requires minsProp for "${item.prop}"`);
+        }
         if (!item.label) throw new Error(`missing label for "${item.prop}"`);
         if (!Number.isFinite(item.points) || item.points <= 0) throw new Error(`invalid points for "${item.prop}"`);
         seenPropsThisEntry.add(item.prop);
+        if (item.minsProp) seenPropsThisEntry.add(item.minsProp);
       });
       if (entry.layout === 'dependent') {
         const child = entry.items[1];
@@ -267,10 +246,22 @@ function registerNiyams() {
       // partial trace in any catalog.
       usedIds.add(entry.id);
       seenPropsThisEntry.forEach(p => usedProps.add(p));
-      entry.flag = 'enable' + entry.id.charAt(0).toUpperCase() + entry.id.slice(1);
+      // Explicit `flag` wins: the built-ins' settings keys (enableBookReading,
+      // enableScreenTime, enableDailyNiyam, …) are long-standing per-sangh
+      // stored data and don't match the enable<Id> derivation.
+      entry.flag = entry.flag || ('enable' + entry.id.charAt(0).toUpperCase() + entry.id.slice(1));
 
       entry.items.forEach((item, idx) => {
-        DEFAULT_DAILY_LOG[item.prop] = false;
+        const type = item.type || 'toggle';
+        // The points key is what a sangh's stored overrides are keyed by, so
+        // it defaults to `prop` (every pre-existing custom niyam) but the
+        // built-ins pin their own historical keys (navkarsi, wakeUpEarly, …).
+        const pointsKey = item.pointsKey || item.prop;
+        item.pointsKey = pointsKey; // normalised so _buildDefaultPointMap() and the UI can rely on it
+
+        // A toggle logs a boolean; every numeric type starts at 0.
+        DEFAULT_DAILY_LOG[item.prop] = (type === 'toggle') ? false : 0;
+        if (item.minsProp) DEFAULT_DAILY_LOG[item.minsProp] = 0;
 
         // The second item of a 2-item entry (dependent/dual/exclusive) is
         // the "sub" niyam _renderAdminNiyamRows() renders as an indented
@@ -280,39 +271,87 @@ function registerNiyams() {
         // these have been live under their parent for every existing
         // sangh, so a settings object merged as {...DEFAULT_SETTINGS,
         // ...snap.val()} must fall back to "still on" for a sangh saved
-        // before this change. Mirrors enableAshtaPrakari/enableRaiya's
-        // identical reasoning in data.js.
+        // before this change. An explicit item.flag wins for the same
+        // stored-data reason as entry.flag above.
         if (idx === 1) {
-          const base = item.prop.slice(0, -4); // strip trailing "Done"
-          item.flag = 'enable' + base.charAt(0).toUpperCase() + base.slice(1);
+          const base = item.prop.replace(/Done$/, '');
+          item.flag = item.flag || ('enable' + base.charAt(0).toUpperCase() + base.slice(1));
           item.parentFlag = entry.flag;
           DEFAULT_SETTINGS[item.flag] = true;
         }
 
-        RAW_POINT_RULES.push({
-          key: item.prop,
-          label: item.label,
-          points: (log, P) => {
+        const flag = item.flag || entry.flag;
+        const parentFlag = item.flag ? item.parentFlag : undefined;
+        const icon = item.icon || entry.icon;
+
+        // ----- scoring -----
+        let pointsFn;
+        if (type === 'counter') {
+          pointsFn = (log, P) => (log[item.prop] || 0) * P[pointsKey];
+        } else if (type === 'duration') {
+          pointsFn = (log, P) => Math.floor((log[item.prop] || 0) / item.divisor) * P[pointsKey];
+        } else if (type === 'screentime') {
+          // Negative by definition — the only rule that subtracts.
+          pointsFn = (log, P) => -(Math.floor(_screenTimeMinutes(item, log) / 60) * P[pointsKey]);
+        } else {
+          pointsFn = (log, P) => {
             if (!log[item.prop]) return 0;
             if (item.dependsOn && !log[item.dependsOn]) return 0;
-            return P[item.prop];
-          }
-        });
+            return P[pointsKey];
+          };
+        }
+        RAW_POINT_RULES.push({ key: pointsKey, label: item.label, points: pointsFn });
 
+        // ----- streak-saver day-edit overlay -----
+        // 'counter' and 'duration' share the overlay's stepper control; only
+        // screen time needs its own hours/minutes widget.
+        const editType = type === 'screentime' ? 'screentime'
+          : (type === 'counter' || type === 'duration') ? 'counter'
+          : 'toggle';
         DAY_EDIT_FIELDS.push({
-          key: item.flag || entry.flag, parentFlag: item.flag ? item.parentFlag : undefined,
-          prop: item.prop, icon: item.icon || entry.icon,
-          label: item.label, type: 'toggle', dependsOn: item.dependsOn
+          key: flag, parentFlag, prop: item.prop, icon, label: item.label,
+          type: editType, step: item.step, unit: item.unit, dependsOn: item.dependsOn
         });
 
-        NIYAM_STATS.push({
-          flag: item.flag || entry.flag, parentFlag: item.flag ? item.parentFlag : undefined,
-          icon: item.icon || entry.icon, label: item.label,
-          countsDay: log => !!log[item.prop] && (!item.dependsOn || !!log[item.dependsOn])
-        });
+        // ----- Monthly Stats / lifetime grid / Excel export -----
+        const spec = { flag, parentFlag, icon, label: item.label };
+        if (type === 'counter') {
+          spec.exportUnit = item.exportUnit || 'times';
+          // targetSetting lets a counter define "followed" as a threshold an
+          // admin controls (Samayik's samayikTarget). Without one, any count
+          // of 1 or more counts as followed.
+          spec.countsDay = (log, s) => (log[item.prop] || 0) >= parseInt((s && item.targetSetting && s[item.targetSetting]) || 1, 10);
+          spec.amount = log => log[item.prop] || 0;
+          spec.formatAmount = total => `${total} time${total === 1 ? '' : 's'}`;
+        } else if (type === 'duration') {
+          spec.exportUnit = item.exportUnit || 'mins';
+          spec.countsDay = log => (log[item.prop] || 0) >= item.divisor;
+          spec.amount = log => log[item.prop] || 0;
+          spec.formatAmount = _formatMinutes;
+        } else if (type === 'screentime') {
+          spec.penalty = true;
+          spec.exportUnit = item.exportUnit || 'mins';
+          spec.countsDay = () => false; // a penalty is never "followed"
+          spec.amount = log => _screenTimeMinutes(item, log);
+          spec.formatAmount = _formatMinutes;
+        } else if (item.dependsOn && item.countsWithoutParent) {
+          // Preserves long-standing built-in behaviour for Ashta Prakari: it
+          // scores 0 without Jin Pooja (see pointsFn above) yet has always
+          // still counted as "followed" here. That is arguably inconsistent
+          // with the identical registry mechanism (Chaitya Vandan DOES gate),
+          // but changing it would silently rewrite what members see for days
+          // already logged, so it stays opt-in and explicit rather than being
+          // quietly "fixed" during a refactor.
+          spec.countsDay = log => !!log[item.prop];
+        } else {
+          spec.countsDay = log => !!log[item.prop] && (!item.dependsOn || !!log[item.dependsOn]);
+        }
+        NIYAM_STATS.push(spec);
       });
 
-      DEFAULT_SETTINGS[entry.flag] = false; // off by default — admin opts in from Settings
+      // Built-ins ship on; a newly added niyam ships off until a sangh admin
+      // opts it in from Settings.
+      DEFAULT_SETTINGS[entry.flag] = entry.defaultEnabled === true;
     } catch (e) {
       console.error(`Skipping invalid NIYAM_REGISTRY entry (id: ${entry && entry.id}):`, e.message);
     }
@@ -3238,6 +3277,9 @@ class KalyanMitra {
 
     (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
       if (!entry.flag) return;
+      // A built-in's card is already hand-written in index.html (with its
+      // own counters/steppers) — generating a second one would duplicate it.
+      if (entry.builtIn) return;
       const container = containers[entry.section];
       if (!container) return;
       const html = this._buildRegistryCardHtml(entry);
@@ -4323,6 +4365,65 @@ class KalyanMitra {
     });
   }
 
+  // Populates every hand-written card / admin row from NIYAM_REGISTRY, so a
+  // built-in's name, Hindi or icon is edited in data.js alone and shows up
+  // everywhere at once. Exactly the mechanism _refreshPointLabels() above
+  // already uses for point values, just for text:
+  //
+  //   data-niyam-label="pooja"        -> that entry's label
+  //   data-niyam-label="pooja:admin"  -> its adminLabel (falls back to label)
+  //   data-niyam-hindi="pooja"        -> its labelHindi
+  //   data-niyam-icon="pooja"         -> its icon
+  //
+  // Generated cards and admin rows already interpolate the same values at
+  // build time, so they need no attributes. Every lookup is guarded: an
+  // attribute naming an entry that no longer exists simply leaves the
+  // markup's own text in place rather than blanking it or throwing.
+  _refreshNiyamLabels() {
+    const REGISTRY = typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : [];
+    if (!REGISTRY.length) return;
+    const byId = {};
+    REGISTRY.forEach(e => { byId[e.id] = e; });
+
+    // Reference syntax: "<id>[#itemIndex][:variant]"
+    //   pooja          -> the entry
+    //   pooja:admin    -> the entry, admin wording
+    //   pooja#1        -> its second item (the Ashta Prakari sub-row)
+    // data-niyam-prefix, if present, is kept in front of the resolved text
+    // so a sub-row's "↳ " indent marker survives the repaint.
+    const resolve = raw => {
+      const [head, variant] = raw.split(':');
+      const [id, itemIdx] = head.split('#');
+      const entry = byId[id];
+      if (!entry) return null;
+      if (itemIdx === undefined) return { entry, target: entry, variant };
+      const item = (entry.items || [])[Number(itemIdx)];
+      return item ? { entry, target: item, variant } : null;
+    };
+
+    const apply = (selector, datasetKey, pick) => {
+      document.querySelectorAll(selector).forEach(el => {
+        const raw = el.dataset[datasetKey];
+        if (!raw) return;
+        const found = resolve(raw);
+        if (!found) return; // stale reference — leave the markup's own text alone
+        const text = pick(found.target, found.entry, found.variant);
+        if (typeof text !== 'string' || !text) return;
+        el.textContent = (el.dataset.niyamPrefix || '') + text;
+      });
+    };
+
+    // adminLabel / adminLabelHindi only exist on entries and only where the
+    // Settings row legitimately reads differently from the dashboard card
+    // (e.g. the Pratikraman row names the Devasiya slot its points input
+    // belongs to). Everything else falls back to the single shared value.
+    apply('[data-niyam-label]', 'niyamLabel',
+      (t, e, variant) => (variant === 'admin' ? (t.adminLabel || t.label) : t.label));
+    apply('[data-niyam-hindi]', 'niyamHindi',
+      (t, e, variant) => (variant === 'admin' ? (t.adminLabelHindi || t.labelHindi) : t.labelHindi));
+    apply('[data-niyam-icon]', 'niyamIcon', (t, e) => t.icon || e.icon);
+  }
+
   renderDashboard() {
     // updateLockUI() runs first so it establishes the locked/unlocked baseline;
     // renderActivities() runs last so it has final authority over each button's
@@ -4335,6 +4436,7 @@ class KalyanMitra {
     this.renderSubmitButton();
     this.renderActivities();
     this._refreshPointLabels();
+    this._refreshNiyamLabels();
   }
 
   // Today's AP, read straight from `this.dailyLog` — the live in-memory log
@@ -4513,6 +4615,10 @@ class KalyanMitra {
     // exactly like the built-in cards.
     REGISTRY.forEach(entry => {
       if (!entry.flag) return;
+      // Built-in cards keep their own hand-written update paths above (they
+      // have bespoke counters, slot buttons and steppers this generic pass
+      // can't drive) — touching them here would fight those.
+      if (entry.builtIn) return;
       const card = document.getElementById(`${entry.id}-card`);
       if (!card) return;
       const enabled = !!s[entry.flag];
@@ -4579,30 +4685,52 @@ class KalyanMitra {
   // built-in Ashta Prakari never has — only the parent counts. An
   // 'exclusive' pair (e.g. Guru Vandan) counts as a single task, satisfied
   // by either option.
+  // Is this ONE item satisfied for the given log? The single definition of
+  // "done" per item type, shared by _registryProgress() (and therefore by
+  // getTotalTasksCount()/getCompletedCount()/_isLogComplete()) so the
+  // dashboard counter, Perfect Day and the streak can never disagree.
+  // Mirrors each type's countsDay() in NIYAM_STATS (registerNiyams()).
+  _niyamItemSatisfied(item, log, settings) {
+    const d = log || {}, s = settings || DEFAULT_SETTINGS;
+    const type = item.type || 'toggle';
+    if (type === 'counter') {
+      // targetSetting lets an admin raise the bar (Samayik's samayikTarget);
+      // without one, any count of 1+ satisfies it.
+      const target = parseInt((item.targetSetting && s[item.targetSetting]) || 1, 10);
+      return (d[item.prop] || 0) >= target;
+    }
+    if (type === 'duration') return (d[item.prop] || 0) >= item.divisor;
+    if (type === 'screentime') return false; // a penalty is never "done"
+    return !!d[item.prop] && (!item.dependsOn || !!d[item.dependsOn]);
+  }
+
   _registryProgress(log, settings) {
     const s = settings || DEFAULT_SETTINGS, d = log || {};
     let total = 0, completed = 0;
     (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
       if (!entry.flag || !s[entry.flag]) return;
       if (entry.layout === 'exclusive') {
-        // A disabled option's own button is already hidden (§1.6 dashboard
-        // gating), so `some(...)` can only ever see the enabled option(s)
-        // in practice — no extra check needed here for the pair to still
-        // count as one satisfiable task.
+        // A disabled option's own button is already hidden (dashboard
+        // gating in renderActivities()), so `some(...)` can only ever see
+        // the enabled option(s) in practice — no extra check needed here
+        // for the pair to still count as one satisfiable task.
         total++;
         if (entry.items.some(item => !!d[item.prop])) completed++;
         return;
       }
       entry.items.forEach(item => {
+        // A dependent child (Ashta Prakari, Chaitya Vandan) is a bonus on
+        // top of its parent, never a task in its own right.
         if (item.dependsOn) return;
-        // 'dual' layout's second item (e.g. Navkar Jaap — Night) can carry
-        // its own independent flag (see registerNiyams()) — skip it from
-        // the total entirely when switched off, exactly like Raiya is
-        // skipped in getTotalTasksCount()/_isLogComplete(), so disabling it
-        // can never make Perfect Day unreachable.
+        // A second item can carry its own independent flag (Raiya, Navkar
+        // Jaap — Night) — skip it from the total entirely when switched
+        // off, so disabling it can never make Perfect Day unreachable.
         if (item.flag && !s[item.flag]) return;
+        // Screen Time is a penalty, not something to complete — it has
+        // never counted toward the daily total.
+        if ((item.type || 'toggle') === 'screentime') return;
         total++;
-        if (d[item.prop]) completed++;
+        if (this._niyamItemSatisfied(item, d, s)) completed++;
       });
     });
     return { total, completed };
@@ -4621,29 +4749,28 @@ class KalyanMitra {
     (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
       if (!entry.flag || !s[entry.flag]) return;
       entry.items.forEach(item => {
+        // A sub-item switched off isn't part of this sangh's day at all.
+        if (item.flag && !s[item.flag]) return;
+        // Screen Time is a penalty — an icon here reads as an achievement.
+        if ((item.type || 'toggle') === 'screentime') return;
+        // A dependent child only shows once its parent is also done.
         if (item.dependsOn && !d[item.dependsOn]) return;
-        if (d[item.prop]) icons.push(item.icon || entry.icon || '');
+        // Uses the same "done" rule as the counters (a 29-minute read must
+        // not earn the Book Reading icon when 30 is the bar) rather than a
+        // bare truthiness check.
+        if (this._niyamItemSatisfied(item, d, s)) icons.push(item.icon || entry.icon || '');
       });
     });
     return icons;
   }
 
   getTotalTasksCount() {
-    const s = this.settings;
-    let total = 0;
-    if (s.enableNavkarsi) total++;
-    if (s.enableWakeup) total++;
-    if (s.enableSleep) total++;
-    if (s.enablePranam) total++;
-    if (s.enablePooja) total++;
-    if (s.enableSamayik) total++;
-    if (s.enablePratikraman) total++; // Devasiya — no independent sub-flag
-    if (s.enablePratikraman && s.enableRaiya) total++;
-    if (s.enableBookReading) total++;
-    if (s.enableRatriBhojan) total++;
-    if (s.enableKandmool) total++;
-    if (s.enableDailyNiyam) total++;
-    return total + this._registryProgress(this.dailyLog, s).total;
+    // Every niyam now comes from NIYAM_REGISTRY via _registryProgress() —
+    // the built-ins included. They used to be counted by a hand-written
+    // branch per niyam here AND (once consolidated) again by the registry
+    // walk, which double-counted every one of them and made Perfect Day
+    // unreachable. One source, counted once.
+    return this._registryProgress(this.dailyLog, this.settings).total;
   }
 
   renderDailyProgress() {
@@ -4994,40 +5121,15 @@ class KalyanMitra {
   // an NaN comparison if samayikTarget is ever missing.
   _isLogComplete(log, settings) {
     if (!log) return false;
-    const d = log, s = settings;
-    if (s.enableNavkarsi && !d.navkarsiDone) return false;
-    if (s.enableWakeup && !d.wakeUpDone) return false;
-    if (s.enableSleep && !d.sleepDone) return false;
-    if (s.enablePranam && !d.pranamDone) return false;
-    if (s.enablePooja && !d.poojaDone) return false;
-    if (s.enableSamayik && (d.samayikDone || 0) < parseInt(s.samayikTarget || 1)) return false;
-    if (s.enablePratikraman && !d.devasiyaDone) return false;
-    if (s.enablePratikraman && s.enableRaiya && !d.raiyaDone) return false;
-    if (s.enableBookReading && (d.bookReadingMins || 0) < 30) return false;
-    if (s.enableRatriBhojan && !d.ratriBhojanDone) return false;
-    if (s.enableKandmool && !d.kandmoolDone) return false;
-    if (s.enableDailyNiyam && !d.dailyNiyamDone) return false;
-    const rp = this._registryProgress(d, s);
-    if (rp.completed < rp.total) return false;
-    return true;
+    // "Every enabled task satisfied" — _registryProgress() already applies
+    // each item type's own rule (a counter must reach its target, a
+    // duration its divisor), so there is nothing left to special-case here.
+    const rp = this._registryProgress(log, settings || DEFAULT_SETTINGS);
+    return rp.completed >= rp.total;
   }
 
   getCompletedCount() {
-    const d = this.dailyLog, s = this.settings;
-    let c = 0;
-    if (s.enableNavkarsi && d.navkarsiDone) c++;
-    if (s.enableWakeup && d.wakeUpDone) c++;
-    if (s.enableSleep && d.sleepDone) c++;
-    if (s.enablePranam && d.pranamDone) c++;
-    if (s.enablePooja && d.poojaDone) c++;
-    if (s.enableSamayik && (d.samayikDone || 0) >= parseInt(s.samayikTarget)) c++;
-    if (s.enablePratikraman && d.devasiyaDone) c++;
-    if (s.enablePratikraman && s.enableRaiya && d.raiyaDone) c++;
-    if (s.enableBookReading && (d.bookReadingMins || 0) >= 30) c++;
-    if (s.enableRatriBhojan && d.ratriBhojanDone) c++;
-    if (s.enableKandmool && d.kandmoolDone) c++;
-    if (s.enableDailyNiyam && d.dailyNiyamDone) c++;
-    return c + this._registryProgress(d, s).completed;
+    return this._registryProgress(this.dailyLog, this.settings).completed;
   }
 
   checkBadges() {
@@ -5761,42 +5863,18 @@ class KalyanMitra {
         continue;
       }
 
-      let done = 0, total = 0;
-      const checks = [
-        { enabled: s.enableNavkarsi, val: log.navkarsiDone },
-        { enabled: s.enableWakeup, val: log.wakeUpDone },
-        { enabled: s.enableSleep, val: log.sleepDone },
-        { enabled: s.enablePranam, val: log.pranamDone },
-        { enabled: s.enablePooja, val: log.poojaDone },
-        { enabled: s.enableSamayik, val: (log.samayikDone || 0) >= parseInt(s.samayikTarget || 1) },
-        { enabled: s.enablePratikraman, val: !!log.devasiyaDone },
-        { enabled: s.enablePratikraman && s.enableRaiya, val: !!log.raiyaDone },
-        { enabled: s.enableBookReading, val: (log.bookReadingMins || 0) >= 30 },
-        { enabled: s.enableRatriBhojan, val: log.ratriBhojanDone },
-        { enabled: s.enableKandmool, val: log.kandmoolDone },
-        { enabled: s.enableDailyNiyam, val: log.dailyNiyamDone },
-      ];
-      checks.forEach(c => { if (c.enabled) { total++; if (c.val) done++; } });
+      // Every niyam — built-in and custom — is counted once by the same
+      // registry walk the dashboard and Perfect Day use, so a day card's
+      // "3/12" can never disagree with them.
       const rp = this._registryProgress(log, s);
-      total += rp.total; done += rp.completed;
+      const total = rp.total, done = rp.completed;
 
       const pct = total > 0 ? Math.round((done / total) * 100) : 0;
       const kp = log.kpEarned || 0;
       const isPerfect = log.perfectDay;
       const statusClass = isPerfect ? 'history-perfect' : (pct >= 50 ? 'history-good' : 'history-low');
 
-      const icons = [];
-      if (s.enableNavkarsi && log.navkarsiDone) icons.push('🌅');
-      if (s.enableWakeup && log.wakeUpDone) icons.push('⏰');
-      if (s.enablePooja && log.poojaDone) icons.push('🪔');
-      if (s.enableSamayik && (log.samayikDone || 0) > 0) icons.push('🧘');
-      if (s.enablePratikraman && log.devasiyaDone) icons.push('🌅');
-      if (s.enablePratikraman && s.enableRaiya && log.raiyaDone) icons.push('🌙');
-      if (s.enableBookReading && (log.bookReadingMins || 0) >= 30) icons.push('📖');
-      if (s.enableRatriBhojan && log.ratriBhojanDone) icons.push('🍽️');
-      if (s.enableKandmool && log.kandmoolDone) icons.push('🌱');
-      if (s.enableDailyNiyam && log.dailyNiyamDone) icons.push('✨');
-      icons.push(...this._registryIcons(log, s));
+      const icons = this._registryIcons(log, s);
 
       html += `<div class="history-day ${statusClass}" ${clickAttr}>
         <div class="history-date">${this._formatHistoryDate(dateKey)}${isPerfect ? ' ⭐' : ''}</div>
@@ -6480,26 +6558,30 @@ class KalyanMitra {
       ${isPerfect ? '<span class="day-detail-badge">⭐ Perfect Day</span>' : ''}
     `;
 
-    // Activity grid
-    const activities = [
-      { key: 'enableNavkarsi', icon: '🌅', name: 'Navkarsi', done: !!log.navkarsiDone },
-      { key: 'enableWakeup', icon: '⏰', name: 'Wake < 7AM', done: !!log.wakeUpDone },
-      { key: 'enableSleep', icon: '🌙', name: 'Sleep < 12AM', done: !!log.sleepDone },
-      { key: 'enablePranam', icon: '🙇', name: 'Pranam', done: !!log.pranamDone },
-      { key: 'enablePooja', icon: '🪔', name: 'Jin Pooja', done: !!log.poojaDone, extra: log.ashtaPrakariDone ? '+Ashta' : '' },
-      { key: 'enableSamayik', icon: '🧘', name: 'Samayik', done: (log.samayikDone || 0) > 0, val: `${log.samayikDone || 0}` },
-      { key: 'enablePratikraman', icon: '🌅', name: 'Devasiya', done: !!log.devasiyaDone },
-      { key: 'enableRaiya', parentFlag: 'enablePratikraman', icon: '🌙', name: 'Raiya', done: !!log.raiyaDone },
-      { key: 'enableBookReading', icon: '📖', name: 'Book Reading', done: (log.bookReadingMins || 0) >= 30, val: `${log.bookReadingMins || 0} min` },
-      { key: 'enableRatriBhojan', icon: '🍽️', name: 'Ratri Bhojan Tyag', done: !!log.ratriBhojanDone },
-      { key: 'enableKandmool', icon: '🌱', name: 'Kandmool Tyag', done: !!log.kandmoolDone },
-      { key: 'enableScreenTime', icon: '📱', name: 'Screen Time', done: false, val: `${log.screenTimeHours || 0}h ${log.screenTimeMins || 0}m` },
-      { key: 'enableDailyNiyam', icon: '✨', name: 'Daily Niyam', done: !!log.dailyNiyamDone },
-    ];
+    // Activity grid — one row per niyam, built straight from the registry
+    // so it lists exactly the same set (and in the same order) as Monthly
+    // Stats and the day-edit overlay. It used to be a hand-written array
+    // PLUS a registry walk, which now that the built-ins live in the
+    // registry would have listed every one of them twice.
+    const activities = [];
     (typeof NIYAM_REGISTRY !== 'undefined' ? NIYAM_REGISTRY : []).forEach(entry => {
       if (!entry.flag) return;
       entry.items.forEach(item => {
-        activities.push({ key: item.flag || entry.flag, parentFlag: item.flag ? item.parentFlag : undefined, icon: item.icon || entry.icon || '', name: item.label, done: !!log[item.prop] });
+        const type = item.type || 'toggle';
+        // Amount-bearing types show the figure itself instead of a tick —
+        // a bare "✓" would hide how many samayiks or minutes were logged.
+        let val = '';
+        if (type === 'counter') val = `${log[item.prop] || 0}`;
+        else if (type === 'duration') val = `${log[item.prop] || 0} min`;
+        else if (type === 'screentime') val = `${log[item.prop] || 0}h ${(item.minsProp ? log[item.minsProp] : 0) || 0}m`;
+        activities.push({
+          key: item.flag || entry.flag,
+          parentFlag: item.flag ? item.parentFlag : undefined,
+          icon: item.icon || entry.icon || '',
+          name: item.label,
+          done: this._niyamItemSatisfied(item, log, s),
+          val,
+        });
       });
     });
 
@@ -6936,6 +7018,11 @@ class KalyanMitra {
       niyamSelect.appendChild(opt);
     });
     niyamSelect.value = s.currentDailyNiyamId || 0;
+
+    // The hand-written built-in rows read their label/Hindi from
+    // NIYAM_REGISTRY, same as the dashboard cards — must run after
+    // _renderAdminNiyamRows() above so the generated rows exist too.
+    this._refreshNiyamLabels();
 
     // Dims + locks every points input whose niyam is currently off — must
     // run AFTER the toggles above (points inputs themselves were already

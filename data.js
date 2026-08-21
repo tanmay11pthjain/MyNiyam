@@ -123,30 +123,14 @@ const MOTIVATIONAL_MESSAGES = {
 };
 
 // ===== DEFAULT SETTINGS =====
+// Only the settings that aren't a niyam's enable flag. Every enable<Id>
+// flag (enableNavkarsi, enablePooja, enableAshtaPrakari, …) is added by
+// registerNiyams() from NIYAM_REGISTRY below, using each entry's `flag` and
+// `defaultEnabled` — so switching a niyam on/off by default, or adding a
+// new one, is a one-line change there rather than an edit in two files.
 const DEFAULT_SETTINGS = {
-  enablePooja: true,
-  enableSamayik: true,
-  enableNavkarsi: true,
-  enablePranam: true,
-  enablePratikraman: true,
-  enableBookReading: true,
-  enableRatriBhojan: true,
-  enableKandmool: true,
-  enableWakeup: true,
-  enableSleep: true,
-  enableScreenTime: true,
-  enableDailyNiyam: true,
-  // Sub-niyam toggles — independent of their parent's flag above. Default
-  // true (unlike registry parent flags, which default false) because these
-  // two have been live under their parent for every existing sangh; `true`
-  // is what a settings object merged as {...DEFAULT_SETTINGS, ...snap.val()}
-  // falls back to for any sangh saved before this change, so nothing
-  // disappears from an existing dashboard. See _syncNiyamRowStates() in
-  // app.js for how the admin row ANDs this with the parent's own flag.
-  enableAshtaPrakari: true,
-  enableRaiya: true,
   currentDailyNiyamId: 0, // Index of PACHCHAKHANS array
-  samayikTarget: 1,
+  samayikTarget: 1,       // referenced by the samayik entry's `targetSetting`
   introSeen: false,
 };
 
@@ -190,23 +174,14 @@ const DEFAULT_PROFILE = {
 };
 
 // ===== DEFAULT DAILY LOG =====
+// Only the non-niyam bookkeeping fields are listed here. Every niyam's own
+// prop (navkarsiDone, samayikDone, bookReadingMins, screenTimeHours/Mins, …)
+// is added by registerNiyams() from NIYAM_REGISTRY below — declaring a niyam
+// there is what creates its log field, so the two can never drift apart.
+// The keys that remain are also the "reserved" set registerNiyams() guards
+// new niyams against colliding with.
 const DEFAULT_DAILY_LOG = {
   date: null,
-  poojaDone: false,
-  ashtaPrakariDone: false,
-  samayikDone: 0,
-  navkarsiDone: false,
-  pranamDone: false,
-  devasiyaDone: false,
-  raiyaDone: false,
-  bookReadingMins: 0,
-  ratriBhojanDone: false,
-  kandmoolDone: false,
-  wakeUpDone: false,
-  sleepDone: false,
-  screenTimeHours: 0,
-  screenTimeMins: 0,
-  dailyNiyamDone: false,
   kpEarned: 0,
   perfectDay: false,
   bonuses: [],
@@ -215,51 +190,173 @@ const DEFAULT_DAILY_LOG = {
 };
 
 // ===== POINT VALUES =====
+// Only the two awards that aren't tied to a niyam. Every niyam's own point
+// value lives on its NIYAM_REGISTRY item (`points`, keyed by `pointsKey`)
+// and is folded in by _buildDefaultPointMap() in app.js.
 const POINTS = {
-  pooja: 10,        // "Jin Pooja" — repointed from 20; see index.html's Pooja card relabel
-  ashtaPrakari: 50, // repointed from 10, alongside the Jin Pooja relabel above
-  samayik: 20, // per samayik
-  navkarsi: 10,
-  pranam: 20,
-  devasiya: 30,
-  raiya: 30,
-  bookReading: 20, // per 30 mins
-  ratriBhojan: 20,
-  kandmool: 20,
-  wakeUpEarly: 10,
-  sleepEarly: 10,
-  screenTimePenalty: 5, // per hour
-  dailyNiyam: 10,
   perfectDay: 50,
   dailyLogin: 10,
 };
 
-// ===== NIYAM REGISTRY — declarative extra niyams =====
-// Each entry becomes one dashboard card. registerNiyams() (app.js) derives
-// scoring, the day-edit overlay, Monthly Niyam Stats, the lifetime grid and
-// the Excel export from this automatically — see registerNiyams()'s own
-// comment for exactly what each field does and how it's validated.
-// Ships with every enable<Id> flag OFF (registerNiyams() seeds
-// DEFAULT_SETTINGS), so adding entries here is safe for existing users —
-// nothing changes until a sangh admin opts a card in from Settings.
+// ===== NIYAM REGISTRY — THE single place every niyam is defined =====
+// This is the one array to edit to add, remove or change ANY niyam —
+// built-in or custom. registerNiyams() (app.js) derives all of it from here:
+// scoring (RAW_POINT_RULES), the log's shape (DEFAULT_DAILY_LOG), the enable
+// flags (DEFAULT_SETTINGS), point values (POINTS/DEFAULT_POINT_MAP), the
+// streak-saver day-edit overlay (DAY_EDIT_FIELDS), Monthly Niyam Stats, the
+// lifetime grid and the Excel export (NIYAM_STATS), the admin Settings rows,
+// and each card's label/Hindi/icon text. See registerNiyams()'s own comment
+// for how each field is validated.
 //
-//   id       unique, letters/digits only, first char a letter (becomes
-//            enable<Id> in settings and <id>-card / btn-<id> in the DOM —
-//            never rename one after users have logged against it)
-//   section  'bhakti' | 'aachar' — which of the two new Home sections
-//   layout   'simple'    one done/undo button, one prop
-//            'dual'      two independent toggle slots in one card (like
-//                        the existing Pratikraman card)
-//            'dependent' a toggle + a child toggle that only scores while
-//                        the parent is done (like the existing Pooja +
-//                        Ashta Prakari checkbox)
-//            'exclusive' two toggle slots where picking one clears the
-//                        other — any one, or neither, but never both
-//   items    one entry per toggle: { prop, label, labelHindi, icon,
-//            points, dependsOn? } — prop must end in "Done" and be
-//            globally unique. `dependsOn` (dependent layout's child only)
-//            names the sibling item's prop.
+// TO ADD A NIYAM: append one entry. It ships DISABLED (defaultEnabled
+// defaults to false), so nothing changes for existing users until a sangh
+// admin opts it in from Settings.
+//
+// ----- entry fields -----
+//   id         unique, letters/digits only, first char a letter. Becomes
+//              <id>-card / btn-<id> in the DOM — NEVER rename one after
+//              members have logged against it.
+//   label      the niyam's name (dashboard card title + admin row)
+//   adminLabel optional — admin Settings row label, when it differs
+//   labelHindi Devanagari name shown under the label
+//   icon       emoji on the dashboard card
+//   section    'morning' | 'sadhana' | 'tyag'  (the three built-in Home
+//              categories) or 'bhakti' | 'aachar' (the two newer ones)
+//   layout     'simple'    one done/undo button, one item
+//              'dual'      two independent toggle slots in one card
+//              'dependent' a toggle + a child that only scores while the
+//                          parent is done (Jin Pooja + Ashta Prakari)
+//              'exclusive' two slots where picking one clears the other
+//   builtIn    true = its card markup is already hand-written in index.html,
+//              so no card is generated for it (its text is still driven from
+//              here — see _refreshNiyamLabels()). Omit for new niyams.
+//   flag       optional — explicit settings key. Defaults to enable<Id>.
+//              The built-ins set it explicitly because their long-standing
+//              saved keys (enableBookReading, enableScreenTime, …) don't
+//              match that derivation and are live per-sangh data.
+//   defaultEnabled  true = on out of the box (the built-ins). Default false.
+//   hint       optional — small grey note on the admin row ("per samayik")
+//
+// ----- item fields (one per scoring slot) -----
+//   prop       the daily_log field. MUST end in "Done" for toggle items and
+//              be globally unique. NEVER rename — it keys every member's
+//              logged history.
+//   pointsKey  optional — the POINTS/sangh-override key. Defaults to `prop`.
+//              The built-ins set it because their stored keys (navkarsi,
+//              wakeUpEarly, …) differ from their props and are live data.
+//   type       'toggle'     (default) boolean done/not-done
+//              'counter'    a count; scores count x points (Samayik)
+//              'duration'   minutes; scores floor(mins/divisor) x points
+//              'screentime' a PENALTY; scores negative, never "followed"
+//   points     coded default point value (admins override it per sangh)
+//   label / labelHindi / icon  as shown in the day-edit overlay, stats,
+//              History and the export. `icon` may differ from the card's.
+//   dependsOn  (dependent layout's child only) the sibling item's prop
+//   divisor    (duration) minutes per award — 30 for Book Reading
+//   minsProp   (screentime) the sibling minutes field
+//   targetSetting (counter) settings key holding the "counts as done"
+//              threshold — samayikTarget for Samayik
+//   step/unit  day-edit overlay stepper size and unit label
 const NIYAM_REGISTRY = [
+  // ===================================================================
+  // BUILT-IN NIYAMS — cards hand-written in index.html (builtIn: true).
+  // Their prop names, pointsKeys and flags are LIVE STORED DATA and must
+  // never change; everything else here is safe to edit.
+  // ===================================================================
+
+  // ----- 🌅 Morning Rituals -----
+  {
+    id: 'navkarsi', label: 'Navkarsi', labelHindi: 'नवकारसी', icon: '🚰',
+    section: 'morning', layout: 'simple', builtIn: true,
+    flag: 'enableNavkarsi', defaultEnabled: true,
+    items: [{ prop: 'navkarsiDone', pointsKey: 'navkarsi', label: 'Navkarsi', labelHindi: 'नवकारसी', icon: '🌅', points: 10 }]
+  },
+  {
+    id: 'wakeup', label: 'Wake < 7AM', adminLabel: 'Wake up < 7AM', labelHindi: '7AM से पहले उठें', icon: '🌅',
+    section: 'morning', layout: 'simple', builtIn: true,
+    flag: 'enableWakeup', defaultEnabled: true,
+    items: [{ prop: 'wakeUpDone', pointsKey: 'wakeUpEarly', label: 'Wake < 7AM', labelHindi: '7AM से पहले उठें', icon: '⏰', points: 10 }]
+  },
+  {
+    id: 'sleep', label: 'Sleep < 12AM', labelHindi: '12AM से पहले सो जाएं', icon: '🌙',
+    section: 'morning', layout: 'simple', builtIn: true,
+    flag: 'enableSleep', defaultEnabled: true,
+    items: [{ prop: 'sleepDone', pointsKey: 'sleepEarly', label: 'Sleep < 12AM', labelHindi: '12AM से पहले सो जाएं', icon: '🌙', points: 10 }]
+  },
+  {
+    id: 'pranam', label: 'Mata Pita Pranam', labelHindi: 'माता पिता प्रणाम', icon: '🙇',
+    section: 'morning', layout: 'simple', builtIn: true,
+    flag: 'enablePranam', defaultEnabled: true,
+    items: [{ prop: 'pranamDone', pointsKey: 'pranam', label: 'Pranam', labelHindi: 'माता पिता प्रणाम', icon: '🙇', points: 20 }]
+  },
+
+  // ----- 🧘 Sadhana -----
+  {
+    id: 'pooja', label: 'Jin Pooja', labelHindi: 'जिन पूजा', icon: '🪔',
+    section: 'sadhana', layout: 'dependent', builtIn: true,
+    flag: 'enablePooja', defaultEnabled: true,
+    items: [
+      { prop: 'poojaDone', pointsKey: 'pooja', label: 'Jin Pooja', labelHindi: 'जिन पूजा', icon: '🪔', points: 10 },
+      // countsWithoutParent preserves this niyam's long-standing quirk: it
+      // scores 0 unless Jin Pooja is also done, but has always still counted
+      // as "followed" in stats/export. See registerNiyams() for why that
+      // inconsistency is preserved explicitly rather than silently changed.
+      { prop: 'ashtaPrakariDone', pointsKey: 'ashtaPrakari', flag: 'enableAshtaPrakari', label: 'Ashta Prakari', labelHindi: 'अष्टप्रकारी पूजा', icon: '🍽️', points: 50, dependsOn: 'poojaDone', countsWithoutParent: true },
+    ]
+  },
+  {
+    id: 'samayik', label: 'Samayik', labelHindi: 'सामायिक', icon: '🧘',
+    section: 'sadhana', layout: 'simple', builtIn: true,
+    flag: 'enableSamayik', defaultEnabled: true, hint: 'per samayik',
+    items: [{ prop: 'samayikDone', pointsKey: 'samayik', type: 'counter', targetSetting: 'samayikTarget', step: 1, label: 'Samayik', labelHindi: 'सामायिक', icon: '🧘', points: 20 }]
+  },
+  {
+    id: 'pratikraman', label: 'Pratikraman', labelHindi: 'प्रतिक्रमण', adminLabelHindi: 'प्रतिक्रमण — देवसि', icon: '🙏',
+    section: 'sadhana', layout: 'dual', builtIn: true,
+    flag: 'enablePratikraman', defaultEnabled: true,
+    items: [
+      { prop: 'devasiyaDone', pointsKey: 'devasiya', label: 'Devasiya', labelHindi: 'देवसि', icon: '🌅', points: 30 },
+      { prop: 'raiyaDone', pointsKey: 'raiya', flag: 'enableRaiya', label: 'Raiya', labelHindi: 'राइअ', icon: '🌙', points: 30 },
+    ]
+  },
+  {
+    id: 'book', label: 'Dharmik Book Reading (30m)', adminLabel: 'Book Reading', labelHindi: 'धार्मिक पुस्तक पढ़ना', icon: '📖',
+    section: 'sadhana', layout: 'simple', builtIn: true,
+    flag: 'enableBookReading', defaultEnabled: true, hint: 'per 30 min',
+    items: [{ prop: 'bookReadingMins', pointsKey: 'bookReading', type: 'duration', divisor: 30, step: 30, unit: 'min', label: 'Book Reading', labelHindi: 'धार्मिक पुस्तक पढ़ना', icon: '📖', points: 20 }]
+  },
+
+  // ----- 🛡️ Tyag & Discipline -----
+  {
+    id: 'ratribhojan', label: 'Ratri Bhojan Tyag', labelHindi: 'रात्रि भोजन त्याग', icon: '🚫',
+    section: 'tyag', layout: 'simple', builtIn: true,
+    flag: 'enableRatriBhojan', defaultEnabled: true,
+    items: [{ prop: 'ratriBhojanDone', pointsKey: 'ratriBhojan', label: 'Ratri Bhojan Tyag', labelHindi: 'रात्रि भोजन त्याग', icon: '🍽️', points: 20 }]
+  },
+  {
+    id: 'kandmool', label: 'Kandmool Tyag', labelHindi: 'कंदमूल त्याग', icon: '🥔',
+    section: 'tyag', layout: 'simple', builtIn: true,
+    flag: 'enableKandmool', defaultEnabled: true,
+    items: [{ prop: 'kandmoolDone', pointsKey: 'kandmool', label: 'Kandmool Tyag', labelHindi: 'कंदमूल त्याग', icon: '🌱', points: 20 }]
+  },
+  {
+    id: 'screentime', label: 'Screen Time', adminLabel: 'Screen Time Tracking', labelHindi: 'स्क्रीन टाइम', icon: '📱',
+    section: 'tyag', layout: 'simple', builtIn: true,
+    flag: 'enableScreenTime', defaultEnabled: true, hint: 'penalty per hour',
+    items: [{ prop: 'screenTimeHours', minsProp: 'screenTimeMins', pointsKey: 'screenTimePenalty', type: 'screentime', label: 'Screen Time', labelHindi: 'स्क्रीन टाइम', icon: '📱', points: 5 }]
+  },
+  {
+    id: 'dailyniyam', label: 'Aaj Ka Niyam', adminLabel: 'Enable Daily Niyam', labelHindi: 'दैनिक नियम', icon: '✨',
+    section: 'tyag', layout: 'simple', builtIn: true,
+    flag: 'enableDailyNiyam', defaultEnabled: true,
+    items: [{ prop: 'dailyNiyamDone', pointsKey: 'dailyNiyam', label: 'Daily Niyam', labelHindi: 'दैनिक नियम', icon: '✨', points: 10 }]
+  },
+
+  // ===================================================================
+  // CUSTOM NIYAMS — cards generated automatically from these entries.
+  // Ship disabled; a sangh admin opts each one in from Settings.
+  // ===================================================================
+
   // ----- 🙏 Dev-Guru Bhakti -----
   {
     id: 'navkarJaap', label: 'Navkar Jaap', labelHindi: 'नवकार जाप', icon: '📿',
