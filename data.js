@@ -431,7 +431,7 @@ const NIYAM_REGISTRY = [
   {
     id: 'packagedTyag', label: 'Bread/Pizza/Cheese/Pav/Butter/Honey/\nMayonnaise/Chocolate/Ice-cream ka Tyag', labelHindi: 'ब्रेड-पाव-पिज़्ज़ा-चीज़-बटर-शहद-चॉकलेट-आइस क्रीम का त्याग', icon: '🍕',
     section: 'aachar', layout: 'simple',
-    items: [{ prop: 'packagedTyagDone', label: 'Bread/Pizza/Cheese/Pav/Butter/Honey/Mayonnaise/Chocolate/Ice-cream ka Tyag', labelHindi: 'ब्रेड-पाव-पिज़्ज़ा-चीज़-बटर-शहद-चॉकलेट-आइस क्रीम का त्याग', icon: '🍕', points: 20 }]
+    items: [{ prop: 'packagedTyagDone', label: 'Bread/Pizza/Cheese/Pav/Butter/Honey/\nMayonnaise/Chocolate/Ice-cream ka Tyag', labelHindi: 'ब्रेड-पाव-पिज़्ज़ा-चीज़-बटर-शहद-चॉकलेट-आइस क्रीम का त्याग', icon: '🍕', points: 20 }]
   },
   {
     id: 'vyavastha', label: 'Cheezein Sahi Jagah par rakhe', labelHindi: 'चीज़ें सही जगह रखना', icon: '🧹',
