@@ -179,6 +179,12 @@ function _screenTimeMinutes(item, log) {
   return ((log[item.prop] || 0) * 60) + ((item.minsProp ? log[item.minsProp] : 0) || 0);
 }
 
+// Every NIYAM_REGISTRY entry registerNiyams() had to skip, with a
+// human-readable reason — so a bad edit to data.js is loud in the admin
+// panel (see _renderNiyamRegistryErrors()), not just a console.error only
+// the person who opened devtools would ever see. Populated once, below.
+const NIYAM_REGISTRY_ERRORS = [];
+
 function registerNiyams() {
   const usedIds = new Set();
   // DEFAULT_DAILY_LOG now ships with only the non-niyam bookkeeping fields
@@ -200,8 +206,16 @@ function registerNiyams() {
       if (!SECTIONS.includes(entry.section)) throw new Error(`invalid section "${entry.section}"`);
       if (!LAYOUTS.includes(entry.layout)) throw new Error(`invalid layout "${entry.layout}"`);
       if (!Array.isArray(entry.items) || entry.items.length === 0) throw new Error('items must be a non-empty array');
-      if ((entry.layout === 'dual' || entry.layout === 'exclusive' || entry.layout === 'dependent') && entry.items.length !== 2) {
-        throw new Error(`layout "${entry.layout}" requires exactly 2 items`);
+      // 'dependent' is always exactly a parent + one child. 'dual'/'exclusive'
+      // allow ANY number of slots >= 2 (e.g. Tapasya's 4 tap levels) — every
+      // consumer (the card builder, the exclusive-select handler, admin row
+      // generation, sub-flag derivation below) already loops over entry.items
+      // rather than assuming 2, so N-way "just works" once validation allows it.
+      if (entry.layout === 'dependent' && entry.items.length !== 2) {
+        throw new Error('layout "dependent" requires exactly 2 items');
+      }
+      if ((entry.layout === 'dual' || entry.layout === 'exclusive') && entry.items.length < 2) {
+        throw new Error(`layout "${entry.layout}" requires at least 2 items`);
       }
       if (entry.layout === 'simple' && entry.items.length !== 1) {
         throw new Error('layout "simple" requires exactly 1 item');
@@ -263,17 +277,21 @@ function registerNiyams() {
         DEFAULT_DAILY_LOG[item.prop] = (type === 'toggle') ? false : 0;
         if (item.minsProp) DEFAULT_DAILY_LOG[item.minsProp] = 0;
 
-        // The second item of a 2-item entry (dependent/dual/exclusive) is
-        // the "sub" niyam _renderAdminNiyamRows() renders as an indented
-        // row — give it its OWN flag so an admin can switch it off
-        // independently of the parent, instead of it riding entry.flag.
-        // Defaults true (unlike entry.flag below, which defaults false) —
-        // these have been live under their parent for every existing
-        // sangh, so a settings object merged as {...DEFAULT_SETTINGS,
-        // ...snap.val()} must fall back to "still on" for a sangh saved
-        // before this change. An explicit item.flag wins for the same
-        // stored-data reason as entry.flag above.
-        if (idx === 1) {
+        // Every item after the first (the "parent") is a "sub" niyam
+        // _renderAdminNiyamRows() renders as its own indented row — give
+        // each one its OWN flag so an admin can switch it off
+        // independently, instead of it riding entry.flag. For the
+        // built-ins' sub-items this defaults true (unlike entry.flag
+        // below, which defaults false) — they've been live under their
+        // parent for every existing sangh, so a settings object merged as
+        // {...DEFAULT_SETTINGS, ...snap.val()} must fall back to "still
+        // on" for a sangh saved before this change. A brand-new entry's
+        // sub-items default true too — harmless, since the whole card
+        // stays hidden until its own entry.flag (defaultEnabled) is
+        // switched on, at which point showing every option by default is
+        // the sensible starting point. An explicit item.flag wins for the
+        // same stored-data reason as entry.flag above.
+        if (idx >= 1) {
           const base = item.prop.replace(/Done$/, '');
           item.flag = item.flag || ('enable' + base.charAt(0).toUpperCase() + base.slice(1));
           item.parentFlag = entry.flag;
@@ -354,6 +372,7 @@ function registerNiyams() {
       DEFAULT_SETTINGS[entry.flag] = entry.defaultEnabled === true;
     } catch (e) {
       console.error(`Skipping invalid NIYAM_REGISTRY entry (id: ${entry && entry.id}):`, e.message);
+      NIYAM_REGISTRY_ERRORS.push({ id: (entry && entry.id) || '(no id)', message: e.message });
     }
   });
 }
@@ -2783,11 +2802,18 @@ class KalyanMitra {
     }
 
     const updates = {};
+    // Which sangh(s) this save actually touches — the attendance list spans
+    // every sangh this admin manages in one flat register, so a save can
+    // touch more than one. Each gets dateKey marked as "taken" below.
+    const sanghCodes = new Set();
     uids.forEach(uid => {
       updates[`${uid}/attendance/${dateKey}`] = {
         present: !!draft[uid].present,
         gathas: Math.max(0, parseInt(draft[uid].gathas, 10) || 0)
       };
+      const record = (this._adminUserRecords || {})[uid];
+      const sanghCode = record && record.registration && record.registration.sanghCode;
+      if (sanghCode) sanghCodes.add(sanghCode);
     });
 
     const saveBtn = document.getElementById('btn-save-attendance');
@@ -2797,6 +2823,26 @@ class KalyanMitra {
       // listener re-fires from this write itself, refreshing
       // _adminUserRecords with the saved values for free.
       await db.ref('users').update(updates);
+
+      // Marks dateKey as a day attendance was actually taken, per sangh
+      // this save touched — the fact every attendance consumer
+      // (_summarizeAttendance()/_collectAttendanceRows()) needs to tell
+      // "the class didn't run" apart from "it ran and this member simply
+      // wasn't marked" (which now counts as absent, not '—'). Best-effort
+      // and its OWN try/catch — a failure here must never be reported as
+      // "attendance failed to save" when the records above just did; a
+      // missed marker self-heals via the backfill in
+      // _resolveAttendanceTakenDates() on the next export.
+      if (sanghCodes.size > 0) {
+        const dateUpdates = {};
+        sanghCodes.forEach(code => { dateUpdates[`${code}/attendanceDates/${dateKey}`] = true; });
+        try {
+          await db.ref('sangh_settings').update(dateUpdates);
+        } catch (e) {
+          console.warn('Attendance saved, but marking the date as taken failed (self-heals on next export):', e);
+        }
+      }
+
       this._clearAttendanceDraft();
     } catch (e) {
       console.error('Failed to save attendance:', e);
@@ -2819,7 +2865,11 @@ class KalyanMitra {
   // overlay — so the sheet can never disagree with the app. `settings` is
   // the one shared sangh-wide node, so every row is measured against the
   // same enabled niyams in the same order.
-  _collectExportRows(allUsers, fromKey, toKey) {
+  // `takenDates` — see _resolveAttendanceTakenDates(); passed straight
+  // through to _summarizeAttendance() so this sheet's attendance columns
+  // apply the exact same stricter absence rule as the dedicated Attendance
+  // export, rather than the two silently disagreeing.
+  _collectExportRows(allUsers, fromKey, toKey, takenDates) {
     const s = this.settings || DEFAULT_SETTINGS;
     const rows = this._eligibleSanghUsers(allUsers).map(({ uid, data }) => {
       const logs = data.daily_logs || {};
@@ -2836,7 +2886,7 @@ class KalyanMitra {
       // since its countsDay() is permanently false — see NIYAM_STATS.
       const totalNiyams = stats.reduce((t, st) => t + st.days, 0);
 
-      const attendance = this._summarizeAttendance(data.attendance, fromKey, toKey);
+      const attendance = this._summarizeAttendance(data.attendance, fromKey, toKey, takenDates);
 
       return {
         name: data.name || uid, stats, totalNiyams, totalAP, daysLogged, perfectDays,
@@ -2902,7 +2952,12 @@ class KalyanMitra {
 
     try {
       const snap = await db.ref('users').once('value');
-      const rows = this._collectExportRows(snap.val() || {}, fromKey, toKey);
+      const allUsers = snap.val() || {};
+      // Same taken-dates resolution (and backfill) the Attendance export
+      // uses, so this sheet's attendance columns can never disagree with
+      // that one — see _resolveAttendanceTakenDates()'s own comment.
+      const takenDates = await this._resolveAttendanceTakenDates(allUsers, fromKey, toKey);
+      const rows = this._collectExportRows(allUsers, fromKey, toKey, takenDates);
 
       if (rows.length === 0) {
         showError('No users found for your sangh in this range.');
@@ -2978,13 +3033,111 @@ class KalyanMitra {
   // used to report a perfectly-attending member at roughly 14%. A day
   // nobody was marked on means the class didn't meet — it is not an
   // absence. Gathas are summed unconditionally, independent of daysMarked.
-  _summarizeAttendance(attendance, fromKey, toKey) {
-    let daysPresent = 0, daysAbsent = 0, totalGathas = 0;
-    Object.entries(attendance || {}).forEach(([dateKey, rec]) => {
-      if (!rec || dateKey < fromKey || dateKey > toKey) return;
-      totalGathas += (rec.gathas || 0);
-      if (rec.present) daysPresent++; else daysAbsent++;
+  // Extracts the Set of dateKeys within [fromKey, toKey] from a raw
+  // sangh_settings/{code} node's `attendanceDates` child (see
+  // saveAttendance()) — shared by the member-facing "My Attendance" (from
+  // the live sangh_settings listener's cached node) and every admin
+  // aggregate (from this._adminSanghPoints). Returns `null`, never an empty
+  // Set, when the node has no attendanceDates child AT ALL — that specific
+  // distinction is what tells _summarizeAttendance()/_collectAttendanceRows()
+  // apart "this sangh has never recorded taken-dates, infer from records"
+  // from "it has, and there simply were none in this particular range".
+  _extractTakenDates(node, fromKey, toKey) {
+    const dates = node && node.attendanceDates;
+    if (!dates) return null;
+    const set = new Set();
+    Object.keys(dates).forEach(dateKey => {
+      if (dateKey >= fromKey && dateKey <= toKey) set.add(dateKey);
     });
+    return set;
+  }
+
+  // Admin-side resolution of _extractTakenDates() across every sangh this
+  // admin manages (the attendance register spans all of them as one flat
+  // list — see _eligibleSanghUsers()), unioned into a single Set. Also
+  // backfills: a date with at least one real record but missing from its
+  // sangh's attendanceDates (data recorded before this feature existed)
+  // is written back so it never has to be re-inferred again. The backfill
+  // write is best-effort — its own try/catch, and never blocks or fails
+  // the caller (an export must still complete on a backfill hiccup).
+  // Returns `null`, matching _extractTakenDates(), only when NOTHING is
+  // known and there is nothing to backfill either — i.e. true fallback.
+  async _resolveAttendanceTakenDates(allUsers, fromKey, toKey) {
+    const codes = this._adminSanghCodes || [];
+    const takenDates = new Set();
+    let anyKnown = false;
+    codes.forEach(code => {
+      const node = (this._adminSanghPoints || {})[code];
+      if (node && node.attendanceDates) anyKnown = true;
+      this._extractTakenDates(node, fromKey, toKey)?.forEach(d => takenDates.add(d));
+    });
+
+    const missingBySangh = {};
+    this._eligibleSanghUsers(allUsers).forEach(({ data }) => {
+      const sanghCode = data.registration && data.registration.sanghCode;
+      if (!sanghCode) return;
+      Object.keys(data.attendance || {}).forEach(dateKey => {
+        if (dateKey < fromKey || dateKey > toKey || takenDates.has(dateKey)) return;
+        (missingBySangh[sanghCode] || (missingBySangh[sanghCode] = {}))[dateKey] = true;
+        takenDates.add(dateKey); // reflected in THIS call's result immediately
+        anyKnown = true;
+      });
+    });
+
+    const backfillCodes = Object.keys(missingBySangh);
+    if (backfillCodes.length > 0) {
+      const updates = {};
+      backfillCodes.forEach(code => {
+        Object.keys(missingBySangh[code]).forEach(dateKey => { updates[`${code}/attendanceDates/${dateKey}`] = true; });
+      });
+      try {
+        await db.ref('sangh_settings').update(updates);
+        backfillCodes.forEach(code => {
+          if (!this._adminSanghPoints[code]) this._adminSanghPoints[code] = {};
+          this._adminSanghPoints[code].attendanceDates = {
+            ...(this._adminSanghPoints[code].attendanceDates || {}),
+            ...missingBySangh[code],
+          };
+        });
+      } catch (e) {
+        console.warn('Attendance-taken backfill failed (this export still reflects it; will retry next time):', e);
+      }
+    }
+
+    return anyKnown ? takenDates : null;
+  }
+
+  // `takenDates` — see _extractTakenDates(): a Set (possibly empty) of
+  // dates known to have been taken, or `null` when nothing is known for
+  // this sangh/range at all.
+  _summarizeAttendance(attendance, fromKey, toKey, takenDates) {
+    let daysPresent = 0, daysAbsent = 0, totalGathas = 0;
+    const att = attendance || {};
+
+    if (takenDates) {
+      // Strict rule: every date KNOWN to have been taken counts — present
+      // if marked so, absent otherwise, including no record at all. This
+      // is what makes an unmarked member on a day the class ran count as
+      // absent rather than silently not counting either way.
+      takenDates.forEach(dateKey => {
+        const rec = att[dateKey];
+        if (rec && rec.present) daysPresent++; else daysAbsent++;
+      });
+      Object.entries(att).forEach(([dateKey, rec]) => {
+        if (!rec || dateKey < fromKey || dateKey > toKey) return;
+        totalGathas += (rec.gathas || 0);
+      });
+    } else {
+      // Fallback — no attendanceDates data at all for this sangh/range yet:
+      // infer purely from whichever records exist, exactly as before this
+      // change. Self-heals the moment an admin export backfills it.
+      Object.entries(att).forEach(([dateKey, rec]) => {
+        if (!rec || dateKey < fromKey || dateKey > toKey) return;
+        totalGathas += (rec.gathas || 0);
+        if (rec.present) daysPresent++; else daysAbsent++;
+      });
+    }
+
     const daysMarked = daysPresent + daysAbsent;
     return {
       daysPresent, daysAbsent, daysMarked, totalGathas,
@@ -2993,28 +3146,30 @@ class KalyanMitra {
   }
 
   // Pure data step — no DOM, no network. Same authorization filter as the
-  // points export (_eligibleSanghUsers()), plus a walked list of every
-  // calendar date in [fromKey, toKey] so the two grid sheets (Attendance,
-  // Gathas) stay column-for-column aligned regardless of which dates a
-  // member does or doesn't have an attendance/{date} node for. A date with
-  // no record at all prints '—' (the class didn't meet), never 'A' — only
-  // a date with an actual record can be an absence. Days Present/Absent/%
-  // on the Summary sheet come from _summarizeAttendance(), so the grid and
-  // the summary can never disagree. Dates are parsed/re-formatted via LOCAL
-  // date components throughout (never toISOString(), which is UTC and can
-  // drift a day near midnight), matching the YYYY-MM-DD keys
+  // points export (_eligibleSanghUsers()). Columns are exactly the known
+  // taken dates (see _extractTakenDates()/_resolveAttendanceTakenDates()) —
+  // a day the class never ran gets no column at all, rather than a '—'
+  // cell for every member. Only when `takenDates` is `null` (nothing known
+  // for this range yet) does every calendar date in [fromKey, toKey] still
+  // get a column, exactly as before this change. Cells are 'P' or 'A' —
+  // never '—' — matching the stricter absence rule
+  // _summarizeAttendance() applies with the same `takenDates`, so the grid
+  // and the Summary sheet can never disagree. Dates are parsed/re-formatted
+  // via LOCAL date components throughout (never toISOString(), which is
+  // UTC and can drift a day near midnight), matching the YYYY-MM-DD keys
   // attendance/{date} is already stored under.
-  _collectAttendanceRows(allUsers, fromKey, toKey) {
-    const dateKeys = [];
+  _collectAttendanceRows(allUsers, fromKey, toKey, takenDates) {
+    const allDateKeys = [];
     const cursor = new Date(`${fromKey}T00:00:00`);
     const end = new Date(`${toKey}T00:00:00`);
     while (cursor <= end) {
       const y = cursor.getFullYear();
       const m = String(cursor.getMonth() + 1).padStart(2, '0');
       const d = String(cursor.getDate()).padStart(2, '0');
-      dateKeys.push(`${y}-${m}-${d}`);
+      allDateKeys.push(`${y}-${m}-${d}`);
       cursor.setDate(cursor.getDate() + 1);
     }
+    const dateKeys = takenDates ? allDateKeys.filter(k => takenDates.has(k)) : allDateKeys;
 
     const rows = this._eligibleSanghUsers(allUsers).map(({ uid, data }) => {
       const attendance = data.attendance || {};
@@ -3022,10 +3177,10 @@ class KalyanMitra {
       const gathaCells = [];
       dateKeys.forEach(dateKey => {
         const rec = attendance[dateKey];
-        presentCells.push(rec ? (rec.present ? 'P' : 'A') : '—');
+        presentCells.push(rec && rec.present ? 'P' : 'A');
         gathaCells.push((rec && rec.gathas) || 0);
       });
-      const summary = this._summarizeAttendance(attendance, fromKey, toKey);
+      const summary = this._summarizeAttendance(attendance, fromKey, toKey, takenDates);
       return {
         name: data.name || uid,
         presentCells,
@@ -3096,20 +3251,44 @@ class KalyanMitra {
 
     try {
       const snap = await db.ref('users').once('value');
-      const { dateKeys, rows } = this._collectAttendanceRows(snap.val() || {}, fromKey, toKey);
+      const allUsers = snap.val() || {};
+      // Resolves which dates were actually taken (and backfills any gap) —
+      // see _resolveAttendanceTakenDates()'s own comment. Must happen
+      // before _collectAttendanceRows() so its columns reflect it.
+      const takenDates = await this._resolveAttendanceTakenDates(allUsers, fromKey, toKey);
+      const { dateKeys, rows } = this._collectAttendanceRows(allUsers, fromKey, toKey, takenDates);
 
       if (rows.length === 0) {
         showError('No users found for your sangh in this range.');
         return;
       }
+      if (dateKeys.length === 0) {
+        showError('No attendance was recorded in this date range.');
+        return;
+      }
 
-      const attHeader = ['Name', ...dateKeys];
-      const attAoa = [attHeader, ...rows.map(r => [r.name, ...r.presentCells])];
+      // Per-date totals at the top, plus a grand-total final column — the
+      // member rows below leave that column blank; per-member totals
+      // already live on the Summary sheet.
+      const presentTotals = dateKeys.map((_, i) => rows.reduce((sum, r) => sum + (r.presentCells[i] === 'P' ? 1 : 0), 0));
+      const absentTotals = dateKeys.map((_, i) => rows.reduce((sum, r) => sum + (r.presentCells[i] === 'A' ? 1 : 0), 0));
+      const attHeader = ['Name', ...dateKeys, 'Total'];
+      const attAoa = [
+        attHeader,
+        ['Total Present', ...presentTotals, presentTotals.reduce((a, b) => a + b, 0)],
+        ['Total Absent', ...absentTotals, absentTotals.reduce((a, b) => a + b, 0)],
+        ...rows.map(r => [r.name, ...r.presentCells, '']),
+      ];
       const attWs = XLSX.utils.aoa_to_sheet(attAoa);
       attWs['!cols'] = attHeader.map((h, i) => ({ wch: i === 0 ? 20 : 12 }));
 
-      const gathaHeader = ['Name', ...dateKeys];
-      const gathaAoa = [gathaHeader, ...rows.map(r => [r.name, ...r.gathaCells])];
+      const gathaTotals = dateKeys.map((_, i) => rows.reduce((sum, r) => sum + (r.gathaCells[i] || 0), 0));
+      const gathaHeader = ['Name', ...dateKeys, 'Total'];
+      const gathaAoa = [
+        gathaHeader,
+        ['Total Gathas', ...gathaTotals, gathaTotals.reduce((a, b) => a + b, 0)],
+        ...rows.map(r => [r.name, ...r.gathaCells, '']),
+      ];
       const gathaWs = XLSX.utils.aoa_to_sheet(gathaAoa);
       gathaWs['!cols'] = gathaHeader.map((h, i) => ({ wch: i === 0 ? 20 : 12 }));
 
@@ -3347,22 +3526,22 @@ class KalyanMitra {
       </div>`;
   }
 
-  // Shared by 'dual' (two independent toggles, like the built-in Pratikraman
-  // card) and 'exclusive' (pick one or neither) — same two-slot-button
-  // markup either way; only the click semantics differ (bound separately in
-  // _bindRegistryCardEvents()). Each slot always shows its OWN points
-  // (never a single shared "+N each" header) — the two items can be priced
-  // independently by an admin at any time, even if their coded defaults
-  // happen to start equal, so a shared header could otherwise go stale the
-  // moment one is overridden without the other (same reasoning as the
-  // built-in Pratikraman card's Devasiya/Raiya split).
+  // Shared by 'dual' (independent toggles, like the built-in Pratikraman
+  // card) and 'exclusive' (pick at most one, like Tapasya's 4 levels) — same
+  // slot-button markup either way, for ANY number of items >= 2; only the
+  // click semantics differ (bound separately in _bindRegistryCardEvents()).
+  // Each slot always shows its OWN points (never a single shared "+N each"
+  // header) — every item can be priced independently by an admin at any
+  // time, even if their coded defaults happen to start equal, so a shared
+  // header could otherwise go stale the moment one is overridden without
+  // the others (same reasoning as the built-in Pratikraman card's
+  // Devasiya/Raiya split).
   _buildRegistrySlotCardHtml(entry, isExclusive) {
-    const [a, b] = entry.items;
     const slotHtml = (item, idx) => `
       <button class="slot-btn" id="${entry.id}-opt${idx}" type="button">
         <span class="slot-icon">${item.icon || entry.icon || ''}</span>
         <span class="slot-label">${item.label}</span>
-        <span class="card-kp" data-point-key="${item.prop}" data-point-format="+{n} AP">+${item.points} AP</span>
+        <span class="card-kp" data-point-key="${item.pointsKey || item.prop}" data-point-format="+{n} AP">+${item.points} AP</span>
         <span class="slot-check" id="${entry.id}-opt${idx}-check">○</span>
       </button>`;
     const statusText = isExclusive ? 'None selected' : `0/${entry.items.length} completed`;
@@ -3378,8 +3557,7 @@ class KalyanMitra {
         </div>
         <div class="card-body">
           <div class="pratikraman-slots">
-            ${slotHtml(a, 0)}
-            ${slotHtml(b, 1)}
+            ${entry.items.map(slotHtml).join('')}
           </div>
           <div class="card-status" id="${entry.id}-status">${statusText}</div>
         </div>
@@ -3477,25 +3655,28 @@ class KalyanMitra {
     this.afterActivity();
   }
 
-  // ----- 'exclusive' layout handler — any one of the two items, or neither,
-  // but never both: selecting one clears the other first. -----
+  // ----- 'exclusive' layout handler — at most ONE of N items, never more:
+  // selecting one clears every other one first. -----
   _selectRegistryExclusive(entry, chosenItem) {
     if (this.isDayLocked()) return;
-    const otherItem = entry.items.find(i => i.prop !== chosenItem.prop);
     const wasChosen = !!this.dailyLog[chosenItem.prop];
     const P = livePoints();
 
     if (wasChosen) {
       // Clicking the already-selected option again clears it → back to "none".
       this.dailyLog[chosenItem.prop] = false;
-      this.deductKarmaPoints(P[chosenItem.prop]);
+      this.deductKarmaPoints(P[chosenItem.pointsKey || chosenItem.prop]);
     } else {
-      if (otherItem && this.dailyLog[otherItem.prop]) {
-        this.dailyLog[otherItem.prop] = false;
-        this.deductKarmaPoints(P[otherItem.prop]);
-      }
+      // Clear every OTHER item that's currently selected — defensively all
+      // of them, not just one, so N-way exclusivity (Tapasya's 4 levels)
+      // can never leave a second option still silently scoring.
+      entry.items.forEach(other => {
+        if (other.prop === chosenItem.prop || !this.dailyLog[other.prop]) return;
+        this.dailyLog[other.prop] = false;
+        this.deductKarmaPoints(P[other.pointsKey || other.prop]);
+      });
       this.dailyLog[chosenItem.prop] = true;
-      this.addKarmaPoints(P[chosenItem.prop], entry.id);
+      this.addKarmaPoints(P[chosenItem.pointsKey || chosenItem.prop], entry.id);
       this.showCompletionBurst(document.getElementById(`${entry.id}-card`));
       this.profile.totalActivities = (this.profile.totalActivities || 0) + 1;
     }
@@ -5420,9 +5601,13 @@ class KalyanMitra {
     // calling it again from renderHistory() right after is a no-op.
     this._initHistoryState();
     const { fromKey, toKey } = this._monthKeyBounds(this._historyYear, this._historyMonth);
+    // this._sanghSettingsNode is the live sangh_settings listener's cached
+    // raw node (see setupRealtimeSync()) — no extra read needed for the
+    // same stricter absence rule the admin exports apply.
+    const takenDates = this._extractTakenDates(this._sanghSettingsNode, fromKey, toKey);
 
     const paint = (attendance) => {
-      const { daysPresent, totalGathas, pct } = this._summarizeAttendance(attendance, fromKey, toKey);
+      const { daysPresent, totalGathas, pct } = this._summarizeAttendance(attendance, fromKey, toKey, takenDates);
       const tiles = [
         { value: daysPresent, label: 'Days Present' },
         { value: totalGathas, label: 'Total Gathas' },
@@ -6854,6 +7039,29 @@ class KalyanMitra {
   // repeated loadAdminSettingsUI() call (tab switches, the settings
   // listener firing mid-edit) never rebuilds it — that would drop whatever
   // the admin was mid-typing.
+  // Paints NIYAM_REGISTRY_ERRORS (registerNiyams()'s skipped-entry log) as a
+  // visible panel above the niyam settings, so a bad edit to data.js is
+  // loud in the admin panel itself — not just a console.error only someone
+  // with devtools open would ever see. Hidden entirely, and left exactly as
+  // its static markup shipped, when the registry is healthy.
+  _renderNiyamRegistryErrors() {
+    const el = document.getElementById('niyam-registry-errors');
+    if (!el) return;
+    if (!NIYAM_REGISTRY_ERRORS.length) {
+      el.classList.add('hidden');
+      el.innerHTML = '';
+      return;
+    }
+    const items = NIYAM_REGISTRY_ERRORS
+      .map(e => `<li><strong>${this._escHtml(e.id)}</strong> — ${this._escHtml(e.message)}</li>`)
+      .join('');
+    const count = NIYAM_REGISTRY_ERRORS.length;
+    el.innerHTML = `
+      <div class="niyam-registry-errors-title">⚠️ ${count} niyam${count === 1 ? '' : 's'} in data.js could not be loaded</div>
+      <ul>${items}</ul>`;
+    el.classList.remove('hidden');
+  }
+
   _renderAdminNiyamRows() {
     const container = document.getElementById('admin-registry-niyams');
     if (!container || container.dataset.built === '1') return;
@@ -6880,8 +7088,11 @@ class KalyanMitra {
               <input type="checkbox" id="${toggleId}">
             </div>
           </div>`;
-        if (entry.items.length > 1) {
-          const sub = entry.items[1];
+        // Every item after the first is its own independently-toggleable
+        // sub-row (registerNiyams() gives each one its own flag) — N of
+        // them for an 'exclusive'/'dual' entry with more than 2 items
+        // (e.g. Tapasya's 4 tap levels), not just a single items[1].
+        entry.items.slice(1).forEach(sub => {
           // sub.flag (registerNiyams()) is this item's own independent
           // toggle — id follows the same admin-toggle-{prop minus "Done"}
           // convention as the hand-written Ashta Prakari/Raiya rows.
@@ -6894,7 +7105,7 @@ class KalyanMitra {
               <input type="checkbox" id="${subToggleId}">
             </div>
           </div>`;
-        }
+        });
       });
       html += `</div>`;
     });
@@ -6967,6 +7178,12 @@ class KalyanMitra {
     // both of which intentionally WANT a fresh repaint.
     if (this._adminSettingsDirty) return;
 
+    // Loud, not just console-only — any NIYAM_REGISTRY entry registerNiyams()
+    // had to skip (a bad edit to data.js) is otherwise invisible outside
+    // devtools. Cheap to repaint every call; NIYAM_REGISTRY_ERRORS never
+    // changes after the one registerNiyams() pass at module load.
+    this._renderNiyamRegistryErrors();
+
     // Populates/syncs the sangh <select> and paints its points inputs
     // FIRST — resolving `activeCode` just below depends on the select
     // already reflecting the current this._adminSanghCodes.
@@ -7000,13 +7217,14 @@ class KalyanMitra {
       if (!entry.flag) return;
       const el = document.getElementById(`admin-toggle-${entry.id}`);
       if (el) el.checked = !!s[entry.flag];
-      // Sub-item (items[1]) with its own flag — see registerNiyams() and
-      // _renderAdminNiyamRows()'s subToggleId, same id convention.
-      const sub = entry.items && entry.items[1];
-      if (sub && sub.flag) {
+      // Every sub-item (items after the first) with its own flag — see
+      // registerNiyams() and _renderAdminNiyamRows()'s subToggleId, same
+      // id convention. N of them for a multi-option entry like Tapasya.
+      (entry.items || []).slice(1).forEach(sub => {
+        if (!sub.flag) return;
         const subEl = document.getElementById(`admin-toggle-${sub.prop.slice(0, -4)}`);
         if (subEl) subEl.checked = !!s[sub.flag];
-      }
+      });
     });
 
     const niyamSelect = document.getElementById('admin-select-niyam');
@@ -7066,11 +7284,13 @@ class KalyanMitra {
       if (!entry.flag) return;
       const el = document.getElementById(`admin-toggle-${entry.id}`);
       if (el) settings[entry.flag] = el.checked;
-      const sub = entry.items && entry.items[1];
-      if (sub && sub.flag) {
+      // Every sub-item (items after the first) — N of them for a
+      // multi-option entry like Tapasya, not just items[1].
+      (entry.items || []).slice(1).forEach(sub => {
+        if (!sub.flag) return;
         const subEl = document.getElementById(`admin-toggle-${sub.prop.slice(0, -4)}`);
         if (subEl) settings[sub.flag] = subEl.checked;
-      }
+      });
     });
 
     // Points — formerly the separate _saveAdminPoints(), now folded in so

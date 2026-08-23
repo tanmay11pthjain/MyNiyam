@@ -710,6 +710,38 @@ html.booting-session #loading-screen {
 }
 
 /* ============================================================
+   NIYAM REGISTRY ERRORS — see _renderNiyamRegistryErrors() in app.js.
+   Same red/error visual language as #db-error-banner above, but inline
+   within the admin Settings tab rather than a floating fixed banner —
+   this is a data.js authoring mistake, not a live connectivity problem.
+   ============================================================ */
+
+.niyam-registry-errors {
+  background: #FDECEA;
+  color: #C0392B;
+  border: 2px solid #E74C3C;
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.niyam-registry-errors-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.niyam-registry-errors ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.niyam-registry-errors li {
+  margin-bottom: 2px;
+}
+
+/* ============================================================
    PWA INSTALL BANNER — see #pwa-install-banner in index.html and
    _updateInstallBanner() in app.js
    ============================================================ */

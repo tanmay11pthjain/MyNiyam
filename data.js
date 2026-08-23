@@ -449,10 +449,10 @@ const NIYAM_REGISTRY = [
     id: 'tap', label: 'Tapasya', labelHindi: 'तपस्या', icon: '🧘',
     section: 'aachar', layout: 'exclusive',
     items: [
-      { prop: 'BiyasanaDone', label: 'Biyasana', labelHindi: 'बियासना', icon: '2️⃣', points: 20 },
-      { prop: 'EkasanaDone', label: 'Ekasana', labelHindi: 'एकसाना', icon: '1️⃣', points: 30 },
-      { prop: 'AyambilDone', label: 'Ayambil', labelHindi: 'आयम्बिल', icon: '🧂', points: 40 },
-      { prop: 'UpvasDone', label: 'Upvas', labelHindi: 'उपवास', icon: '⭐', points: 50 },
+      { prop: 'biyasanaDone', label: 'Biyasana', labelHindi: 'बियासना', icon: '2️⃣', points: 20 },
+      { prop: 'ekasanaDone', label: 'Ekasana', labelHindi: 'एकसाना', icon: '1️⃣', points: 30 },
+      { prop: 'ayambilDone', label: 'Ayambil', labelHindi: 'आयम्बिल', icon: '🧂', points: 40 },
+      { prop: 'upvasDone', label: 'Upvas', labelHindi: 'उपवास', icon: '⭐', points: 50 },
     ]
   },
 ];

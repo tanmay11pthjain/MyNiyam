@@ -32,7 +32,7 @@
        <noscript> fallback covers the rare case of JS being disabled. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-  <link rel="stylesheet" href="styles.css?v=40">
+  <link rel="stylesheet" href="styles.css?v=41">
   <script>
     // Decide the boot state before <body> even exists, so no element lookup
     // is possible here — the previous version of this check ran mid-body and
@@ -845,6 +845,12 @@
         <h2 class="section-heading">⚙️ Target Settings</h2>
         <p class="admin-desc">Set daily targets for the user's spiritual practice.</p>
 
+        <!-- Populated by _renderNiyamRegistryErrors() (app.js) — lists any
+             NIYAM_REGISTRY entry that failed registerNiyams()'s validation,
+             so a bad edit to data.js is loud here instead of console-only.
+             Empty and hidden when the registry is healthy. -->
+        <div class="niyam-registry-errors hidden" id="niyam-registry-errors"></div>
+
         <!-- Per-sangh niyam points — a path (sangh_settings/{code}) separate
              from the global `settings` node the toggles below save to.
              Moved to the top since every group below now carries points
@@ -1352,8 +1358,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" async></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=51"></script>
+  <script src="data.js?v=52"></script>
   <script src="auth.js?v=49"></script>
-  <script src="app.js?v=57"></script>
+  <script src="app.js?v=58"></script>
 </body>
 </html>
