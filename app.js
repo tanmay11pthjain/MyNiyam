@@ -2546,6 +2546,20 @@ class KalyanMitra {
     return resolveSettings((this._adminSanghPoints || {})[sanghCode], this._legacyGlobalSettings);
   }
 
+  // The admin-side counterpart to _settingsForMember() — same sanghCode
+  // lookup, same _adminSanghPoints source — but resolving takenDates (see
+  // _extractTakenDates()) instead of settings, for _renderLifetimeStats()'s
+  // attendance tiles on a drilled-into member. Returns `null` (the
+  // documented "fall back to inferring from records alone" signal) when the
+  // member's sangh can't be resolved yet, same as an unresolvable sangh
+  // code falls back to global settings above.
+  _takenDatesForMember(uid, fromKey, toKey) {
+    const record = (this._adminUserRecords || {})[uid];
+    const sanghCode = record && record.registration && record.registration.sanghCode;
+    if (!sanghCode) return null;
+    return this._extractTakenDates((this._adminSanghPoints || {})[sanghCode], fromKey, toKey);
+  }
+
   // Self-healing photo migration. users/{uid}/photo has been mandatory at
   // registration since v4.790, so this only ever matters for members who
   // registered before the Firebase switchover — their photo still lives
@@ -3511,6 +3525,7 @@ class KalyanMitra {
     if (individualEl) individualEl.classList.add('hidden');
     if (overviewEl) overviewEl.classList.remove('hidden');
     this._clearAdminSelection();
+    window.scrollTo(0, 0); // returning to the overview is its own "page" — see switchTab()'s comment
   }
 
   // The "← Back" button's full behavior, extracted so the device back
@@ -3538,6 +3553,7 @@ class KalyanMitra {
     // Show the individual view, hide the overview
     document.getElementById('admin-overview').classList.add('hidden');
     document.getElementById('admin-individual').classList.remove('hidden');
+    window.scrollTo(0, 0); // drilling into a member is its own "page" — see switchTab()'s comment
     // Clear the previous member's profile card immediately — it holds
     // personal details (phone, photo), so it must never flash a DIFFERENT
     // member's data while this one's record resolves below.
@@ -3907,11 +3923,11 @@ class KalyanMitra {
     if (hPrev) hPrev.addEventListener('click', () => this._changeHistoryMonth(-1, false));
     if (hNext) hNext.addEventListener('click', () => this._changeHistoryMonth(1, false));
 
-    // Monthly Niyam Stats — entry points on both History and Achievements tabs
+    // Monthly Niyam Stats — single entry point on the History tab (the
+    // Achievements tab's duplicate trigger was removed; month-scoped data
+    // belongs with the other month-scoped controls).
     const btnStatsFromHistory = document.getElementById('btn-niyam-stats-history');
     if (btnStatsFromHistory) btnStatsFromHistory.addEventListener('click', () => this.openNiyamStats());
-    const btnStatsFromAchievements = document.getElementById('btn-niyam-stats-achievements');
-    if (btnStatsFromAchievements) btnStatsFromAchievements.addEventListener('click', () => this.openNiyamStats());
     const btnCloseNiyamStats = document.getElementById('btn-close-niyam-stats');
     if (btnCloseNiyamStats) btnCloseNiyamStats.addEventListener('click', () => this.closeNiyamStats());
     const niyamStatsPrev = document.getElementById('btn-niyam-stats-prev');
@@ -4375,12 +4391,15 @@ class KalyanMitra {
     this.profile.streakSaversUsed = (this.profile.streakSaversUsed || 0) + 1;
   }
 
-  // Editable window: yesterday back through 7 days ago. Today is
+  // Editable window: yesterday back through 30 days ago. Today is
   // deliberately excluded — it's edited live via the dashboard, not this
-  // overlay. Date keys are YYYY-MM-DD, so lexicographic comparison sorts
-  // identically to chronological order and safely spans month boundaries.
+  // overlay. The 3-per-month streak-saver cap (STREAK_SAVERS_PER_MONTH,
+  // _streakSaversLeft()) is unaffected by this window — it still limits
+  // HOW MANY days can be edited, this only widens WHICH days are eligible.
+  // Date keys are YYYY-MM-DD, so lexicographic comparison sorts identically
+  // to chronological order and safely spans month boundaries.
   _isStreakSaverEligible(dateKey) {
-    return dateKey >= this.getTodayKey(-7) && dateKey < this.getTodayKey();
+    return dateKey >= this.getTodayKey(-30) && dateKey < this.getTodayKey();
   }
 
   // Walks backwards counting consecutive complete days against the given
@@ -5659,25 +5678,35 @@ class KalyanMitra {
   // daily_logs history via _computeNiyamRange() — most niyams have no
   // profile counter at all, and the few that do can drift from a
   // streak-saver edit. Renders only into gridEl; caller owns visibility.
-  // `settingsOverride` (optional) mirrors _renderHistoryDays()'s — an admin
-  // drill-down passes the specific member's own resolved settings; the
-  // user-side call (renderAchievements()) omits it and keeps using
-  // this.settings, already that user's own.
-  _renderLifetimeStats(gridEl, settingsOverride) {
+  // `settingsOverride`/`attendance`/`takenDates` (all optional) mirror
+  // _renderHistoryDays()'s pattern — an admin drill-down passes the
+  // specific member's own resolved settings, attendance record and taken-
+  // dates set (see _takenDatesForMember()); the user-side call
+  // (renderAchievements()) omits all three and falls back to this
+  // session's own cached values. `attendance` is checked against
+  // `undefined` specifically (not falsy) — a member with zero attendance
+  // records legitimately passes `null`, which must NOT fall back to the
+  // ADMIN's own cached attendance.
+  _renderLifetimeStats(gridEl, settingsOverride, attendance, takenDates) {
     if (!gridEl) return;
     const p = this.profile || DEFAULT_PROFILE;
     const s = settingsOverride || this.settings || DEFAULT_SETTINGS;
     const logs = this._cachedDailyLogs || {};
     const today = this.getTodayKey();
+    const att = attendance !== undefined ? attendance : this._cachedAttendance;
+    const taken = takenDates !== undefined ? takenDates : this._extractTakenDates(this._sanghSettingsNode, '0000-00-00', today);
 
     // '0000-00-00' sorts before every real date key, so this covers the
     // user's entire history without needing their actual first log date.
     const { stats } = this._computeNiyamRange(logs, '0000-00-00', today, s, true);
+    const attSummary = this._summarizeAttendance(att, '0000-00-00', today, taken);
 
     const tiles = [
       { value: p.totalKP || 0, label: 'Total AP' },
       { value: p.longestStreak || 0, label: 'Best Streak' },
       { value: p.totalPerfectDays || 0, label: 'Perfect Days' },
+      { value: attSummary.daysPresent, label: '📋 Days Present' },
+      { value: attSummary.totalGathas, label: '📿 Total Gathas' },
       ...stats.map(st => ({
         value: st.amount != null ? (st.formatAmount ? st.formatAmount(st.amount) : st.amount) : st.days,
         label: `${st.icon} ${st.label}`,
@@ -6151,12 +6180,15 @@ class KalyanMitra {
     // _settingsForMember(). Passed explicitly so _renderHistoryDays() never
     // has to guess which member it's being called for.
     const memberSettings = this._settingsForMember(this._adminSelectedUid);
-    this._renderHistoryDays(listEl, allLogs, this._adminHistoryYear, this._adminHistoryMonth, true, memberSettings);
+    const memberRecord = (this._adminUserRecords || {})[this._adminSelectedUid];
+    const memberAttendance = (memberRecord && memberRecord.attendance) || null;
+    const memberTakenDates = this._takenDatesForMember(this._adminSelectedUid, '0000-00-00', this.getTodayKey());
+    this._renderHistoryDays(listEl, allLogs, this._adminHistoryYear, this._adminHistoryMonth, true, memberSettings, memberAttendance, memberTakenDates);
 
     // Lifetime stats for the currently-viewed user, at the bottom of the
     // History section — shares _renderLifetimeStats() with the user's own
     // Badges tab so the two can never disagree.
-    this._renderLifetimeStats(document.getElementById('admin-stats-grid'), memberSettings);
+    this._renderLifetimeStats(document.getElementById('admin-stats-grid'), memberSettings, memberAttendance, memberTakenDates);
   }
 
   // `settingsOverride` (optional, trailing) lets an admin drill-down pass
@@ -6165,10 +6197,17 @@ class KalyanMitra {
   // is never any particular member's sangh (see resolveSettings()). The
   // user-side call site (renderMyAttendance()) omits it, so this.settings
   // (already that user's own) keeps working exactly as before.
-  _renderHistoryDays(container, allLogs, year, month, isAdmin, settingsOverride) {
+  // `attendance`/`takenDates` (optional, mirror _renderLifetimeStats()'s
+  // pattern) add a Present/Absent + gathas line to each day. `attendance`
+  // is checked against `undefined` specifically — a member with none
+  // legitimately passes `null`, which must not fall back to the ADMIN's
+  // own cached attendance.
+  _renderHistoryDays(container, allLogs, year, month, isAdmin, settingsOverride, attendance, takenDates) {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const today = this.getTodayKey();
     const s = settingsOverride || this.settings || DEFAULT_SETTINGS;
+    const att = attendance !== undefined ? attendance : this._cachedAttendance;
+    const taken = takenDates !== undefined ? takenDates : this._extractTakenDates(this._sanghSettingsNode, `${year}-01-01`, today);
     // Note: `isAdmin` is passed `true` from both call sites (user + admin
     // history), so it cannot be used as a role signal. currentRole is the
     // only trustworthy check — streak saver editing is user-only.
@@ -6187,10 +6226,30 @@ class KalyanMitra {
         ? `<button type="button" class="history-edit-btn" data-editkey="${dateKey}" title="Edit this day">✏️ Edit</button>`
         : `<button type="button" class="history-edit-btn" disabled title="No streak savers left this month">✏️ Edit</button>`);
 
+      // Attendance is its own Firebase node (users/{uid}/attendance/{date}),
+      // independent of daily_logs — a day can have one, both, or neither.
+      // Shown when either a real record exists, or the date is known to
+      // have been taken (see _extractTakenDates()) so an unmarked member on
+      // a day the class ran reads "Absent", matching
+      // _summarizeAttendance()'s same stricter rule rather than silently
+      // showing nothing. Genuinely unknown days (no record, not in
+      // `taken`, or `taken` itself null — fallback mode) show nothing,
+      // same as before this existed.
+      let attendanceHtml = '';
+      if (att) {
+        const attRec = att[dateKey];
+        if (attRec || (taken && taken.has(dateKey))) {
+          const present = !!(attRec && attRec.present);
+          const gathas = (attRec && attRec.gathas) || 0;
+          attendanceHtml = `<div class="history-attendance">${present ? '✅ Present' : '❌ Absent'}${gathas ? ` · 📿 ${gathas}` : ''}</div>`;
+        }
+      }
+
       if (!log) {
         html += `<div class="history-day history-empty">
           <div class="history-date">${this._formatHistoryDate(dateKey)}</div>
           <div class="history-summary">No data recorded</div>
+          ${attendanceHtml}
           ${editBtn}
         </div>`;
         continue;
@@ -6219,6 +6278,7 @@ class KalyanMitra {
           <span class="history-kp">+${kp} AP</span>
         </div>
         <div class="history-icons">${icons.join(' ')}</div>
+        ${attendanceHtml}
         ${editBtn}
       </div>`;
     }
@@ -6846,12 +6906,38 @@ class KalyanMitra {
         : 'No days have occurred yet in this month.';
     }
 
+    // Attendance/gathas for this same month, ahead of the niyam rows and
+    // in the same .niyam-stat-row shape so no new CSS is needed — this
+    // member's own record for an admin drill-down, this session's own
+    // cache for the user-side entry point. Computed before the "no niyams
+    // enabled" early return below so a sangh with everything switched off
+    // still shows attendance, which is a separate concern from niyams.
+    const { fromKey: attFrom, toKey: attTo } = this._monthKeyBounds(this._niyamStatsYear, this._niyamStatsMonth);
+    const attendance = this.currentRole === 'admin'
+      ? (((this._adminUserRecords || {})[this._adminSelectedUid] || {}).attendance || null)
+      : this._cachedAttendance;
+    const takenDates = this.currentRole === 'admin'
+      ? this._takenDatesForMember(this._adminSelectedUid, attFrom, attTo)
+      : this._extractTakenDates(this._sanghSettingsNode, attFrom, attTo);
+    const attSummary = this._summarizeAttendance(attendance, attFrom, attTo, takenDates);
+    const attendanceRows = `
+      <div class="niyam-stat-row">
+        <span class="niyam-stat-icon">📋</span>
+        <span class="niyam-stat-label">Attendance</span>
+        <span class="niyam-stat-value">${attSummary.daysPresent} day${attSummary.daysPresent === 1 ? '' : 's'}</span>
+      </div>
+      <div class="niyam-stat-row">
+        <span class="niyam-stat-icon">📿</span>
+        <span class="niyam-stat-label">Gathas</span>
+        <span class="niyam-stat-value">${attSummary.totalGathas}</span>
+      </div>`;
+
     if (stats.length === 0) {
-      listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#795548;">No niyams are currently enabled.</div>';
+      listEl.innerHTML = attendanceRows + '<div style="text-align:center; padding:20px; color:#795548;">No niyams are currently enabled.</div>';
       return;
     }
 
-    listEl.innerHTML = stats.map(st => `
+    listEl.innerHTML = attendanceRows + stats.map(st => `
       <div class="niyam-stat-row">
         <span class="niyam-stat-icon">${st.icon}</span>
         <span class="niyam-stat-label">${st.label}</span>
@@ -7149,6 +7235,12 @@ class KalyanMitra {
     document.querySelectorAll('#bottom-nav .nav-item').forEach(n => n.classList.remove('active'));
     tabEl.classList.add('active');
     navEl.classList.add('active');
+    // Every tab starts scrolled to the top — .tab-content has no overflow
+    // of its own (see styles.css), so this is a real window scroll, not an
+    // internal one. Without it, switching away from a page scrolled deep
+    // (e.g. History) and into a short one leaves the new tab landing
+    // mid-scroll instead of at its heading.
+    window.scrollTo(0, 0);
     if (tabName === 'achievements') this.renderAchievements();
     if (tabName === 'history') this.renderHistory();
     if (tabName === 'profile') this.renderProfile();
@@ -7170,6 +7262,7 @@ class KalyanMitra {
     document.querySelectorAll('#admin-bottom-nav .nav-item').forEach(n => n.classList.remove('active'));
     tabEl.classList.add('active');
     navEl.classList.add('active');
+    window.scrollTo(0, 0); // see switchTab()'s identical comment
     if (tabName === 'admin-progress') this.renderAdminProgress();
     if (tabName === 'admin-attendance') this.renderAttendance();
     if (tabName === 'admin-leaderboard') this.renderAdminLeaderboard();
@@ -7648,7 +7741,11 @@ class KalyanMitra {
     const badgeCount = (p.badges || []).length;
     document.getElementById('admin-user-level-icon').textContent = '🏅';
     document.getElementById('admin-user-level').textContent = `${badgeCount} Badge${badgeCount === 1 ? '' : 's'} Earned`;
-    document.getElementById('admin-user-kp').textContent = `${p.totalKP} AP`;
+    // Total AP is no longer duplicated here — it's the Lifetime Stats
+    // grid's own "Total AP" tile just below (_renderLifetimeStats()), the
+    // exact same p.totalKP value. currentStreak stays: it's the streak
+    // RIGHT NOW, distinct from Lifetime Stats' "Best Streak"
+    // (p.longestStreak) — not a duplicate.
     document.getElementById('admin-user-streak').textContent = `${p.currentStreak} day streak`;
     const flame = document.getElementById('admin-user-streak-flame');
     const st = p.currentStreak;

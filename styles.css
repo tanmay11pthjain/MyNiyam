@@ -1218,7 +1218,58 @@ body.landing-open {
 
 .landing-footer .landing-cta { margin-bottom: 20px; }
 .landing-footer-url { font-size: 0.85rem; font-weight: 600; color: var(--primary-light); margin: 0 0 4px; }
-.landing-footer-credit { font-size: 0.78rem; color: rgba(255, 253, 248, 0.55); margin: 0; }
+
+/* ============================================================
+   APP FOOTER — one shared "Presented by / Developed by" credit block,
+   reused on every screen: the dashboard (#app), admin panel
+   (#admin-panel), login screen and the landing page's own footer
+   (replacing what used to be a single .landing-footer-credit line).
+   Layout-only in the base rule — text color is set per context below,
+   since this sits on both light (#app, #admin-panel) and dark
+   (#login-screen, .landing-footer) backgrounds.
+   ============================================================ */
+.app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 16px;
+}
+
+.app-footer-icon {
+  height: 28px;
+  width: auto;
+  display: block;
+  flex-shrink: 0;
+}
+
+.app-footer-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--text-secondary); /* light-background default: #app, #admin-panel */
+}
+
+/* Dark-background contexts — the same faded-white tone
+   .landing-footer-credit used before this replaced it. */
+#login-screen .app-footer-text,
+.landing-footer .app-footer-text {
+  color: rgba(255, 253, 248, 0.55);
+}
+
+/* Extra bottom clearance on the two screens with a FIXED bottom nav
+   (#bottom-nav / #admin-bottom-nav) — this footer becomes the new true
+   end of scrollable content there, needing the same buffer
+   .bottom-spacer already reserves for whatever precedes it. #login-screen
+   and .landing-footer need no such override — neither has a fixed nav,
+   and .landing-footer already carries its own 120px clearance for the
+   landing page's sticky CTA bar. */
+.app-footer--nav-clearance {
+  padding-bottom: 80px;
+}
 
 /* Footer CTA glows twice right as it settles into view, then stops —
    finite (not infinite) so it draws the eye without nagging forever. */
@@ -4263,6 +4314,7 @@ body.landing-open {
 .history-pct { font-weight: 600; color: var(--text-dark); }
 .history-kp { font-weight: 700; color: var(--primary); }
 .history-icons { font-size: 16px; letter-spacing: 4px; }
+.history-attendance { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
 
 /* ===== DAY DETAIL MODAL ===== */
 .day-detail-content { max-width: 400px; width: 90%; background: white; border-radius: 20px; padding: 24px; position: relative; max-height: 80vh; overflow-y: auto; }

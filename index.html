@@ -11,11 +11,11 @@
   <title>MyNiyam - Aapka Adhyatmik Saathi 🙏</title>
   <!-- Favicon — cropped from the actual logo artwork (logo.png), just the
        folded-hands glyph, on the app's own cream (--bg) tile. -->
-  <link rel="icon" type="image/png" href="favicon.png?v=2">
+  <link rel="icon" type="image/png" href="favicon.png?v=3">
   <!-- PWA manifest — see manifest.json. apple-touch-icon covers iOS, which
        ignores the manifest's own icons list for home-screen purposes. -->
-  <link rel="manifest" href="manifest.json?v=1">
-  <link rel="apple-touch-icon" href="icon-192.png?v=1">
+  <link rel="manifest" href="manifest.json?v=2">
+  <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- The app no longer READS from Sheets (Firebase is master — see
@@ -32,7 +32,7 @@
        <noscript> fallback covers the rare case of JS being disabled. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-  <link rel="stylesheet" href="styles.css?v=42">
+  <link rel="stylesheet" href="styles.css?v=43">
   <script>
     // Decide the boot state before <body> even exists, so no element lookup
     // is possible here — the previous version of this check ran mid-body and
@@ -167,7 +167,13 @@
     <footer class="landing-footer landing-reveal">
       <button class="landing-cta landing-cta-primary">🙏 Fill My Niyam</button>
       <p class="landing-footer-url">🌐 myniyam.vercel.app</p>
-      <p class="landing-footer-credit">Developed by Heer Sena</p>
+      <div class="app-footer">
+        <img src="logo-icon.webp?v=1" alt="" class="app-footer-icon">
+        <div class="app-footer-text">
+          <span>Presented by Heer Sena</span>
+          <span>Developed by Tanmay Dhelariya</span>
+        </div>
+      </div>
     </footer>
 
     <!-- STICKY CTA BAR — its button is picked up by the same
@@ -273,6 +279,13 @@
         <span>Sign in with Google</span>
       </button>
       <div class="login-footer">🙏 Jai Jinendra</div>
+    </div>
+    <div class="app-footer">
+      <img src="logo-icon.webp?v=1" alt="" class="app-footer-icon">
+      <div class="app-footer-text">
+        <span>Presented by Heer Sena</span>
+        <span>Developed by Tanmay Dhelariya</span>
+      </div>
     </div>
   </div>
   <!-- ===== REGISTRATION FORM ===== -->
@@ -686,7 +699,6 @@
       <div class="achievements-container">
         <h2 class="section-heading">📊 Your Lifetime Stats</h2>
         <div class="stats-grid" id="stats-grid"><!-- Populated by JS: _renderLifetimeStats() --></div>
-        <button class="btn-export btn-niyam-stats-trigger" id="btn-niyam-stats-achievements">📊 Monthly Niyam Stats</button>
         <h2 class="section-heading">🏆 Trophy Shelf</h2>
         <div class="badges-grid" id="badges-grid"></div>
       </div>
@@ -779,6 +791,17 @@
       </div>
 
       <div class="bottom-spacer"></div>
+    </div>
+
+    <!-- Shared credit footer — visible under whichever tab is active,
+         since it's a sibling of the .tab-content divs, not inside one.
+         --nav-clearance because #bottom-nav below is fixed. -->
+    <div class="app-footer app-footer--nav-clearance">
+      <img src="logo-icon.webp?v=1" alt="" class="app-footer-icon">
+      <div class="app-footer-text">
+        <span>Presented by Heer Sena</span>
+        <span>Developed by Tanmay Dhelariya</span>
+      </div>
     </div>
 
     <!-- BOTTOM NAV (User: 4 tabs) -->
@@ -1054,7 +1077,6 @@
               <span class="admin-profile-icon" id="admin-user-level-icon">🏅</span>
               <div class="admin-profile-info">
                 <span class="admin-profile-title" id="admin-user-level">0 Badges Earned</span>
-                <span class="admin-profile-kp" id="admin-user-kp">10 AP</span>
               </div>
               <div class="admin-profile-streak">
                 <span id="admin-user-streak-flame">🕯️</span>
@@ -1125,6 +1147,15 @@
 
     <!-- Spacer so bottom nav doesn't overlap content -->
     <div class="bottom-spacer"></div>
+
+    <!-- Shared credit footer — see #app's identical block. -->
+    <div class="app-footer app-footer--nav-clearance">
+      <img src="logo-icon.webp?v=1" alt="" class="app-footer-icon">
+      <div class="app-footer-text">
+        <span>Presented by Heer Sena</span>
+        <span>Developed by Tanmay Dhelariya</span>
+      </div>
+    </div>
 
     <!-- ADMIN BOTTOM NAV -->
     <nav id="admin-bottom-nav">
@@ -1382,6 +1413,6 @@
   <!-- Scripts -->
   <script src="data.js?v=52"></script>
   <script src="auth.js?v=49"></script>
-  <script src="app.js?v=59"></script>
+  <script src="app.js?v=60"></script>
 </body>
 </html>
