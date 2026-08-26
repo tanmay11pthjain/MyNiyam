@@ -3107,6 +3107,45 @@ body.landing-open {
   transform: scale(1);
 }
 
+/* ============================================================
+   SANGH RE-SELECTION OVERLAY — see #sangh-reselect-overlay in index.html
+   and _showSanghReselectOverlay() in app.js.
+
+   Deliberately its OWN selector, not the shared .overlay class above:
+   _initNavHistory() (app.js) auto-observes every element carrying that
+   exact class via a one-time document.querySelectorAll('.overlay') at
+   construction time, and ANY overlay it observes — even one left out of
+   OVERLAY_CLOSERS — still gets dismissed by Android back/Escape through
+   _navCloseOverlayById()'s generic fallback (a plain direct hide). A
+   member who lost their sangh must choose a new one before continuing, so
+   this is styled identically to .overlay (properties kept in sync by
+   hand) but under a selector that observer never sees at all — not merely
+   "unregistered". .overlay-content is reused as-is for the inner card;
+   only the OUTER container needed to avoid that class.
+   ============================================================ */
+.sangh-lock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(62, 39, 35, 0.65);
+  padding: 24px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.sangh-lock-overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.sangh-lock-overlay.show .overlay-content {
+  transform: scale(1);
+}
+
 .btn-continue {
   display: inline-block;
   background: linear-gradient(135deg, var(--primary), var(--primary-dark));

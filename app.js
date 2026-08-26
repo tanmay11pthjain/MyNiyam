@@ -1440,12 +1440,39 @@ class KalyanMitra {
     this._setupSanghAutocomplete();
   }
 
-  _setupSanghAutocomplete() {
-    const input = document.getElementById('reg-sangh');
-    const dropdown = document.getElementById('sangh-dropdown');
-    const selectedDiv = document.getElementById('sangh-selected');
-    const hiddenInput = document.getElementById('reg-sangh-code');
-    const sanghs = this._sanghsList || [];
+  // Search/filter/select behavior shared by the registration form's sangh
+  // picker and the sangh re-selection overlay
+  // (_promptSanghReselectIfOrphaned()) — same widget, two different sets of
+  // DOM ids and "where does the choice go" targets, so the two can never
+  // drift apart in behavior.
+  //
+  // opts (all optional):
+  //   sanghs       the list to search — defaults to this._sanghsList
+  //   ids          { input, dropdown, selectedDiv, hiddenInput } — default
+  //                to the registration form's own ids, so the registration
+  //                call site (_setupSanghAutocomplete() with no args) needs
+  //                no changes at all
+  //   setSelected  called with the chosen sangh object (or null once
+  //                cleared) — defaults to setting this._selectedSangh, the
+  //                field handleRegistration() reads. Selection state itself
+  //                is tracked in a local closure variable below, never on
+  //                `this` directly, so two instances of this widget open at
+  //                once could never clobber each other's selection.
+  //   closeOutsideSelector  container whose outside-click closes the
+  //                dropdown — defaults to '.sangh-group' (registration's
+  //                container); the overlay passes its own.
+  _setupSanghAutocomplete(opts) {
+    opts = opts || {};
+    const sanghs = opts.sanghs || this._sanghsList || [];
+    const ids = opts.ids || {};
+    const input = document.getElementById(ids.input || 'reg-sangh');
+    const dropdown = document.getElementById(ids.dropdown || 'sangh-dropdown');
+    const selectedDiv = document.getElementById(ids.selectedDiv || 'sangh-selected');
+    const hiddenInput = document.getElementById(ids.hiddenInput || 'reg-sangh-code');
+    const setSelected = opts.setSelected || ((sangh) => { this._selectedSangh = sangh; });
+    if (!input || !dropdown || !selectedDiv || !hiddenInput) return;
+
+    let selected = null;
 
     const showDropdown = (items) => {
       if (items.length === 0) {
@@ -1466,7 +1493,8 @@ class KalyanMitra {
     };
 
     const selectSangh = (sangh) => {
-      this._selectedSangh = sangh;
+      selected = sangh;
+      setSelected(sangh);
       hiddenInput.value = sangh.code;
       input.value = '';
       input.style.display = 'none';
@@ -1479,7 +1507,8 @@ class KalyanMitra {
       selectedDiv.classList.remove('hidden');
 
       selectedDiv.querySelector('.sangh-chip-remove').onclick = () => {
-        this._selectedSangh = null;
+        selected = null;
+        setSelected(null);
         hiddenInput.value = '';
         selectedDiv.classList.add('hidden');
         selectedDiv.innerHTML = '';
@@ -1503,7 +1532,7 @@ class KalyanMitra {
     };
 
     input.onfocus = () => {
-      if (!this._selectedSangh) {
+      if (!selected) {
         const q = input.value.trim().toLowerCase();
         const items = q.length === 0 ? sanghs.slice(0, 10) :
           sanghs.filter(s =>
@@ -1524,8 +1553,9 @@ class KalyanMitra {
     };
 
     // Close dropdown on outside click
+    const closeOutsideSelector = opts.closeOutsideSelector || '.sangh-group';
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('.sangh-group')) {
+      if (!e.target.closest(closeOutsideSelector)) {
         dropdown.classList.add('hidden');
       }
     });
@@ -1732,6 +1762,124 @@ class KalyanMitra {
       this._updateInstallBanner();
     } catch (e) {
       console.error('Install banner update failed (non-fatal):', e);
+    }
+    // Not awaited: nothing else in initUser() depends on it, and it must
+    // never delay the dashboard becoming visible (already done above).
+    // .catch() rather than a try/catch wrapper — this call is async and
+    // un-awaited, so only .catch() can actually observe a later rejection
+    // (see calculatePanchang()'s own history of this exact bug class:
+    // an un-awaited async throw is a silent unhandled rejection unless
+    // something is actually attached to catch it).
+    this._promptSanghReselectIfOrphaned().catch(e => console.error('Sangh re-selection check failed (non-fatal):', e));
+  }
+
+  // Detects a member whose registered sangh has been removed via the
+  // Firebase Console (see SANGH-RUNBOOK.md — sanghs/ is deliberately
+  // console-only, no client can write it) and prompts them to pick a new
+  // one, rather than silently continuing to log niyams no admin can see —
+  // the leaderboard, attendance list and every export are all scoped by
+  // _adminSanghCodes, which will never include a deleted code again.
+  //
+  // Deliberately fail-SAFE at every step: a network hiccup, an undeployed
+  // sanghs/ node, or fetchSanghs() coming back empty must NEVER mass-prompt
+  // every member — the only way this shows anything is a POSITIVE
+  // confirmation, from the full sangh list (which includes the Sheet
+  // fallback fetchSanghs() already has), that the code is truly gone.
+  async _promptSanghReselectIfOrphaned() {
+    if (this.currentRole !== 'user') return;
+
+    const regSnap = await db.ref(`users/${this.uid}/registration`).once('value');
+    const registration = regSnap.val();
+    const code = registration && registration.sanghCode;
+    if (!code) return; // unregistered — registration itself already requires picking a sangh
+
+    // Cheap existence check first — one tiny read, not the whole list.
+    // This is the common (healthy) path and costs almost nothing.
+    const existsSnap = await db.ref(`sanghs/${code}`).once('value');
+    if (existsSnap.exists()) return;
+
+    // Only reached when sanghs/{code} is missing — confirm against the
+    // FULL list before concluding it's truly gone, rather than trusting a
+    // single node read that could itself be transient.
+    let sanghsList = [];
+    try {
+      sanghsList = await Auth.fetchSanghs();
+    } catch (e) {
+      console.warn('Could not verify the sangh list — skipping re-selection this session:', e);
+      return;
+    }
+    if (sanghsList.length === 0) return; // can't verify — never prompt on unresolvable data
+    if (sanghsList.some(s => s.code === code)) return; // the Sheet fallback still knows it
+
+    this._orphanedSanghCode = code;
+    this._showSanghReselectOverlay(sanghsList);
+  }
+
+  // Populates and reveals the re-selection overlay, reusing
+  // _setupSanghAutocomplete()'s search/filter/select widget with the
+  // overlay's own ids and its own "where does the choice go" target
+  // (this._orphanedSanghReselected, kept separate from registration's own
+  // this._selectedSangh so the two flows can never clobber each other).
+  _showSanghReselectOverlay(sanghsList) {
+    const overlay = document.getElementById('sangh-reselect-overlay');
+    if (!overlay) return;
+
+    this._orphanedSanghReselected = null;
+    const errorEl = document.getElementById('sangh-reselect-error');
+    if (errorEl) errorEl.classList.add('hidden');
+
+    this._setupSanghAutocomplete({
+      sanghs: sanghsList,
+      ids: {
+        input: 'sangh-reselect-input',
+        dropdown: 'sangh-reselect-dropdown',
+        selectedDiv: 'sangh-reselect-selected',
+        hiddenInput: 'sangh-reselect-code',
+      },
+      setSelected: (sangh) => { this._orphanedSanghReselected = sangh; },
+      closeOutsideSelector: '.sangh-reselect-group',
+    });
+
+    const btn = document.getElementById('btn-sangh-reselect-confirm');
+    if (btn) btn.onclick = () => this._confirmSanghReselect();
+
+    overlay.classList.remove('hidden');
+    overlay.classList.add('show');
+  }
+
+  // Writes the new sangh using only paths a member is already permitted to
+  // write directly (users/$uid — auth.uid === $uid; sangh_users — any
+  // signed-in user), clears the stale sangh_users index entry for the old
+  // (now-deleted) code, then reloads — the same approach resetProgress()
+  // already uses — so every sangh-scoped listener (settings, point map,
+  // attendanceDates) re-attaches against the new code from a clean start
+  // rather than needing to be surgically re-pointed while live.
+  async _confirmSanghReselect() {
+    const errorEl = document.getElementById('sangh-reselect-error');
+    const btn = document.getElementById('btn-sangh-reselect-confirm');
+    const sangh = this._orphanedSanghReselected;
+    if (!sangh) {
+      if (errorEl) { errorEl.textContent = 'Please select a Sangh from the dropdown.'; errorEl.classList.remove('hidden'); }
+      return;
+    }
+
+    const oldCode = this._orphanedSanghCode;
+    if (errorEl) errorEl.classList.add('hidden');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    try {
+      await db.ref(`users/${this.uid}/registration`).update({
+        sanghCode: sangh.code,
+        sanghName: sangh.name,
+      });
+      await db.ref(`sangh_users/${sangh.code}/${this.uid}`).set(true);
+      if (oldCode && oldCode !== sangh.code) {
+        await db.ref(`sangh_users/${oldCode}/${this.uid}`).remove();
+      }
+      location.reload();
+    } catch (e) {
+      console.error('Failed to save the new sangh:', e);
+      if (errorEl) { errorEl.textContent = 'Failed to save. Please check your connection and try again.'; errorEl.classList.remove('hidden'); }
+      if (btn) { btn.disabled = false; btn.textContent = 'Continue'; }
     }
   }
 

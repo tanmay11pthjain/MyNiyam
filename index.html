@@ -32,7 +32,7 @@
        <noscript> fallback covers the rare case of JS being disabled. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-  <link rel="stylesheet" href="styles.css?v=41">
+  <link rel="stylesheet" href="styles.css?v=42">
   <script>
     // Decide the boot state before <body> even exists, so no element lookup
     // is possible here — the previous version of this check ran mid-body and
@@ -1219,6 +1219,28 @@
     </div>
   </div>
 
+  <!-- Sangh Re-selection — shown when a member's registered sangh no
+       longer exists (removed via the Firebase Console; see
+       SANGH-RUNBOOK.md and _promptSanghReselectIfOrphaned() in app.js).
+       Deliberately NOT the shared .overlay class — see its own CSS block
+       in styles.css for why — and has no cancel button: a member must
+       choose a sangh before continuing, since every admin view (the
+       leaderboard, attendance, exports) is scoped by sangh membership. -->
+  <div id="sangh-reselect-overlay" class="sangh-lock-overlay hidden">
+    <div class="overlay-content">
+      <h2 class="summary-title">🏛️ Select Your Sangh</h2>
+      <p class="submit-confirm-text">Your Pathshala/Sangh is no longer available. Please select a new one to continue.</p>
+      <div class="input-group sangh-group sangh-reselect-group">
+        <input type="text" id="sangh-reselect-input" autocomplete="off" placeholder="Type sangh code or name...">
+        <input type="hidden" id="sangh-reselect-code">
+        <div id="sangh-reselect-dropdown" class="sangh-dropdown hidden"></div>
+        <div id="sangh-reselect-selected" class="sangh-selected hidden"></div>
+      </div>
+      <div class="register-error hidden" id="sangh-reselect-error"></div>
+      <button type="button" class="btn-continue" id="btn-sangh-reselect-confirm">Continue</button>
+    </div>
+  </div>
+
   <!-- One-time: add a profile photo -->
   <div id="photo-prompt-overlay" class="overlay hidden">
     <div class="overlay-content">
@@ -1360,6 +1382,6 @@
   <!-- Scripts -->
   <script src="data.js?v=52"></script>
   <script src="auth.js?v=49"></script>
-  <script src="app.js?v=58"></script>
+  <script src="app.js?v=59"></script>
 </body>
 </html>
