@@ -6704,14 +6704,17 @@ class KalyanMitra {
     });
 
     // ---- Footer ----
+    // Matches the app-wide "Presented by / Developed by" credit — see the
+    // shared .app-footer block in index.html and its identical wording.
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.font = "700 30px 'Outfit', sans-serif";
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.fillText('🌐 myniyam.vercel.app', CX, 1250);
-    ctx.font = "500 24px 'Inter', sans-serif";
+    ctx.fillText('🌐 myniyam.heersena.com', CX, 1230);
+    ctx.font = "500 22px 'Inter', sans-serif";
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillText('Developed by Heer Sena', CX, 1290);
+    ctx.fillText('Presented by Heer Sena', CX, 1268);
+    ctx.fillText('Developed by Tanmay Dhelariya', CX, 1298);
   }
 
   _posterFileName() {
