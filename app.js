@@ -1431,11 +1431,12 @@ class KalyanMitra {
         errorEl.textContent = 'Could not load the sangh list right now. Please try again in a moment, or contact your admin if this keeps happening.';
         errorEl.classList.remove('hidden');
       }
-      // Not a connectivity issue if you're seeing this with a healthy network —
-      // check the browser console for the actual Apps Script response/error
-      // (a CORS error here means the deployment's "Who has access" needs to be
-      // "Anyone", or the get_sanghs action isn't wired into doPost/doGet yet).
-      console.error('Sangh list came back empty — see the Apps Script response/error logged above for the real cause.');
+      // sanghs/ is the only source now (see Auth.fetchSanghs()) — an empty
+      // result here means either sanghs/ hasn't been populated yet, its
+      // shape is wrong, or the read was denied by firebase-rules.json.
+      // fetchSanghs() itself already logged which of those three it was;
+      // this just points a developer back at that message.
+      console.error('Sangh list came back empty — see fetchSanghs()\'s own diagnostic logged just above for the specific cause.');
     }
     this._setupSanghAutocomplete();
   }
@@ -1940,26 +1941,30 @@ class KalyanMitra {
     }
   }
 
-  // Resolves each sangh code to "Name (CODE)", using knownNames where available
-  // and falling back to Auth.fetchSanghs() (memoized) only for the codes it can't
-  // already resolve.
+  // Resolves each sangh code to "Name (CODE)". sanghs/ (via
+  // Auth.fetchSanghs(), memoized per session — one real read regardless of
+  // how many labels this resolves across the app) is authoritative: its
+  // name wins even when `knownNames` (the denormalized
+  // registration.sanghName copied at signup) has a value, so a sangh
+  // renamed in the database shows its NEW name instead of sticking on
+  // whatever was true when the member registered. `knownNames` is only the
+  // fallback — used when the code isn't in sanghs/ at all (a removed
+  // sangh), where the stored name is the best label left.
   // `bare: true` drops the "(CODE)" suffix — used by the poster, where a
   // raw sangh code reads as a rendering glitch rather than useful context.
   async _resolveSanghLabels(codes, knownNames = {}, bare = false) {
     if (!codes || codes.length === 0) return [];
 
-    const needsLookup = codes.some(code => !knownNames[code]);
     let sanghsList = [];
-    if (needsLookup) {
-      try {
-        sanghsList = await Auth.fetchSanghs();
-      } catch (e) {
-        console.warn('Failed to fetch sanghs list:', e);
-      }
+    try {
+      sanghsList = await Auth.fetchSanghs();
+    } catch (e) {
+      console.warn('Failed to fetch sanghs list:', e);
     }
 
     return codes.map(code => {
-      const name = knownNames[code] || (sanghsList.find(s => s.code === code) || {}).name;
+      const dbName = (sanghsList.find(s => s.code === code) || {}).name;
+      const name = dbName || knownNames[code];
       if (bare) return name || code;
       return name ? `${name} (${code})` : code;
     });
@@ -6081,15 +6086,18 @@ class KalyanMitra {
     const code = data.sanghCode || (this._currentAuthUser.sanghCodes || [])[0];
     if (!code) { el.textContent = 'Not set'; return; }
 
+    // sanghs/ is authoritative — its name/city win even when this member's
+    // own stored sanghName/sanghCity have a value, so a sangh renamed in
+    // the database shows up here instead of sticking on signup-time data.
+    // The stored values are only the fallback, for a code no longer in
+    // sanghs/ at all (a removed sangh).
     let name = data.sanghName;
     let city = data.sanghCity;
-    if (!name) {
-      try {
-        const sanghs = await Auth.fetchSanghs();
-        const match = sanghs.find(s => s.code === code);
-        if (match) { name = match.name; city = match.city; }
-      } catch (e) { /* fall back to code-only display below */ }
-    }
+    try {
+      const sanghs = await Auth.fetchSanghs();
+      const match = sanghs.find(s => s.code === code);
+      if (match) { name = match.name; city = match.city; }
+    } catch (e) { /* fall back to the stored values already assigned above */ }
     el.innerHTML = name
       ? `<span class="sangh-chip"><strong>${code}</strong> — ${name}${city ? ', ' + city : ''}</span>`
       : `<span class="sangh-chip"><strong>${code}</strong></span>`;

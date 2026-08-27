@@ -3,9 +3,8 @@
 // (via Apps Script — see apps-script-additions.gs) is written to on
 // registration/profile/photo changes so it stays a convenient, current
 // place to look at data by hand, but the app itself never reads from it —
-// except fetchSanghs()'s transitional fallback (see its own comment) and
-// the *FromSheetLegacy() functions, which exist only for the one-time
-// migration script (migrate-to-firebase.js).
+// the *FromSheetLegacy() functions exist only for the one-time migration
+// script (migrate-to-firebase.js), never called from the live app.
 
 const Auth = (() => {
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbysnFVeHYnOj9yqZzXCtBV2KQfStNV8GMe-ABHPxM4a7GA16yWziTkqM3ouyHb2wEMp/exec";
@@ -456,17 +455,20 @@ const Auth = (() => {
   let _sanghsCache = null;
   let _sanghsFetchPromise = null;
 
-  // Reads the console-managed sanghs/ node. Falls back to the Sheet (via
-  // fetchSanghsFromSheetLegacy(), single attempt) ONLY when sanghs/ comes
-  // back empty or unreachable — this is purely transitional, for the gap
-  // between deploying this and running the one-time migration that
-  // populates sanghs/. Without it, a brand-new visitor would see an empty
-  // registration dropdown and be unable to register at all until that
-  // migration runs. It self-disables the moment sanghs/ has data, since the
-  // Firebase branch below returns first whenever it succeeds.
+  // Reads the console-managed sanghs/ node — the single source of truth
+  // for the sangh list everywhere in the app (registration, the
+  // header/profile labels, the admin poster). No Sheet fallback: sanghs/
+  // is fully populated now, and silently substituting stale Sheet data
+  // here is exactly what let a rename or a newly-added sangh go unnoticed
+  // before. An empty or unreadable node returns an empty list — every
+  // caller already handles that (see showRegistrationForm()'s own error
+  // message) — rather than ever quietly serving data that isn't actually
+  // in the database. Each failure mode below logs its OWN specific cause,
+  // so a wrong result is diagnosable from the console alone.
   async function fetchSanghs() {
-    // Only a non-empty result is treated as cached — an empty list (e.g. from a
-    // backend that isn't deployed yet) must not permanently stick for the session.
+    // Only a non-empty result is treated as cached — an empty list (e.g. a
+    // rules denial, or sanghs/ not populated yet) must not permanently
+    // stick for the session; the next call retries.
     if (_sanghsCache && _sanghsCache.length) return _sanghsCache;
     if (_sanghsFetchPromise) return _sanghsFetchPromise;
 
@@ -474,28 +476,33 @@ const Auth = (() => {
       try {
         const snap = await firebase.database().ref('sanghs').once('value');
         const val = snap.val();
-        if (val && typeof val === 'object') {
-          // Normalize every entry to trimmed strings, and drop any with no
-          // code — mirrors the old Sheet-side normalization exactly.
-          const sanghs = Object.keys(val)
-            .map(code => ({
-              code: String(code || '').trim(),
-              name: String((val[code] && val[code].name) || '').trim(),
-              city: String((val[code] && val[code].city) || '').trim()
-            }))
-            .filter(s => s.code);
-          if (sanghs.length) {
-            _sanghsCache = sanghs;
-            return sanghs;
-          }
+        if (val === null || val === undefined) {
+          console.error('sanghs/ does not exist in the database yet — see SANGH-RUNBOOK.md to create and populate it.');
+          return [];
         }
+        if (typeof val !== 'object') {
+          console.error(`sanghs/ exists but isn't shaped as an object (got ${typeof val}) — it must be {CODE: {name, city}, ...}.`);
+          return [];
+        }
+        // Normalize every entry to trimmed strings, and drop any with no
+        // code.
+        const sanghs = Object.keys(val)
+          .map(code => ({
+            code: String(code || '').trim(),
+            name: String((val[code] && val[code].name) || '').trim(),
+            city: String((val[code] && val[code].city) || '').trim()
+          }))
+          .filter(s => s.code);
+        if (sanghs.length === 0) {
+          console.error('sanghs/ exists but has no valid entries (every child key is the sangh code, and must be non-empty) — check its shape in the Firebase console.');
+          return [];
+        }
+        _sanghsCache = sanghs;
+        return sanghs;
       } catch (e) {
-        console.error("Fetch sanghs from Firebase failed:", e);
+        console.error('Failed to read sanghs/ — likely a Firebase rules denial or network error:', e);
+        return [];
       }
-      console.warn('sanghs/ empty or unreachable — falling back to the Sheet.');
-      const legacy = await fetchSanghsFromSheetLegacy();
-      if (legacy.length) _sanghsCache = legacy;
-      return legacy;
     })();
 
     try {
@@ -505,10 +512,10 @@ const Auth = (() => {
     }
   }
 
-  // Legacy Sheet-backed sangh list. Kept only as (a) fetchSanghs()'s
-  // transitional fallback above, and (b) for the one-time migration script
-  // to read from when it populates sanghs/ — the live app never calls this
-  // directly once that migration has run.
+  // Legacy Sheet-backed sangh list. No longer reachable from the live
+  // app (fetchSanghs() above is Firebase-only) — kept only for the
+  // one-time migration script (migrate-to-firebase.js) to read from when
+  // (re-)populating sanghs/.
   async function fetchSanghsFromSheetLegacy() {
     try {
       const text = await _sheetsRequest({ action: "get_sanghs" });
