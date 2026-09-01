@@ -35,12 +35,18 @@ const SANGH_SHEET_NAME  = 'Sanghs';
 //
 // TWO photo columns, on purpose:
 //   'Photo'      -> the actual visible in-cell image (what you look at)
-//   'Photo Data' -> the raw base64 string (what the app reads back)
+//   'Photo Data' -> the raw value behind it — a Firebase Storage https://
+//                   URL now (v5 moved profile photos out of the database
+//                   into Storage; see auth.js's uploadPhoto()), or a
+//                   base64 data URL for any row written before that
 // Both are needed because once an image is placed in a cell via CellImage,
-// Apps Script can no longer read its source URL back out — getValue() returns
-// a CellImage object whose getUrl() is null. So the base64 must be kept in its
-// own text column for get_photo to serve. You can safely hide 'Photo Data' in
-// the Sheet; the script addresses columns by header name, not position.
+// Apps Script can no longer read its source back out — getValue() returns a
+// CellImage object whose getUrl() is null — so the raw value is kept in its
+// own text column purely for a human to read/click by hand. The live app no
+// longer calls get_photo to read this back (see MyNiyam's migration plan —
+// _backfillMissingPhotos() was retired); only the one-time migration
+// tooling from before v5 ever did. You can safely hide 'Photo Data' in the
+// Sheet; the script addresses columns by header name, not position.
 const USER_HEADERS = [
   'UID', 'Name', 'Email', 'DOB', 'Gender', 'Phone', 'City', 'Area',
   'Sangh Code', 'Role', 'Sangh Codes', 'Registered At', 'Photo', 'Photo Data'
@@ -70,12 +76,23 @@ const PROFILE_EDITABLE_FIELDS = ['phone', 'city', 'area'];
 // ~33%, so this leaves headroom for the 256x256 JPEG thumbnail the client
 // resizes/compresses down to before ever sending one. Anything over this is
 // rejected server-side rather than silently truncated into a corrupt cell.
+// Kept even though the app itself moved to Firebase Storage URLs (see
+// below) — a URL will never come close to this limit, so it only ever
+// matters for the base64 shape.
 const MAX_PHOTO_CHARS = 45000;
 
+// Accepts EITHER shape the client may send: the base64 data URL the app
+// used before it moved profile photos to Firebase Storage, or the plain
+// https:// download URL it sends now (see auth.js's uploadPhoto()). Both
+// are handled identically by every caller below — _setPhotoCell_() passes
+// whichever one through to newCellImage().setSourceUrl(), which accepts a
+// real URL just as well as a data URL.
 function _isValidPhotoDataUrl_(photo) {
-  return typeof photo === 'string' &&
-    /^data:image\/(jpeg|jpg|png|webp);base64,/.test(photo) &&
-    photo.length > 0 && photo.length <= MAX_PHOTO_CHARS;
+  if (typeof photo !== 'string' || photo.length === 0) return false;
+  if (/^data:image\/(jpeg|jpg|png|webp);base64,/.test(photo)) {
+    return photo.length <= MAX_PHOTO_CHARS;
+  }
+  return /^https:\/\//.test(photo);
 }
 
 // Writes a photo to BOTH photo columns: the raw base64 into 'Photo Data'

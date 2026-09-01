@@ -310,7 +310,7 @@
         </div>
         <div class="input-group">
           <label for="reg-dob">Date of Birth</label>
-          <input type="date" id="reg-dob" name="dob">
+          <input type="date" id="reg-dob" name="dob" min="1920-01-01">
         </div>
         <div class="input-group">
           <label>Gender</label>
@@ -853,6 +853,7 @@
         <div class="export-bar">
           <button class="btn-export" id="btn-open-export">📊 Export to Excel</button>
           <button class="btn-export" id="btn-open-poster">📸 Generate Poster</button>
+          <button class="btn-export" id="btn-refresh-leaderboard" title="Fetch the latest data">🔄 Refresh</button>
         </div>
         <input type="search" class="admin-search-input" id="leaderboard-search" placeholder="🔍 Search by name...">
         <div id="admin-leaderboard-list" class="leaderboard-list">
@@ -1402,6 +1403,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 
   <!-- Excel export (admin leaderboard) — async: it's a ~900KB library used
        only by the admin Export button, so it must never hold up the app's
@@ -1411,8 +1413,8 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" async></script>
 
   <!-- Scripts -->
-  <script src="data.js?v=52"></script>
-  <script src="auth.js?v=50"></script>
-  <script src="app.js?v=62"></script>
+  <script src="data.js?v=53"></script>
+  <script src="auth.js?v=51"></script>
+  <script src="app.js?v=63"></script>
 </body>
 </html>

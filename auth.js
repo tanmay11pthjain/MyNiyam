@@ -1,10 +1,14 @@
-// ===== MyNiyam V4 — Firebase Google Auth + Firebase-backed Identity =====
-// Firebase is the sole master for everything the app reads. The Sheet
-// (via Apps Script — see apps-script-additions.gs) is written to on
-// registration/profile/photo changes so it stays a convenient, current
-// place to look at data by hand, but the app itself never reads from it —
-// the *FromSheetLegacy() functions exist only for the one-time migration
-// script (migrate-to-firebase.js), never called from the live app.
+// ===== MyNiyam V5 — Firebase Google Auth + Firebase-backed Identity =====
+// Firebase Realtime Database is the sole master for everything the app
+// reads, scoped by firebase-rules.json to each member's own record and
+// their sangh's admins. Profile photos live in Firebase Storage
+// (storage-rules.txt), not inline in the database — see uploadPhoto()/
+// fetchPhotoUrl() below. The Sheet (via Apps Script — see
+// apps-script-additions.gs) is still written to on registration/profile
+// changes as a human-readable mirror, but the app itself never reads from
+// it. There is no migration script — v5 shipped via a full database reset
+// (see SANGH-RUNBOOK.md), so the old *FromSheetLegacy() readers that only
+// existed for that one-time migration have been removed.
 
 const Auth = (() => {
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbysnFVeHYnOj9yqZzXCtBV2KQfStNV8GMe-ABHPxM4a7GA16yWziTkqM3ouyHb2wEMp/exec";
@@ -512,34 +516,6 @@ const Auth = (() => {
     }
   }
 
-  // Legacy Sheet-backed sangh list. No longer reachable from the live
-  // app (fetchSanghs() above is Firebase-only) — kept only for the
-  // one-time migration script (migrate-to-firebase.js) to read from when
-  // (re-)populating sanghs/.
-  async function fetchSanghsFromSheetLegacy() {
-    try {
-      const text = await _sheetsRequest({ action: "get_sanghs" });
-      console.log("Sanghs (Sheet, legacy) response:", text);
-      try {
-        const result = JSON.parse(text);
-        if (result.success) {
-          return (result.sanghs || [])
-            .map(s => ({
-              code: String(s.code || '').trim(),
-              name: String(s.name || '').trim(),
-              city: String(s.city || '').trim()
-            }))
-            .filter(s => s.code);
-        }
-      } catch (parseErr) {
-        console.error("Failed to parse Sanghs response:", text);
-      }
-    } catch (e) {
-      console.error("Fetch sanghs (legacy) failed:", e);
-    }
-    return [];
-  }
-
   let _statsCache = null;
   let _statsFetchPromise = null;
 
@@ -600,45 +576,67 @@ const Auth = (() => {
     }
   }
 
-  // Fetch a single user's profile photo (data URL). Lives at its own path
-  // (users/{uid}/photo) — deliberately separate from registration — so the
-  // ~20KB image never rides along with the smaller, more frequent reads
+  // Fetch a single user's profile photo URL. Lives at users/{uid}/photoUrl
+  // — a short string, not the ~20-90KB base64 blob v4 used to store inline
+  // — so it rides along cheaply with the smaller, more frequent reads
   // (_tryFetchIdentityFromFirebase's login-path fetch, renderProfile()'s
-  // own registration read).
-  async function fetchPhoto(uid) {
+  // own registration read) without ever needing to be excluded from them.
+  // The actual image lives in Firebase Storage (see uploadPhoto() below)
+  // and is fetched by the browser directly from that URL, with normal HTTP
+  // caching — never re-downloaded through this database read again.
+  async function fetchPhotoUrl(uid) {
     try {
-      const snap = await firebase.database().ref(`users/${uid}/photo`).once('value');
+      const snap = await firebase.database().ref(`users/${uid}/photoUrl`).once('value');
       return snap.val() || null;
     } catch (e) {
-      console.error("Fetch photo from Firebase failed:", e);
+      console.error("Fetch photo URL from Firebase failed:", e);
       return null;
     }
   }
 
-  // Legacy Sheet-backed photo reader. Kept only for the one-time migration
-  // script — the live app always reads users/{uid}/photo now.
-  async function fetchPhotoFromSheetLegacy(uid) {
+  // Uploads a resized/compressed data URL to Firebase Storage at
+  // profile-photos/{uid}.jpg (see storage-rules.txt — write is restricted
+  // to the owning account's own profile slots) and resolves the public
+  // download URL. Does NOT write users/{uid}/photoUrl itself — callers
+  // write that (a small, fast Realtime Database update) only after this
+  // resolves { success: true }, exactly like updateProfile()'s
+  // check-before-mirror contract.
+  async function uploadPhoto(uid, dataUrl) {
+    if (!dataUrl) return { success: false, error: 'no_data' };
     try {
-      const text = await _sheetsRequest({ action: "get_photo", uid }, { allowJsonp: false });
-      console.log("Get photo (Sheet, legacy) response length:", text ? text.length : 0);
-      try {
-        const result = JSON.parse(text);
-        if (result.success) return result.photo || null;
-      } catch (parseErr) {
-        console.error("Failed to parse get_photo response:", text);
-      }
+      const ref = firebase.storage().ref(`profile-photos/${uid}.jpg`);
+      const snapshot = await ref.putString(dataUrl, 'data_url', { contentType: 'image/jpeg' });
+      const url = await snapshot.ref.getDownloadURL();
+      return { success: true, url };
     } catch (e) {
-      console.error("Fetch photo (legacy) failed:", e);
+      console.error("Photo upload to Storage failed:", e);
+      return { success: false, error: (e && e.code) || 'storage_error' };
     }
-    return null;
   }
 
-  // Uploads a resized/compressed data URL as the user's profile photo.
-  // Response-checked like updateProfile() — callers must not treat this as
-  // successful unless it resolves { success: true }.
-  async function updatePhoto(uid, dataUrl) {
+  // Removes a user's photo object from Storage — called when an admin
+  // deletes a member (deleteAdminUser(), app.js), so a removed member's
+  // photo doesn't sit in Storage forever with nothing pointing at it.
+  // "Nothing there to delete" is treated as success, not a failure.
+  async function deletePhoto(uid) {
     try {
-      const text = await _sheetsRequest({ action: "update_photo", uid, photo: dataUrl }, { allowJsonp: false });
+      await firebase.storage().ref(`profile-photos/${uid}.jpg`).delete();
+      return { success: true };
+    } catch (e) {
+      if (e && e.code === 'storage/object-not-found') return { success: true };
+      console.error("Photo delete from Storage failed:", e);
+      return { success: false, error: (e && e.code) || 'storage_error' };
+    }
+  }
+
+  // Mirrors the photo URL onto the Sheet's own copy, purely for a human
+  // browsing the Sheet by hand — the app itself never reads this back.
+  // Sends the URL (a short string) rather than the base64 blob v4 sent, so
+  // this no longer needs to dodge JSONP's query-string size limit the way
+  // the old base64 payload did.
+  async function updatePhoto(uid, photoUrl) {
+    try {
+      const text = await _sheetsRequest({ action: "update_photo", uid, photo: photoUrl });
       console.log("Update photo response:", text);
       try {
         const result = JSON.parse(text);
@@ -681,53 +679,13 @@ const Auth = (() => {
     }
   }
 
-  // Fetch users belonging to specific sangh codes — sangh_users/{code} is the
-  // index (written at registration and on transfer; see app.js), so for each
-  // code this reads that index, then each listed uid's denormalized name
-  // (users/{uid}/name). Both levels run fully in parallel over the same
-  // already-open connection, so this stays fast even for a sangh with many
-  // members. Resolves [] on any failure — matches the exact contract this
-  // function has always had; _fetchAdminUserUids() (app.js) already treats
-  // "no users" and "the fetch failed" the same way.
-  async function fetchSanghUsers(sanghCodes) {
-    try {
-      const db = firebase.database();
-      const codes = (sanghCodes || []).map(c => String(c || '').trim()).filter(Boolean);
-      if (!codes.length) return [];
-
-      const perCode = await Promise.all(codes.map(async code => {
-        const indexSnap = await db.ref(`sangh_users/${code}`).once('value');
-        const indexVal = indexSnap.val() || {};
-        const uids = Object.keys(indexVal).filter(uid => indexVal[uid]);
-        const nameSnaps = await Promise.all(uids.map(uid => db.ref(`users/${uid}/name`).once('value')));
-        return uids.map((uid, i) => ({ uid, name: nameSnaps[i].val() || '', sanghCode: code }));
-      }));
-
-      return perCode.flat();
-    } catch (e) {
-      console.error("Fetch sangh users from Firebase failed:", e);
-      return [];
-    }
-  }
-
-  // Legacy Sheet-backed sangh-users reader. Kept only for the one-time
-  // migration script, which uses it to backfill sangh_users/{code} for
-  // users who registered before that index existed.
-  async function fetchSanghUsersFromSheetLegacy(sanghCodes) {
-    try {
-      const text = await _sheetsRequest({ action: "get_sangh_users", sanghCodes: sanghCodes });
-      console.log("Sangh users (Sheet, legacy) response:", text);
-      try {
-        const result = JSON.parse(text);
-        if (result.success) return result.users || [];
-      } catch (parseErr) {
-        console.error("Failed to parse sangh users response:", text);
-      }
-    } catch (e) {
-      console.error("Fetch sangh users (legacy) failed:", e);
-    }
-    return [];
-  }
+  // NOTE: there is no fetchSanghMembers() here — app.js's _fetchAdminUsers()
+  // reads sangh_members/{code} directly (uids only, no denormalized name;
+  // it reads each member's own users/{uid} record in the same pass, which
+  // already has the current name — see that function's own comment for why
+  // v4's denormalized-name approach here was dropped: it's the same
+  // staleness risk the sangh-name fix earlier in this project's history
+  // already had to correct once).
 
   return {
     init,
@@ -739,9 +697,10 @@ const Auth = (() => {
     sendRegistration,
     fetchSanghs,
     fetchStats,
-    fetchSanghUsers,
     updateProfile,
-    fetchPhoto,
+    fetchPhotoUrl,
+    uploadPhoto,
+    deletePhoto,
     updatePhoto,
     // Multi-profile identity
     baseUidOf,
@@ -750,11 +709,6 @@ const Auth = (() => {
     getNextProfileId,
     fetchProfiles,
     MAX_PROFILES,
-    retryRoleCheck,
-    // Legacy Sheet readers — unused by the live app, exported only for the
-    // one-time migration script (see plan/migration snippet).
-    fetchSanghsFromSheetLegacy,
-    fetchPhotoFromSheetLegacy,
-    fetchSanghUsersFromSheetLegacy
+    retryRoleCheck
   };
 })();

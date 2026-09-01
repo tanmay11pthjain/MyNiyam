@@ -1,42 +1,65 @@
 {
   "rules": {
-    "settings": {
-      ".read": "auth != null",
-      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p2').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p3').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p4').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p5').child('role').val() === 'admin')"
+    "meta": {
+      ".read": true,
+      ".write": false
     },
-    "sangh_settings": {
+    "sanghs": {
+      ".read": "auth != null",
+      ".write": false
+    },
+    "sangh_config": {
       ".read": "auth != null",
       "$code": {
-        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p2').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p3').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p4').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p5').child('role').val() === 'admin')"
+        "admins": {
+          ".write": false
+        },
+        "settings": {
+          ".write": "auth != null && root.child('sangh_config').child($code).child('admins').child(auth.uid).val() === true"
+        },
+        "points": {
+          ".write": "auth != null && root.child('sangh_config').child($code).child('admins').child(auth.uid).val() === true"
+        },
+        "pointsVersion": {
+          ".write": "auth != null && root.child('sangh_config').child($code).child('admins').child(auth.uid).val() === true"
+        }
+      }
+    },
+    "sangh_members": {
+      ".read": "auth != null",
+      "$code": {
+        "$uid": {
+          ".write": "auth != null && (auth.uid === $uid || $uid.beginsWith(auth.uid + '__p') || root.child('sangh_config').child($code).child('admins').child(auth.uid).val() === true)"
+        }
+      }
+    },
+    "sangh_attendance": {
+      ".read": "auth != null",
+      "$code": {
+        ".write": "auth != null && root.child('sangh_config').child($code).child('admins').child(auth.uid).val() === true"
       }
     },
     "users": {
-      ".read": "auth != null",
       "$uid": {
-        ".write": "auth != null && (auth.uid === $uid || $uid.beginsWith(auth.uid + '__p') || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p2').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p3').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p4').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p5').child('role').val() === 'admin')",
+        ".read": "auth != null && (auth.uid === $uid || $uid.beginsWith(auth.uid + '__p') || root.child('sangh_config').child(root.child('users').child($uid).child('registration').child('sanghCode').val()).child('admins').child(auth.uid).val() === true)",
+        ".write": "auth != null && (auth.uid === $uid || $uid.beginsWith(auth.uid + '__p') || root.child('sangh_config').child(root.child('users').child($uid).child('registration').child('sanghCode').val()).child('admins').child(auth.uid).val() === true)",
         "role": {
-          ".validate": "newData.val() === 'user' || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p2').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p3').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p4').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p5').child('role').val() === 'admin'"
+          ".validate": "newData.val() === 'user'"
         },
         "sanghCodes": {
           ".validate": false
         }
       }
     },
-    "sangh_users": {
-      ".read": "auth != null",
-      ".write": "auth != null"
-    },
     "account_profiles": {
-      ".read": "auth != null",
-      ".write": "auth != null"
-    },
-    "sanghs": {
-      ".read": "auth != null",
-      ".write": false
+      "$baseUid": {
+        ".read": "auth != null && auth.uid === $baseUid",
+        ".write": "auth != null && auth.uid === $baseUid"
+      }
     },
     "stats": {
       ".read": true,
-      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p2').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p3').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p4').child('role').val() === 'admin' || root.child('users').child(auth.uid + '__p5').child('role').val() === 'admin')"
+      ".write": "auth != null && root.child('sangh_config').child(root.child('users').child(auth.uid).child('sanghCodes').child('0').val()).child('admins').child(auth.uid).val() === true"
     }
   }
 }

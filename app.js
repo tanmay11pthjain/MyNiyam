@@ -17,6 +17,11 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+// v5: profile photos live in Firebase Storage now, not inline base64 in
+// the database — see auth.js's uploadPhoto()/deletePhoto()/fetchPhotoUrl(),
+// which call firebase.storage() directly (storageBucket was already
+// present in firebaseConfig above). Nothing in app.js itself talks to
+// Storage directly, so there's no `const storage` needed here.
 
 // ===== RAW NIYAM POINTS — single source of truth =====
 // What a day's raw points are, derived purely from what was actually done
@@ -97,7 +102,7 @@ function resolvePointMap(overrides) {
 }
 
 // The map currently in effect for THIS session — a user's own sangh's
-// resolved map (set by the sangh_settings listener in setupRealtimeSync()),
+// resolved map (set by the sangh_config listener in setupRealtimeSync()),
 // or the coded defaults before that listener has resolved for the first
 // time / for a session with no sangh at all.
 function livePoints() {
@@ -108,20 +113,17 @@ function setLivePoints(map) {
   _livePointMap = map;
 }
 
-// Resolves a sangh's effective niyam settings: DEFAULT_SETTINGS, overlaid by
-// the legacy global `settings` node (the single shared node this app used
-// before per-sangh settings existed), then overlaid by that sangh's OWN
-// sangh_settings/{code}/settings. Order is load-bearing — registry niyam
-// flags (Navkar Jaap, Dev Darshan, Guru Vandan, …) default to false in
-// DEFAULT_SETTINGS ([registerNiyams()]), so without the legacy layer in the
-// middle, every sangh would lose all of them from every member's dashboard
-// the moment per-sangh settings ship, until an admin happens to re-save.
-// A sangh that HAS saved its own settings simply overrides both layers —
-// no migration write needed, this just self-heals on read.
-function resolveSettings(sanghNode, legacyGlobal) {
+// Resolves a sangh's effective niyam settings: DEFAULT_SETTINGS overlaid by
+// that sangh's OWN sangh_config/{code}/settings. v4 had a third layer in
+// the middle — a legacy global `settings` node shared by every sangh
+// before per-sangh settings existed — which is gone in v5: every sangh's
+// config is seeded/saved with every registry flag explicit (see
+// seed-v5.js), so there is nothing left for a middle fallback layer to
+// contribute, and a stale global default can no longer silently win over
+// a sangh's own choice for a niyam it never happened to re-save.
+function resolveSettings(sanghNode) {
   return {
     ...DEFAULT_SETTINGS,
-    ...(legacyGlobal || {}),
     ...((sanghNode && sanghNode.settings) || {}),
   };
 }
@@ -1579,6 +1581,20 @@ class KalyanMitra {
       return;
     }
 
+    // v4's data had DOBs like "111111-11-11" and "10101-01-01" — real
+    // registrations that somehow bypassed <input type="date">'s own
+    // constraints (a browser quirk, or a value set some other way). Belt
+    // and suspenders: reject anything outside a sane human lifespan,
+    // client-side, in addition to the input's own min="1920-01-01".
+    const dobDate = new Date(`${dob}T00:00:00`);
+    const dobYear = dobDate.getFullYear();
+    const todayForDob = new Date();
+    if (isNaN(dobDate.getTime()) || dobYear < 1920 || dobDate > todayForDob) {
+      errorEl.textContent = 'Please enter a valid date of birth.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
     if (!this._registrationPhotoDataUrl) {
       errorEl.textContent = 'Please add a profile photo.';
       errorEl.classList.remove('hidden');
@@ -1601,34 +1617,45 @@ class KalyanMitra {
     btn.querySelector('span').textContent = 'Saving...';
     errorEl.classList.add('hidden');
 
-    const regData = {
-      name, dob, gender, phone, city, area, sanghCode,
-      sanghName: this._selectedSangh.name,
-      sanghCity: this._selectedSangh.city,
-      photo: this._registrationPhotoDataUrl
-    };
     const user = this._currentAuthUser;
 
     try {
+      // Photo goes to Storage FIRST — registration requires one (checked
+      // above), so an upload failure must stop registration here rather
+      // than silently completing with no photo. On success this is a
+      // regular https URL; nothing about it needs to be kept out of the
+      // `registration` node the way the old inline base64 blob did.
+      const uploadResult = await Auth.uploadPhoto(this.uid, this._registrationPhotoDataUrl);
+      if (!uploadResult.success) {
+        throw new Error('Photo upload failed — please try again.');
+      }
+      const photoUrl = uploadResult.url;
+
+      const regData = {
+        name, dob, gender, phone, city, area, sanghCode,
+        sanghName: this._selectedSangh.name,
+        sanghCity: this._selectedSangh.city,
+        photo: photoUrl
+      };
+
       // Save to Firebase — this IS registration now; nothing else has to
-      // succeed for the user to be registered. The photo goes to its own
-      // sibling path (users/{uid}/photo), not inside `registration` — that
-      // node is read on every login (_tryFetchIdentityFromFirebase in
-      // auth.js) and must stay small, exactly why the Sheet always kept its
-      // photo column separate from get_profile/google_login too.
-      const { photo, ...regDataForFirebase } = regData;
+      // succeed for the user to be registered.
       await db.ref(`users/${this.uid}`).update({
         name: name,
         role: 'user',
         registered: true,
-        registration: regDataForFirebase,
+        registration: regData,
         registeredAt: new Date().toISOString(),
-        photo: this._registrationPhotoDataUrl
+        photoUrl: photoUrl
       });
 
-      // Link user to their sangh for admin discovery
+      // Link user to their sangh for admin discovery — sangh_members is a
+      // derived index; registration.sanghCode (just written above) stays
+      // the single source of truth for which sangh a member belongs to.
       if (sanghCode) {
-        await db.ref(`sangh_users/${sanghCode}/${this.uid}`).set(true);
+        await db.ref(`sangh_members/${sanghCode}/${this.uid}`).set({
+          joinedAt: new Date().toISOString()
+        });
       }
 
       // Sheet write, in the background — purely to keep your Sheet current
@@ -1638,11 +1665,12 @@ class KalyanMitra {
       // and logs internally), so there's nothing to .catch() here either.
       Auth.sendRegistration(this.uid, user.email, regData);
 
-      // Cache the just-uploaded photo locally so the Profile tab shows it
-      // instantly, and mark the one-time photo prompt as already satisfied —
-      // a freshly registered user must never see "please add a photo" again.
+      // Cache the just-uploaded photo URL locally so the Profile tab shows
+      // it instantly, and mark the one-time photo prompt as already
+      // satisfied — a freshly registered user must never see "please add a
+      // photo" again.
       try {
-        localStorage.setItem(`myniyam_photo_${this.uid}`, regData.photo);
+        localStorage.setItem(`myniyam_photo_${this.uid}`, photoUrl);
         localStorage.setItem(`myniyam_photo_prompted_${this.uid}`, '1');
       } catch (e) { /* localStorage unavailable — non-fatal */ }
 
@@ -1849,12 +1877,14 @@ class KalyanMitra {
   }
 
   // Writes the new sangh using only paths a member is already permitted to
-  // write directly (users/$uid — auth.uid === $uid; sangh_users — any
-  // signed-in user), clears the stale sangh_users index entry for the old
-  // (now-deleted) code, then reloads — the same approach resetProgress()
-  // already uses — so every sangh-scoped listener (settings, point map,
-  // attendanceDates) re-attaches against the new code from a clean start
-  // rather than needing to be surgically re-pointed while live.
+  // write directly under firebase-rules.json (users/$uid and
+  // sangh_members/$code/$uid, both scoped to auth.uid === $uid or one of
+  // their own __pN slots), clears the stale sangh_members index entry for
+  // the old (now-deleted) code, then reloads — the same approach
+  // resetProgress() already uses — so every sangh-scoped listener
+  // (settings, point map, attendance) re-attaches against the new code
+  // from a clean start rather than needing to be surgically re-pointed
+  // while live.
   async _confirmSanghReselect() {
     const errorEl = document.getElementById('sangh-reselect-error');
     const btn = document.getElementById('btn-sangh-reselect-confirm');
@@ -1872,9 +1902,11 @@ class KalyanMitra {
         sanghCode: sangh.code,
         sanghName: sangh.name,
       });
-      await db.ref(`sangh_users/${sangh.code}/${this.uid}`).set(true);
+      await db.ref(`sangh_members/${sangh.code}/${this.uid}`).set({
+        joinedAt: new Date().toISOString()
+      });
       if (oldCode && oldCode !== sangh.code) {
-        await db.ref(`sangh_users/${oldCode}/${this.uid}`).remove();
+        await db.ref(`sangh_members/${oldCode}/${this.uid}`).remove();
       }
       location.reload();
     } catch (e) {
@@ -1891,7 +1923,7 @@ class KalyanMitra {
   // streak-multiplier/bonus scoring (guarded by the plain boolean
   // rawPointsMigrated); now doubles as the lazy self-heal for a per-sangh
   // niyam-points change, via profile.pointsVersion vs. this session's
-  // this._sanghPointsVersion (set by setupRealtimeSync()'s sangh_settings
+  // this._sanghPointsVersion (set by setupRealtimeSync()'s sangh_config
   // listener, which resolves before this is ever called — see initUser()).
   // Catches anyone an admin's own fan-out (_recomputeSanghPoints()) missed:
   // offline at save time, a member outside _adminUserUids, a partial write.
@@ -2119,7 +2151,7 @@ class KalyanMitra {
   }
 
   // Renders the switcher's profile list from this._accountProfiles — paints
-  // with cached photos immediately, then upgrades each from Auth.fetchPhoto()
+  // with cached photos immediately, then upgrades each from Auth.fetchPhotoUrl()
   // in the background (mirrors _loadAvatarInto()'s cache-then-fetch shape,
   // just for N profiles instead of one).
   _renderProfileSwitcher() {
@@ -2171,7 +2203,7 @@ class KalyanMitra {
     // Lazily fetch+correct each profile's photo — never blocks the initial
     // render, and a failure for one profile can't affect the others.
     profiles.forEach(p => {
-      Auth.fetchPhoto(p.profileId).then(photo => { // never throws; null on any failure or "no photo"
+      Auth.fetchPhotoUrl(p.profileId).then(photo => { // never throws; null on any failure or "no photo"
         if (!photo) return;
         try { localStorage.setItem(`myniyam_photo_${p.profileId}`, photo); } catch (e) { /* non-fatal */ }
         const avatarWrap = listEl.querySelector(`.profile-switcher-item[data-profile-id="${p.profileId}"] .profile-switcher-avatar`);
@@ -2237,9 +2269,9 @@ class KalyanMitra {
   }
 
   async fetchGeolocationAndPanchang() {
-    // Load this user's OWN saved location — a per-user node, never the global
-    // settings singleton. Writing GPS coordinates to db.ref('settings') used
-    // to broadcast one user's precise location to every connected client and
+    // Load this user's OWN saved location — a per-user node, never a shared
+    // one. Writing GPS coordinates anywhere global would broadcast one
+    // user's precise location to every connected client and
     // re-trigger everyone's panchang calculation on every save.
     try {
       const snap = await db.ref(`users/${this.uid}/location`).once('value');
@@ -2297,7 +2329,7 @@ class KalyanMitra {
     // Store admin's sangh codes from auth
     this._adminSanghCodes = this._currentAuthUser.sanghCodes || [];
     this._adminUserUids = []; // UIDs this admin manages
-    this._adminSanghPoints = {}; // code -> raw stored sangh_settings value (or null), kept fresh by the listeners started below
+    this._adminSanghPoints = {}; // code -> raw stored sangh_config value (or null), kept fresh by the listeners started below
     // A stale `true` left over from a PREVIOUS admin session (this app
     // instance survives a logout/login cycle without a page reload) would
     // otherwise permanently block loadAdminSettingsUI() from ever painting
@@ -2332,31 +2364,20 @@ class KalyanMitra {
     // Setup Admin Event Listeners (Tabs, Logout, etc.)
     this.setupAdminEventListeners();
 
-    // Legacy global settings — now a read-only FALLBACK layer only (see
-    // resolveSettings()), for any sangh that hasn't saved its own settings
-    // yet. Nothing writes here anymore; still listened live for symmetry
-    // with the per-sangh listeners below.
-    this._settingsRef = db.ref('settings');
-    this._settingsListener = this._settingsRef.on('value', snap => {
-      this._legacyGlobalSettings = snap.val() || {};
-      this.loadAdminSettingsUI();
-    }, err => {
-      // The fallback layer just stays empty on a denied read — Settings
-      // still resolves from DEFAULT_SETTINGS and whatever the sangh itself
-      // has saved. Never a crash, and the admin panel is already visible
-      // either way.
-      console.error('Firebase read failed for "settings":', err);
-      this._showDbErrorBanner(['settings']);
-    });
+    // v5 has no legacy global `settings` fallback layer any more — every
+    // sangh's config is seeded/saved with every flag explicit (see
+    // resolveSettings(), now a two-layer merge: DEFAULT_SETTINGS overlaid
+    // by this sangh's own sangh_config/{code}/settings).
 
-    // One listener per managed sangh, caching the WHOLE raw node — points,
-    // pointsVersion AND settings (see resolveSettings()) — so the points
-    // UI, the toggles, and every aggregate (_adminSanghPointMap(), used by
-    // the export/poster) always reflect the latest stored value. Cached RAW
-    // (not merged with defaults) so resolveSettings()/_adminSanghPointMap()/
-    // _loadAdminPointInputs() can each resolve it fresh on demand.
+    // One listener per managed sangh, caching the WHOLE raw sangh_config
+    // node — points, pointsVersion AND settings (see resolveSettings()) —
+    // so the points UI, the toggles, and every aggregate
+    // (_adminSanghPointMap(), used by the export/poster) always reflect
+    // the latest stored value. Cached RAW (not merged with defaults) so
+    // resolveSettings()/_adminSanghPointMap()/_loadAdminPointInputs() can
+    // each resolve it fresh on demand.
     this._adminSanghCodes.forEach(code => {
-      db.ref(`sangh_settings/${code}`).on('value', snap => {
+      db.ref(`sangh_config/${code}`).on('value', snap => {
         this._adminSanghPoints[code] = snap.val() || null;
         // Only repaints if the Settings tab is currently showing THIS
         // sangh — a background sangh's listener firing must never clobber
@@ -2366,56 +2387,68 @@ class KalyanMitra {
         const sel = document.getElementById('admin-points-sangh');
         const activeCode = (sel && sel.value) || this._adminSanghCodes[0];
         if (activeCode === code) this.loadAdminSettingsUI();
-      }, err => console.error(`Firebase read failed for "sangh_settings/${code}":`, err));
+      }, err => console.error(`Firebase read failed for "sangh_config/${code}":`, err));
     });
 
-    // Fetch user UIDs from all assigned sanghs
-    await this._fetchAdminUserUids();
-
-    // Fetch and render Leaderboard
+    // Fetch and render Leaderboard — also fetches this._adminUserUids from
+    // sangh_members (see _fetchAdminUsers()).
     await this.renderAdminLeaderboard();
   }
 
-  async _fetchAdminUserUids() {
+  // Replaces v4's single db.ref('users').on('value') — a permanent live
+  // subscription to EVERY user in the entire database, re-delivered in
+  // full on every write by anyone, anywhere (see the v5 restructure plan's
+  // "Context" section). This is scoped and one-shot instead:
+  //   1. sangh_members/{code} for each sangh this admin manages — a tiny
+  //      uid index, not a data dump.
+  //   2. users/{uid} for each of those uids, in one parallel batch — each
+  //      read individually authorized by firebase-rules.json (an admin may
+  //      read users/$uid iff $uid's own registration.sanghCode names a
+  //      sangh this admin's baseUid administers).
+  // No live listener means the leaderboard no longer updates itself while
+  // the tab sits open — switchAdminTab() already re-runs
+  // renderAdminLeaderboard() every time the admin navigates to the tab,
+  // and #btn-refresh-leaderboard (setupAdminEventListeners()) covers the
+  // "I want it current right now" case without a tab switch.
+  async _fetchAdminUsers() {
     const codes = this._adminSanghCodes || [];
     if (codes.length === 0) {
       this._adminUserUids = [];
       console.log('Admin has no sangh codes — no users to manage.');
-      return;
+      return {};
     }
 
-    // Fetch users by sangh code from Firebase (sangh_users/{code} index).
+    let uids = [];
     try {
-      const sanghUsers = await Auth.fetchSanghUsers(codes);
-      this._adminUserUids = sanghUsers.map(u => u.uid).filter(uid => uid);
-      console.log('Admin sangh codes:', codes, '| Sangh users:', this._adminUserUids);
+      const memberSnaps = await Promise.all(codes.map(code => db.ref(`sangh_members/${code}`).once('value')));
+      const uidSet = new Set();
+      memberSnaps.forEach(snap => {
+        const val = snap.val() || {};
+        Object.keys(val).forEach(uid => uidSet.add(uid));
+      });
+      uids = [...uidSet];
+      console.log('Admin sangh codes:', codes, '| Sangh members:', uids);
     } catch (e) {
-      console.error('Failed to fetch sangh users:', e);
-      this._adminUserUids = [];
+      console.error('Failed to fetch sangh members:', e);
+      uids = [];
     }
-  }
+    this._adminUserUids = uids;
+    if (uids.length === 0) return {};
 
-  startLeaderboardListener() {
-    // Detach previous leaderboard listener if any
-    if (this._leaderboardRef) {
-      this._leaderboardRef.off('value', this._leaderboardListener);
-    }
-
-    this._leaderboardRef = db.ref('users');
-    // Only the FIRST snapshot this listener ever receives updates the public
-    // stats node — this fires again on every realtime change to `users`
-    // (any user logging a niyam, admin session left open, etc.), and the
-    // landing page's counters don't need to track that closely; see
-    // _updatePublicStats()'s own comment.
-    let statsUpdated = false;
-    this._leaderboardListener = this._leaderboardRef.on('value', snap => {
-      this._renderLeaderboardFromSnap(snap);
-      this._renderOverviewFromSnap(snap);
-      if (!statsUpdated) {
-        statsUpdated = true;
-        this._updatePublicStats(snap.val() || {});
-      }
+    const userSnaps = await Promise.all(uids.map(uid =>
+      db.ref(`users/${uid}`).once('value').catch(e => {
+        // One member's read failing (e.g. a rules edge case, a mid-delete
+        // race) must not blank the whole leaderboard for everyone else.
+        console.warn(`Failed to read users/${uid}:`, e);
+        return null;
+      })
+    ));
+    const allUsers = {};
+    uids.forEach((uid, i) => {
+      const val = userSnaps[i] && userSnaps[i].val();
+      if (val) allUsers[uid] = val;
     });
+    return allUsers;
   }
 
   // Recomputes the public `stats` node (see firebase-rules.json — the one
@@ -2440,11 +2473,11 @@ class KalyanMitra {
     }
   }
 
-  _renderOverviewFromSnap(snap) {
+  _renderOverviewFromUsers(allUsers) {
     const grid = document.getElementById('admin-overview-grid');
     if (!grid) return;
 
-    const allUsers = snap.val() || {};
+    allUsers = allUsers || {};
     const todayKey = this.getTodayKey();
     let totalUsers = 0, activeToday = 0, totalKP = 0;
 
@@ -2503,7 +2536,7 @@ class KalyanMitra {
   }
 
   // Shared authorization + basic-shape filter — the same rules
-  // _renderLeaderboardFromSnap() (below) and _collectExportRows() already
+  // _renderLeaderboardFromUsers() (below) and _collectExportRows() already
   // apply independently: admin role excluded, only uids in
   // this._adminUserUids kept, and the node must look like a real user
   // (has a role of 'user'/none, or at least a profile). Used by the
@@ -2548,109 +2581,35 @@ class KalyanMitra {
     const record = (this._adminUserRecords || {})[uid];
     const sanghCode = record && record.registration && record.registration.sanghCode;
     if (!sanghCode) return this.settings || DEFAULT_SETTINGS;
-    return resolveSettings((this._adminSanghPoints || {})[sanghCode], this._legacyGlobalSettings);
+    return resolveSettings((this._adminSanghPoints || {})[sanghCode]);
   }
 
   // The admin-side counterpart to _settingsForMember() — same sanghCode
-  // lookup, same _adminSanghPoints source — but resolving takenDates (see
-  // _extractTakenDates()) instead of settings, for _renderLifetimeStats()'s
-  // attendance tiles on a drilled-into member. Returns `null` (the
-  // documented "fall back to inferring from records alone" signal) when the
-  // member's sangh can't be resolved yet, same as an unresolvable sangh
-  // code falls back to global settings above.
+  // lookup, but resolving takenDates (see _extractTakenDates()) from
+  // this._adminSanghAttendance (populated by _fetchAdminSanghAttendance())
+  // instead of settings from this._adminSanghPoints, for
+  // _renderLifetimeStats()'s attendance tiles on a drilled-into member.
+  // Returns `null` (the documented "fall back to inferring from records
+  // alone" signal) when the member's sangh can't be resolved yet, same as
+  // an unresolvable sangh code falls back to global settings above.
   _takenDatesForMember(uid, fromKey, toKey) {
     const record = (this._adminUserRecords || {})[uid];
     const sanghCode = record && record.registration && record.registration.sanghCode;
     if (!sanghCode) return null;
-    return this._extractTakenDates((this._adminSanghPoints || {})[sanghCode], fromKey, toKey);
+    return this._extractTakenDates((this._adminSanghAttendance || {})[sanghCode], fromKey, toKey);
   }
 
-  // Self-healing photo migration. users/{uid}/photo has been mandatory at
-  // registration since v4.790, so this only ever matters for members who
-  // registered before the Firebase switchover — their photo still lives
-  // only in the Sheet (see migrate-to-firebase.js, the one-time DevTools
-  // script this replaces). Fetches missing photos a few at a time (Apps
-  // Script concurrency-limits), writes them all back in ONE multi-path
-  // update, and lets the leaderboard listener's own re-fire repaint the
-  // rows — no manual DOM patch needed. A uid confirmed to have no Sheet
-  // photo either is remembered in localStorage so it's never re-fetched on
-  // a later session; nothing photo-sized is ever cached to localStorage
-  // itself (see the leaderboard's own comment about the 5MB origin quota).
-  _backfillMissingPhotos(allUsers) {
-    if (this._photoBackfillRunning) return;
-
-    let noSheetPhoto;
-    try {
-      noSheetPhoto = new Set(JSON.parse(localStorage.getItem('myniyam_nosheetphoto') || '[]'));
-    } catch (e) {
-      noSheetPhoto = new Set();
-    }
-    if (!this._photoBackfillAttempted) this._photoBackfillAttempted = new Set();
-
-    const candidates = Object.entries(allUsers || {})
-      .filter(([uid, data]) => {
-        if (!data || data.role === 'admin') return false;
-        if (!this._adminUserUids.includes(uid)) return false;
-        if (data.photo) return false;
-        if (noSheetPhoto.has(uid)) return false;
-        if (this._photoBackfillAttempted.has(uid)) return false;
-        return true;
-      })
-      .map(([uid]) => uid);
-
-    if (candidates.length === 0) return;
-    this._photoBackfillRunning = true;
-    // Marked BEFORE the async work starts so a second render firing while
-    // this batch is in flight (e.g. from an unrelated write elsewhere)
-    // can't queue a duplicate fetch for the same uids.
-    candidates.forEach(uid => this._photoBackfillAttempted.add(uid));
-
-    (async () => {
-      const updates = {};
-      const confirmedNone = [];
-      const BATCH = 3;
-      for (let i = 0; i < candidates.length; i += BATCH) {
-        const batch = candidates.slice(i, i + BATCH);
-        await Promise.all(batch.map(async uid => {
-          let photo = null;
-          try {
-            photo = await Auth.fetchPhotoFromSheetLegacy(uid); // never throws in practice; defensive try/catch regardless
-          } catch (e) { /* treated as "no photo" below */ }
-          if (photo) updates[`${uid}/photo`] = photo;
-          else confirmedNone.push(uid);
-        }));
-      }
-
-      if (confirmedNone.length > 0) {
-        try {
-          const merged = new Set([...noSheetPhoto, ...confirmedNone]);
-          localStorage.setItem('myniyam_nosheetphoto', JSON.stringify([...merged]));
-        } catch (e) { /* storage unavailable — non-fatal, just re-checks next session */ }
-      }
-
-      if (Object.keys(updates).length > 0) {
-        try {
-          await db.ref('users').update(updates);
-        } catch (e) {
-          console.warn('Photo backfill write failed (non-fatal):', e);
-        }
-      }
-
-      this._photoBackfillRunning = false;
-    })();
-  }
-
-  _renderLeaderboardFromSnap(snap) {
+  _renderLeaderboardFromUsers(allUsers) {
     const listEl = document.getElementById('admin-leaderboard-list');
     if (!listEl) return;
 
-    const allUsers = snap.val() || {};
+    allUsers = allUsers || {};
     const users = [];
-    // Rebuilt fresh on every snapshot (this listener re-fires on every
-    // change under users/) so a deleted or no-longer-eligible member never
-    // lingers here. Holds the FULL record — not just the 4 leaderboard
-    // fields — so renderAdminUserDetails() can paint the drill-down's
-    // profile card with zero extra Firebase reads.
+    // Rebuilt fresh on every fetch (renderAdminLeaderboard() re-runs this
+    // on tab switch and on manual refresh) so a deleted or no-longer-
+    // eligible member never lingers here. Holds the FULL record — not just
+    // the 4 leaderboard fields — so renderAdminUserDetails() can paint the
+    // drill-down's profile card with zero extra Firebase reads.
     this._adminUserRecords = {};
     Object.entries(allUsers).forEach(([uid, data]) => {
       if (data.role === 'admin') return;
@@ -2662,17 +2621,11 @@ class KalyanMitra {
           name: data.name || uid,
           kp: data.profile?.totalKP || 0,
           streak: data.profile?.currentStreak || 0,
-          photo: data.photo || null
+          photo: data.photoUrl || null
         });
         this._adminUserRecords[uid] = data;
       }
     });
-
-    // Not awaited: legacy members (registered before the Firebase photo
-    // migration) have a photo only in the Sheet — this self-heals them into
-    // Firebase in the background, a few at a time, so the leaderboard never
-    // needs a manual DevTools migration step again.
-    this._backfillMissingPhotos(allUsers);
 
     users.sort((a, b) => b.kp - a.kp);
 
@@ -2716,15 +2669,15 @@ class KalyanMitra {
     });
 
     // Re-applies whatever the admin already typed into the search box —
-    // this listener re-fires on every change under users/, which would
-    // otherwise silently clear an active filter on every rebuild.
+    // renderAdminLeaderboard() rebuilds this list on every tab switch and
+    // manual refresh, which would otherwise silently clear an active filter.
     this._filterLeaderboard();
   }
 
   // Filters the Leaderboard by name — toggles display on the EXISTING rows
   // rather than re-rendering, so a filter never disturbs the click handlers
   // just bound above. Called on every keystroke and after every rebuild
-  // (see the end of _renderLeaderboardFromSnap() above).
+  // (see the end of _renderLeaderboardFromUsers() above).
   _filterLeaderboard() {
     const input = document.getElementById('leaderboard-search');
     const listEl = document.getElementById('admin-leaderboard-list');
@@ -2757,20 +2710,30 @@ class KalyanMitra {
     }
 
     try {
-      // 1. Remove user from all sangh_users mapping nodes across DB
-      const sanghsSnap = await db.ref('sangh_users').once('value');
-      const sanghsData = sanghsSnap.val() || {};
-      for (const [code, sanghUserMap] of Object.entries(sanghsData)) {
-        if (sanghUserMap && sanghUserMap[uidToDelete]) {
-          await db.ref(`sangh_users/${code}/${uidToDelete}`).remove();
-        }
-      }
+      // 1. Remove this member's row from every sangh_members index this
+      // admin can see them under — normally just their own registered
+      // sangh, but a member who transferred sangh mid-session could have a
+      // stray leftover under an old code, so this checks every code THIS
+      // admin manages (the only ones firebase-rules.json lets them write
+      // anyway) rather than assuming exactly one.
+      const targetRecord = (this._adminUserRecords || {})[uidToDelete];
+      const codesToCheck = new Set(this._adminSanghCodes || []);
+      const ownCode = targetRecord && targetRecord.registration && targetRecord.registration.sanghCode;
+      if (ownCode) codesToCheck.add(ownCode);
+      await Promise.all([...codesToCheck].map(code =>
+        db.ref(`sangh_members/${code}/${uidToDelete}`).remove().catch(() => {})
+      ));
 
       // 2. Remove user main node completely (clears sanghCode, profile,
       // logs, lock_status and attendance — all nested under users/{uid})
       await db.ref(`users/${uidToDelete}`).remove();
 
-      // 3. If currently viewing this user, return to leaderboard. Calls
+      // 3. Delete their Storage photo too — otherwise it sits in Storage
+      // forever with nothing left pointing at it. Best-effort: a failure
+      // here must never block the deletion that already succeeded above.
+      Auth.deletePhoto(uidToDelete).catch(e => console.warn('Photo delete failed (non-fatal):', e));
+
+      // 4. If currently viewing this user, return to leaderboard. Calls
       // _showAdminOverview() directly rather than history.back() — this is
       // a programmatic transition after a destructive action (not a user
       // back-gesture), and the alert() below is a blocking dialog whose
@@ -2782,8 +2745,7 @@ class KalyanMitra {
         this._showAdminOverview();
       }
 
-      // 4. Refresh admin state and re-render
-      await this._fetchAdminUserUids();
+      // 5. Refresh admin state and re-render
       await this.renderAdminLeaderboard();
 
       alert(`User "${userName}" was successfully deleted.`);
@@ -2797,25 +2759,30 @@ class KalyanMitra {
     const listEl = document.getElementById('admin-leaderboard-list');
     if (!listEl) return;
     listEl.innerHTML = '<div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>';
-    if (!this._leaderboardRef) {
-      // First time — start real-time listener (fires immediately)
-      this.startLeaderboardListener();
-    } else {
-      // Listener already running — do a one-time read to refresh now
-      const snap = await db.ref('users').once('value');
-      this._renderLeaderboardFromSnap(snap);
+    const allUsers = await this._fetchAdminUsers();
+    this._renderLeaderboardFromUsers(allUsers);
+    this._renderOverviewFromUsers(allUsers);
+    // Only the FIRST time this admin session refreshes the leaderboard —
+    // this can be called repeatedly (tab switches, the refresh button),
+    // and the landing page's counters don't need to track that closely;
+    // see _updatePublicStats()'s own comment.
+    if (!this._statsUpdatedThisSession) {
+      this._statsUpdatedThisSession = true;
+      this._updatePublicStats(allUsers);
     }
   }
 
   // ===== ATTENDANCE (replaces the old admin Lock tab) =====
-  // Storage: users/{uid}/attendance/{YYYY-MM-DD} = { present, gathas }.
-  // Deliberately per-user rather than a top-level attendance/{sanghCode}
-  // node — needs no firebase-rules.json change (the existing users/$uid
-  // rule already lets an admin write any member's node), survives a member
-  // transferring sangh, and arrives for free inside the same `users`
-  // snapshot the leaderboard listener already downloads (_adminUserRecords,
-  // populated by _renderLeaderboardFromSnap()) — so the grid and the export
-  // both need zero extra Firebase reads.
+  // TWO storage locations, written together by saveAttendance() — see the
+  // v5 restructure's "Why attendance moves to a sangh-level node":
+  //   users/{uid}/attendance/{YYYY-MM-DD} = { present, gathas } — the
+  //     member's own private history, unchanged from v4. Survives a
+  //     member transferring sangh (their old attendance stays theirs).
+  //   sangh_attendance/{code}/{YYYY-MM-DD} = { presentCount, absentCount,
+  //     gathaTotal, records: {uid: {present, gathas}} } — the roster-level
+  //     view, new in v5. Answers "who was here on date X" in ONE read
+  //     instead of scanning every managed member's own record the way v4
+  //     had to (see _collectAttendanceRows()).
   //
   // Edits accumulate in this._attendanceDraft (uid -> {present, gathas})
   // and never touch Firebase until Save — a class can have 30+ members, and
@@ -2867,7 +2834,7 @@ class KalyanMitra {
       return `
       <div class="attendance-row${present ? '' : ' is-absent'}" data-uid="${this._escHtml(uid)}">
         <div class="lb-avatar">
-          ${data.photo ? `<img src="${this._escHtml(data.photo)}" alt="">` : `<span class="lb-initial">${this._escHtml(initial)}</span>`}
+          ${data.photoUrl ? `<img src="${this._escHtml(data.photoUrl)}" alt="">` : `<span class="lb-initial">${this._escHtml(initial)}</span>`}
         </div>
         <div class="lb-info"><span class="lb-name">${this._escHtml(name)}</span></div>
         <label class="attendance-present-toggle">
@@ -2968,45 +2935,69 @@ class KalyanMitra {
       return;
     }
 
-    const updates = {};
-    // Which sangh(s) this save actually touches — the attendance list spans
-    // every sangh this admin manages in one flat register, so a save can
-    // touch more than one. Each gets dateKey marked as "taken" below.
-    const sanghCodes = new Set();
+    // Two copies, written in this order — see the v5 restructure plan's
+    // "Why attendance moves to a sangh-level node": users/{uid}/attendance
+    // stays the member's own private history (unchanged shape from v4);
+    // sangh_attendance/{code}/{date} is the NEW roster-level view a whole
+    // class's presence can be read from in one read, instead of scanning
+    // every member's own record. Grouped by sangh since the attendance
+    // list spans every sangh this admin manages in one flat register, so
+    // a single save can touch more than one.
+    const userUpdates = {};
+    const bySangh = {}; // code -> { uid -> {present, gathas} }
     uids.forEach(uid => {
-      updates[`${uid}/attendance/${dateKey}`] = {
+      const rec = {
         present: !!draft[uid].present,
         gathas: Math.max(0, parseInt(draft[uid].gathas, 10) || 0)
       };
+      userUpdates[`${uid}/attendance/${dateKey}`] = rec;
       const record = (this._adminUserRecords || {})[uid];
       const sanghCode = record && record.registration && record.registration.sanghCode;
-      if (sanghCode) sanghCodes.add(sanghCode);
+      if (!sanghCode) return;
+      (bySangh[sanghCode] || (bySangh[sanghCode] = {}))[uid] = rec;
     });
 
     const saveBtn = document.getElementById('btn-save-attendance');
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
     try {
-      // One multi-path update for the whole class — the leaderboard
-      // listener re-fires from this write itself, refreshing
-      // _adminUserRecords with the saved values for free.
-      await db.ref('users').update(updates);
+      // 1. The member's own copy — the write the admin is actually
+      // waiting on; a failure here is the only one that should be
+      // reported as "attendance failed to save".
+      await db.ref('users').update(userUpdates);
 
-      // Marks dateKey as a day attendance was actually taken, per sangh
-      // this save touched — the fact every attendance consumer
-      // (_summarizeAttendance()/_collectAttendanceRows()) needs to tell
-      // "the class didn't run" apart from "it ran and this member simply
-      // wasn't marked" (which now counts as absent, not '—'). Best-effort
-      // and its OWN try/catch — a failure here must never be reported as
-      // "attendance failed to save" when the records above just did; a
-      // missed marker self-heals via the backfill in
-      // _resolveAttendanceTakenDates() on the next export.
-      if (sanghCodes.size > 0) {
-        const dateUpdates = {};
-        sanghCodes.forEach(code => { dateUpdates[`${code}/attendanceDates/${dateKey}`] = true; });
+      // 2. The sangh-level roster view, per sangh this save touched.
+      // Best-effort and its OWN try/catch per sangh — a failure here must
+      // never be reported as "attendance failed to save" when the member
+      // records above just did. Reads the FULL existing record set for
+      // this date first (not just this save's delta) so presentCount/
+      // absentCount/gathaTotal reflect everyone marked on this date, not
+      // only whoever this particular save touched — an earlier visit may
+      // already have marked other members for the same date.
+      for (const [code, newRecords] of Object.entries(bySangh)) {
         try {
-          await db.ref('sangh_settings').update(dateUpdates);
+          const dateRef = db.ref(`sangh_attendance/${code}/${dateKey}`);
+          const existingSnap = await dateRef.child('records').once('value');
+          const merged = { ...(existingSnap.val() || {}), ...newRecords };
+          let presentCount = 0, absentCount = 0, gathaTotal = 0;
+          Object.values(merged).forEach(r => {
+            if (r && r.present) presentCount++; else absentCount++;
+            gathaTotal += (r && r.gathas) || 0;
+          });
+          const update = {
+            presentCount, absentCount, gathaTotal,
+            takenAt: new Date().toISOString(),
+            takenBy: (this._currentAuthUser && this._currentAuthUser.baseUid) || null,
+          };
+          Object.entries(newRecords).forEach(([uid, rec]) => { update[`records/${uid}`] = rec; });
+          await dateRef.update(update);
+          // Keep the just-fetched cache current too, so a taken-dates
+          // check immediately after this save (e.g. re-opening this same
+          // date) doesn't have to wait for the listener/next fetch.
+          if (!this._adminSanghAttendance) this._adminSanghAttendance = {};
+          if (!this._adminSanghAttendance[code]) this._adminSanghAttendance[code] = {};
+          this._adminSanghAttendance[code][dateKey] = { ...update, records: merged };
         } catch (e) {
-          console.warn('Attendance saved, but marking the date as taken failed (self-heals on next export):', e);
+          console.warn(`Attendance saved, but updating the sangh_attendance roster for "${code}" failed (self-heals on next export):`, e);
         }
       }
 
@@ -3118,12 +3109,17 @@ class KalyanMitra {
     if (btnSpan) btnSpan.textContent = 'Exporting...';
 
     try {
-      const snap = await db.ref('users').once('value');
-      const allUsers = snap.val() || {};
-      // Same taken-dates resolution (and backfill) the Attendance export
-      // uses, so this sheet's attendance columns can never disagree with
-      // that one — see _resolveAttendanceTakenDates()'s own comment.
-      const takenDates = await this._resolveAttendanceTakenDates(allUsers, fromKey, toKey);
+      // Scoped to this admin's own managed sangh(s), not a whole-`users`
+      // download — see _fetchAdminUsers()'s own comment. Re-fetched fresh
+      // here (rather than reusing this._adminUserRecords) so an export
+      // always reflects the very latest data, not whatever the leaderboard
+      // happened to have cached from its last visit.
+      const allUsers = await this._fetchAdminUsers();
+      await this._fetchAdminSanghAttendance();
+      // Same taken-dates resolution the Attendance export uses, so this
+      // sheet's attendance columns can never disagree with that one — see
+      // _resolveAttendanceTakenDates()'s own comment.
+      const takenDates = await this._resolveAttendanceTakenDates(fromKey, toKey);
       const rows = this._collectExportRows(allUsers, fromKey, toKey, takenDates);
 
       if (rows.length === 0) {
@@ -3201,76 +3197,69 @@ class KalyanMitra {
   // nobody was marked on means the class didn't meet — it is not an
   // absence. Gathas are summed unconditionally, independent of daysMarked.
   // Extracts the Set of dateKeys within [fromKey, toKey] from a raw
-  // sangh_settings/{code} node's `attendanceDates` child (see
-  // saveAttendance()) — shared by the member-facing "My Attendance" (from
-  // the live sangh_settings listener's cached node) and every admin
-  // aggregate (from this._adminSanghPoints). Returns `null`, never an empty
-  // Set, when the node has no attendanceDates child AT ALL — that specific
-  // distinction is what tells _summarizeAttendance()/_collectAttendanceRows()
-  // apart "this sangh has never recorded taken-dates, infer from records"
-  // from "it has, and there simply were none in this particular range".
+  // sangh_attendance/{code} node — its own child keys ARE the taken dates
+  // (see saveAttendance()); a date the class never met simply has no key
+  // there at all, so unlike v4 there is no separate `attendanceDates`
+  // child to reach into. `node` is this._sanghAttendanceNode
+  // (member-facing "My Attendance", live-listened in setupRealtimeSync())
+  // or this._adminSanghAttendance[code] (admin aggregates, fetched by
+  // _fetchAdminSanghAttendance()). Returns `null`, never an empty Set,
+  // when the WHOLE node is missing (this sangh has never taken attendance
+  // at all) — that distinction is what tells
+  // _summarizeAttendance()/_collectAttendanceRows() apart "nothing known,
+  // infer from records" from "known, and there simply were none in this
+  // particular range".
   _extractTakenDates(node, fromKey, toKey) {
-    const dates = node && node.attendanceDates;
-    if (!dates) return null;
+    if (!node) return null;
     const set = new Set();
-    Object.keys(dates).forEach(dateKey => {
+    Object.keys(node).forEach(dateKey => {
       if (dateKey >= fromKey && dateKey <= toKey) set.add(dateKey);
     });
     return set;
   }
 
+  // Fetches sangh_attendance/{code} for every sangh this admin manages,
+  // caching the raw nodes into this._adminSanghAttendance — the admin-side
+  // counterpart to the member's live sangh_attendance listener
+  // (setupRealtimeSync()). Not live: called on demand (renderAdminLeaderboard(),
+  // and again just before an export needs the freshest possible picture)
+  // rather than a persistent per-sangh listener, matching _fetchAdminUsers()'s
+  // "scoped, one-shot" pattern rather than v4's always-on subscriptions.
+  async _fetchAdminSanghAttendance() {
+    const codes = this._adminSanghCodes || [];
+    this._adminSanghAttendance = {};
+    if (codes.length === 0) return;
+    const snaps = await Promise.all(codes.map(code =>
+      db.ref(`sangh_attendance/${code}`).once('value').catch(e => {
+        console.warn(`Failed to read sangh_attendance/${code}:`, e);
+        return null;
+      })
+    ));
+    codes.forEach((code, i) => {
+      this._adminSanghAttendance[code] = (snaps[i] && snaps[i].val()) || null;
+    });
+  }
+
   // Admin-side resolution of _extractTakenDates() across every sangh this
   // admin manages (the attendance register spans all of them as one flat
-  // list — see _eligibleSanghUsers()), unioned into a single Set. Also
-  // backfills: a date with at least one real record but missing from its
-  // sangh's attendanceDates (data recorded before this feature existed)
-  // is written back so it never has to be re-inferred again. The backfill
-  // write is best-effort — its own try/catch, and never blocks or fails
-  // the caller (an export must still complete on a backfill hiccup).
-  // Returns `null`, matching _extractTakenDates(), only when NOTHING is
-  // known and there is nothing to backfill either — i.e. true fallback.
-  async _resolveAttendanceTakenDates(allUsers, fromKey, toKey) {
+  // list — see _eligibleSanghUsers()), unioned into a single Set. No
+  // backfill needed in v5: saveAttendance() writes a member's own
+  // users/{uid}/attendance AND the sangh_attendance roster view in the
+  // same operation, so (barring a genuinely failed write, left for manual
+  // correction) the two can no longer independently drift the way v4's
+  // separately-added attendanceDates child could for pre-existing data.
+  // Callers must call _fetchAdminSanghAttendance() first — this reads
+  // only from that cache. Returns `null`, matching _extractTakenDates(),
+  // when nothing is known for any managed sangh in range — true fallback.
+  async _resolveAttendanceTakenDates(fromKey, toKey) {
     const codes = this._adminSanghCodes || [];
     const takenDates = new Set();
     let anyKnown = false;
     codes.forEach(code => {
-      const node = (this._adminSanghPoints || {})[code];
-      if (node && node.attendanceDates) anyKnown = true;
+      const node = (this._adminSanghAttendance || {})[code];
+      if (node) anyKnown = true;
       this._extractTakenDates(node, fromKey, toKey)?.forEach(d => takenDates.add(d));
     });
-
-    const missingBySangh = {};
-    this._eligibleSanghUsers(allUsers).forEach(({ data }) => {
-      const sanghCode = data.registration && data.registration.sanghCode;
-      if (!sanghCode) return;
-      Object.keys(data.attendance || {}).forEach(dateKey => {
-        if (dateKey < fromKey || dateKey > toKey || takenDates.has(dateKey)) return;
-        (missingBySangh[sanghCode] || (missingBySangh[sanghCode] = {}))[dateKey] = true;
-        takenDates.add(dateKey); // reflected in THIS call's result immediately
-        anyKnown = true;
-      });
-    });
-
-    const backfillCodes = Object.keys(missingBySangh);
-    if (backfillCodes.length > 0) {
-      const updates = {};
-      backfillCodes.forEach(code => {
-        Object.keys(missingBySangh[code]).forEach(dateKey => { updates[`${code}/attendanceDates/${dateKey}`] = true; });
-      });
-      try {
-        await db.ref('sangh_settings').update(updates);
-        backfillCodes.forEach(code => {
-          if (!this._adminSanghPoints[code]) this._adminSanghPoints[code] = {};
-          this._adminSanghPoints[code].attendanceDates = {
-            ...(this._adminSanghPoints[code].attendanceDates || {}),
-            ...missingBySangh[code],
-          };
-        });
-      } catch (e) {
-        console.warn('Attendance-taken backfill failed (this export still reflects it; will retry next time):', e);
-      }
-    }
-
     return anyKnown ? takenDates : null;
   }
 
@@ -3295,9 +3284,9 @@ class KalyanMitra {
         totalGathas += (rec.gathas || 0);
       });
     } else {
-      // Fallback — no attendanceDates data at all for this sangh/range yet:
-      // infer purely from whichever records exist, exactly as before this
-      // change. Self-heals the moment an admin export backfills it.
+      // Fallback — this sangh has no sangh_attendance data at all for this
+      // range (attendance has never been taken, or the read failed):
+      // infer purely from whichever per-member records exist.
       Object.entries(att).forEach(([dateKey, rec]) => {
         if (!rec || dateKey < fromKey || dateKey > toKey) return;
         totalGathas += (rec.gathas || 0);
@@ -3417,12 +3406,14 @@ class KalyanMitra {
     if (btnSpan) btnSpan.textContent = 'Exporting...';
 
     try {
-      const snap = await db.ref('users').once('value');
-      const allUsers = snap.val() || {};
-      // Resolves which dates were actually taken (and backfills any gap) —
-      // see _resolveAttendanceTakenDates()'s own comment. Must happen
-      // before _collectAttendanceRows() so its columns reflect it.
-      const takenDates = await this._resolveAttendanceTakenDates(allUsers, fromKey, toKey);
+      // Scoped to this admin's own managed sangh(s), not a whole-`users`
+      // download — see _fetchAdminUsers()'s own comment.
+      const allUsers = await this._fetchAdminUsers();
+      await this._fetchAdminSanghAttendance();
+      // Resolves which dates were actually taken — see
+      // _resolveAttendanceTakenDates()'s own comment. Must happen before
+      // _collectAttendanceRows() so its columns reflect it.
+      const takenDates = await this._resolveAttendanceTakenDates(fromKey, toKey);
       const { dateKeys, rows } = this._collectAttendanceRows(allUsers, fromKey, toKey, takenDates);
 
       if (rows.length === 0) {
@@ -3567,10 +3558,10 @@ class KalyanMitra {
 
     const nameEl = document.getElementById('admin-viewing-name');
 
-    // The leaderboard listener already has this user's full record in
-    // memory (see _renderLeaderboardFromSnap()) — only fall back to a
-    // direct read if that cache somehow missed them (e.g. selected in the
-    // instant before the very first leaderboard snapshot has landed).
+    // The leaderboard fetch already has this user's full record in memory
+    // (see _renderLeaderboardFromUsers()) — only fall back to a direct
+    // read if that cache somehow missed them (e.g. selected before the
+    // leaderboard has finished its first fetch this session).
     let record = (this._adminUserRecords || {})[uid];
     if (!record) {
       const recSnap = await db.ref(`users/${uid}`).once('value');
@@ -4101,6 +4092,13 @@ class KalyanMitra {
     const leaderboardSearchEl = document.getElementById('leaderboard-search');
     if (leaderboardSearchEl) leaderboardSearchEl.addEventListener('input', () => this._filterLeaderboard());
 
+    // Manual leaderboard refresh — see _fetchAdminUsers()'s comment on why
+    // there is no live listener any more (switchAdminTab() already refetches
+    // on every visit to this tab; this covers "I want it current right now"
+    // without needing a tab switch).
+    const refreshLeaderboardBtn = document.getElementById('btn-refresh-leaderboard');
+    if (refreshLeaderboardBtn) refreshLeaderboardBtn.addEventListener('click', () => this.renderAdminLeaderboard());
+
     // Export leaderboard to Excel
     const openExportBtn = document.getElementById('btn-open-export');
     if (openExportBtn) openExportBtn.addEventListener('click', () => this.openExportDialog());
@@ -4221,28 +4219,10 @@ class KalyanMitra {
     const todayKey = this.getTodayKey();
     const userPath = `users/${this.uid}`;
 
-    // Legacy global settings — now a read-only FALLBACK layer only (see
-    // resolveSettings()). Nothing writes here anymore (saveAdminSettings()
-    // writes sangh_settings/{code}/settings instead), but it's still worth
-    // listening live rather than a one-time read, purely for symmetry with
-    // the sangh_settings listener below — both feed the same resolve.
-    const p1 = this.listenToRef('settings', val => {
-      this._legacyGlobalSettings = val || {};
-      this.settings = resolveSettings(this._sanghSettingsNode, this._legacyGlobalSettings);
-      if (!this.initializing) {
-        if (this.currentRole === 'user') {
-          // Deliberately NOT calling calculatePanchang() here — location now
-          // lives per-user, not in this shared node, so nothing here should
-          // affect sun times. Recomputing on every settings change used to
-          // fan out an Open-Meteo/geolocation refresh to every connected
-          // client whenever anyone (including an admin) saved settings.
-          this.renderDashboard();
-        } else {
-          this.loadAdminSettingsUI();
-        }
-      }
-    });
-
+    // v5 has no legacy global `settings` node to listen to any more — a
+    // member's settings resolve purely from their own sangh's
+    // sangh_config/{code} (the p5 listener below); there is no middle
+    // fallback layer left (see resolveSettings()).
     const p2 = this.listenToRef(`${userPath}/profile`, val => {
       this.profile = val ? { ...DEFAULT_PROFILE, ...val } : { ...DEFAULT_PROFILE };
       if (!this.initializing) {
@@ -4309,36 +4289,52 @@ class KalyanMitra {
       }
     });
 
-    // Per-sangh niyam point overrides — user sessions only (the admin's OWN
-    // role never scores anything; a family profile switched INTO always
-    // goes through this same initUser()/setupRealtimeSync() path as its
-    // own uid, so it resolves its own sangh's map correctly regardless).
-    // Must resolve before _migrateToRawPoints() runs (see initUser()'s
-    // ordering comment) — it's included in the same awaited settle below
-    // as everything else, so that ordering is guaranteed.
+    // Per-sangh niyam settings + point overrides — user sessions only (the
+    // admin's OWN role never scores anything; a family profile switched
+    // INTO always goes through this same initUser()/setupRealtimeSync()
+    // path as its own uid, so it resolves its own sangh's config
+    // correctly regardless). Must resolve before _migrateToRawPoints()
+    // runs (see initUser()'s ordering comment) — it's included in the same
+    // awaited settle below as everything else, so that ordering is
+    // guaranteed. Reads registration.sanghCode directly (rather than
+    // this._currentAuthUser.sanghCodes[0], the field meant for a
+    // multi-sangh ADMIN's managed list) — this is the single source of
+    // truth for which sangh an ordinary member belongs to; see
+    // deleteAdminUser()/_confirmSanghReselect() for the same choice
+    // elsewhere.
     let p5 = Promise.resolve();
-    const labeledPaths = ['settings', `${userPath}/profile`, `${userPath}/daily_logs/${todayKey}`, `${userPath}/lock_status/${todayKey}`];
+    const labeledPaths = [`${userPath}/profile`, `${userPath}/daily_logs/${todayKey}`, `${userPath}/lock_status/${todayKey}`];
     if (this.currentRole === 'user') {
-      const sanghCode = (this._currentAuthUser && this._currentAuthUser.sanghCodes && this._currentAuthUser.sanghCodes[0]) || null;
+      const sanghCode = (this._currentAuthUser && this._currentAuthUser.profile && this._currentAuthUser.profile.sanghCode) || null;
       if (sanghCode) {
-        p5 = this.listenToRef(`sangh_settings/${sanghCode}`, val => {
+        p5 = this.listenToRef(`sangh_config/${sanghCode}`, val => {
           setLivePoints(resolvePointMap(val && val.points));
           this._sanghPointsVersion = (val && val.pointsVersion) || 0;
           // Cache the raw node's `settings` child too, and re-resolve
-          // this.settings (see resolveSettings()) — this is this sangh's
-          // own saved config, the highest-precedence layer. Whichever of
-          // this listener or the legacy `settings` one (p1, above) fires
-          // first leaves the other's cached value at its own default
-          // (undefined _sanghSettingsNode / undefined _legacyGlobalSettings)
-          // — resolveSettings() guards both with `|| {}`, so neither
-          // ordering can throw or produce a wrong-shaped settings object.
+          // this.settings (see resolveSettings()) — this sangh's own saved
+          // config is now the ONLY layer besides DEFAULT_SETTINGS.
           this._sanghSettingsNode = val;
-          this.settings = resolveSettings(this._sanghSettingsNode, this._legacyGlobalSettings);
+          this.settings = resolveSettings(this._sanghSettingsNode);
           // renderDashboard() itself calls _refreshPointLabels() — no need
           // to call it separately here.
           if (!this.initializing) this.renderDashboard();
         });
-        labeledPaths.push(`sangh_settings/${sanghCode}`);
+        labeledPaths.push(`sangh_config/${sanghCode}`);
+
+        // sangh_attendance/{code} — the roster-level "which dates did the
+        // class meet" record (see saveAttendance()/_extractTakenDates()).
+        // A SEPARATE listener from sangh_config above (v4 kept this data
+        // nested inside the settings node, so it was re-downloaded on
+        // every points/toggle change too) — supplementary like the
+        // daily_logs/attendance listeners just above: not part of the
+        // awaited critical settle, own .catch(), never blocks first paint.
+        this.listenToRef(`sangh_attendance/${sanghCode}`, val => {
+          this._sanghAttendanceNode = val || null;
+          if (!this.initializing && this.currentRole === 'user') {
+            this.renderMyAttendance();
+            this.renderAchievements();
+          }
+        }).catch(e => console.error('sangh_attendance listener failed:', e));
       }
     }
 
@@ -4346,13 +4342,12 @@ class KalyanMitra {
     // initialisation — every caller gets to reveal *something* regardless
     // of what Firebase's rules allow. Returns the paths that failed so the
     // caller can tell the user their data may not be syncing.
-    const results = await Promise.allSettled([p1, p2, p3, p4, p5]);
+    const results = await Promise.allSettled([p2, p3, p4, p5]);
     return results
       .map((r, i) => (r.status === 'rejected' ? labeledPaths[i] : null))
       .filter(Boolean);
   }
 
-  saveSettings() { db.ref('settings').set(this.settings); }
   saveProfile() { db.ref(`users/${this.uid}/profile`).set(this.profile); }
   saveDailyLogFor(dateKey, log) {
     db.ref(`users/${this.uid}/daily_logs/${dateKey}`).set(log);
@@ -4360,7 +4355,6 @@ class KalyanMitra {
   saveDailyLog() {
     this.saveDailyLogFor(this.getTodayKey(), this.dailyLog);
   }
-  saveAll() { this.saveSettings(); this.saveProfile(); this.saveDailyLog(); }
 
   getTodayKey(offset = 0) {
     const d = new Date();
@@ -5699,7 +5693,7 @@ class KalyanMitra {
     const logs = this._cachedDailyLogs || {};
     const today = this.getTodayKey();
     const att = attendance !== undefined ? attendance : this._cachedAttendance;
-    const taken = takenDates !== undefined ? takenDates : this._extractTakenDates(this._sanghSettingsNode, '0000-00-00', today);
+    const taken = takenDates !== undefined ? takenDates : this._extractTakenDates(this._sanghAttendanceNode, '0000-00-00', today);
 
     // '0000-00-00' sorts before every real date key, so this covers the
     // user's entire history without needing their actual first log date.
@@ -5783,10 +5777,10 @@ class KalyanMitra {
     // calling it again from renderHistory() right after is a no-op.
     this._initHistoryState();
     const { fromKey, toKey } = this._monthKeyBounds(this._historyYear, this._historyMonth);
-    // this._sanghSettingsNode is the live sangh_settings listener's cached
-    // raw node (see setupRealtimeSync()) — no extra read needed for the
-    // same stricter absence rule the admin exports apply.
-    const takenDates = this._extractTakenDates(this._sanghSettingsNode, fromKey, toKey);
+    // this._sanghAttendanceNode is the live sangh_attendance listener's
+    // cached raw node (see setupRealtimeSync()) — no extra read needed for
+    // the same stricter absence rule the admin exports apply.
+    const takenDates = this._extractTakenDates(this._sanghAttendanceNode, fromKey, toKey);
 
     const paint = (attendance) => {
       const { daysPresent, totalGathas, pct } = this._summarizeAttendance(attendance, fromKey, toKey, takenDates);
@@ -5941,12 +5935,12 @@ class KalyanMitra {
     // The Google account's own photo is only a sensible placeholder for the
     // PRIMARY profile (it IS that Google identity). For an added profile —
     // e.g. a child's — falling back to it would briefly show the parent's
-    // Google photo under the child's name until fetchPhoto() resolves.
+    // Google photo under the child's name until fetchPhotoUrl() resolves.
     const googlePlaceholder = this._isPrimaryProfile() ? (this._currentAuthUser && this._currentAuthUser.photoURL) : null;
     applyPhoto(cached || googlePlaceholder || null);
 
     if (!profileId) return;
-    const photo = await Auth.fetchPhoto(profileId); // never throws; null on any failure or "no photo"
+    const photo = await Auth.fetchPhotoUrl(profileId); // never throws; null on any failure or "no photo"
     if (photo) {
       applyPhoto(photo);
       try { localStorage.setItem(cacheKey, photo); } catch (e) { /* storage full — non-fatal */ }
@@ -5973,26 +5967,34 @@ class KalyanMitra {
     return this._loadAvatarInto('admin-header-avatar-img', 'admin-header-avatar-placeholder');
   }
 
-  // Bound to the Profile tab's "Change photo" file input. Firebase-first:
-  // the upload's success/failure is decided by the Firebase write alone;
-  // Auth.updatePhoto() (the Sheet write) runs afterwards in the background,
-  // purely to keep the Sheet's copy current for your own reference.
+  // Bound to the Profile tab's "Change photo" file input. Storage-first:
+  // the upload's success/failure is decided by the Storage write (see
+  // Auth.uploadPhoto()) plus the small users/{uid}/photoUrl database
+  // write that follows it — both must succeed before the UI updates.
+  // Auth.updatePhoto() (the Sheet mirror) runs afterwards in the
+  // background, purely to keep the Sheet's copy current for your own
+  // reference.
   async _handleProfilePhotoChange(file) {
     const errorEl = document.getElementById('profile-error');
     if (errorEl) errorEl.classList.add('hidden');
     try {
       const dataUrl = await this._resizeImageToDataUrl(file);
-      await db.ref(`users/${this.uid}/photo`).set(dataUrl);
+      const uploadResult = await Auth.uploadPhoto(this.uid, dataUrl);
+      if (!uploadResult.success) {
+        throw new Error('Photo upload failed — please try again.');
+      }
+      const photoUrl = uploadResult.url;
+      await db.ref(`users/${this.uid}/photoUrl`).set(photoUrl);
 
       const avatarEl = document.getElementById('profile-avatar');
       const placeholderEl = document.getElementById('profile-avatar-placeholder');
       if (avatarEl) {
-        avatarEl.src = dataUrl;
+        avatarEl.src = photoUrl;
         avatarEl.classList.remove('hidden');
       }
       if (placeholderEl) placeholderEl.classList.add('hidden');
       try {
-        localStorage.setItem(`myniyam_photo_${this.uid}`, dataUrl);
+        localStorage.setItem(`myniyam_photo_${this.uid}`, photoUrl);
         localStorage.setItem(`myniyam_photo_prompted_${this.uid}`, '1');
       } catch (e) { /* non-fatal */ }
 
@@ -6000,7 +6002,7 @@ class KalyanMitra {
       // above. updatePhoto() resolves { success: false } rather than
       // rejecting on a Sheet-side failure, so both are checked; either way
       // it's just logged, never surfaced to the user.
-      Auth.updatePhoto(this.uid, dataUrl).then(result => {
+      Auth.updatePhoto(this.uid, photoUrl).then(result => {
         if (!result.success) console.warn('Background Sheet photo update failed (non-fatal):', result.error);
       }).catch(e => console.warn('Background Sheet photo update failed (non-fatal):', e));
     } catch (e) {
@@ -6022,7 +6024,7 @@ class KalyanMitra {
       if (localStorage.getItem(promptedKey)) return;
     } catch (e) { /* localStorage unavailable — proceed as if not yet prompted */ }
 
-    const photo = await Auth.fetchPhoto(this.uid); // never throws; null on any failure or "no photo"
+    const photo = await Auth.fetchPhotoUrl(this.uid); // never throws; null on any failure or "no photo"
     try { localStorage.setItem(promptedKey, '1'); } catch (e) { /* non-fatal */ }
 
     if (photo) {
@@ -6215,7 +6217,7 @@ class KalyanMitra {
     const today = this.getTodayKey();
     const s = settingsOverride || this.settings || DEFAULT_SETTINGS;
     const att = attendance !== undefined ? attendance : this._cachedAttendance;
-    const taken = takenDates !== undefined ? takenDates : this._extractTakenDates(this._sanghSettingsNode, `${year}-01-01`, today);
+    const taken = takenDates !== undefined ? takenDates : this._extractTakenDates(this._sanghAttendanceNode, `${year}-01-01`, today);
     // Note: `isAdmin` is passed `true` from both call sites (user + admin
     // history), so it cannot be used as a role signal. currentRole is the
     // only trustworthy check — streak saver editing is user-only.
@@ -6443,15 +6445,17 @@ class KalyanMitra {
     this._renderPoster();
   }
 
-  // Pure data step beyond the one `users` read — ranks this sangh's
-  // eligible users (_eligibleSanghUsers()) by the selected month's AP via
-  // _computeNiyamRange(), the same "total AP" definition the export and
-  // lifetime stats grid already use, so the poster can never disagree with
-  // the rest of the app. Zero-AP users are dropped — a poster crediting
-  // someone with 0 AP is worse than not showing them.
+  // Ranks this sangh's eligible users (_eligibleSanghUsers()) by the
+  // selected month's AP via _computeNiyamRange(), the same "total AP"
+  // definition the export and lifetime stats grid already use, so the
+  // poster can never disagree with the rest of the app. Zero-AP users are
+  // dropped — a poster crediting someone with 0 AP is worse than not
+  // showing them. Fetches fresh via _fetchAdminUsers() (scoped to this
+  // admin's own managed sangh(s), not a whole-`users` download) rather
+  // than reusing this._adminUserRecords, so the poster reflects the
+  // latest data regardless of how long the leaderboard tab has been open.
   async _computePosterWinners(year, month) {
-    const snap = await db.ref('users').once('value');
-    const allUsers = snap.val() || {};
+    const allUsers = await this._fetchAdminUsers();
     const eligible = this._eligibleSanghUsers(allUsers);
     const s = this.settings || DEFAULT_SETTINGS;
     const { fromKey, toKey } = this._monthKeyBounds(year, month);
@@ -6543,7 +6547,7 @@ class KalyanMitra {
   // Draws a circular photo (centre-cropped like _resizeImageToDataUrl(),
   // app.js:2773) at (cx, cy) with radius r and a coloured ring; draws a
   // coloured initial circle instead when img is null (no photo, or
-  // fetchPhoto failed) — the poster always shows a complete podium.
+  // fetchPhotoUrl failed) — the poster always shows a complete podium.
   _drawAvatar(ctx, img, cx, cy, r, ringColor, fallbackLetter) {
     ctx.save();
     ctx.beginPath();
@@ -6819,7 +6823,7 @@ class KalyanMitra {
       }
 
       const [images, sanghLabels] = await Promise.all([
-        Promise.all(winners.map(w => Auth.fetchPhoto(w.uid).then(photo => this._loadImage(photo)))),
+        Promise.all(winners.map(w => Auth.fetchPhotoUrl(w.uid).then(photo => this._loadImage(photo)))),
         this._resolveSanghLabels(this._adminSanghCodes || [], {}, true),
         this._ensurePosterFonts(),
       ]);
@@ -6929,7 +6933,7 @@ class KalyanMitra {
       : this._cachedAttendance;
     const takenDates = this.currentRole === 'admin'
       ? this._takenDatesForMember(this._adminSelectedUid, attFrom, attTo)
-      : this._extractTakenDates(this._sanghSettingsNode, attFrom, attTo);
+      : this._extractTakenDates(this._sanghAttendanceNode, attFrom, attTo);
     const attSummary = this._summarizeAttendance(attendance, attFrom, attTo, takenDates);
     const attendanceRows = `
       <div class="niyam-stat-row">
@@ -7424,10 +7428,10 @@ class KalyanMitra {
   loadAdminSettingsUI() {
     // An admin's own in-progress edit must never be silently overwritten by
     // a listener repaint racing in behind it — their own save echoing back
-    // through the sangh_settings listener, another admin saving the same
-    // sangh concurrently, or the legacy-global listener firing. Cleared on
-    // successful save and on sangh-switch (setupAdminEventListeners()) —
-    // both of which intentionally WANT a fresh repaint.
+    // through the sangh_config listener, or another admin saving the same
+    // sangh concurrently. Cleared on successful save and on sangh-switch
+    // (setupAdminEventListeners()) — both of which intentionally WANT a
+    // fresh repaint.
     if (this._adminSettingsDirty) return;
 
     // Loud, not just console-only — any NIYAM_REGISTRY entry registerNiyams()
@@ -7444,10 +7448,10 @@ class KalyanMitra {
     const sel = document.getElementById('admin-points-sangh');
     const activeCode = (sel && sel.value) || (this._adminSanghCodes || [])[0];
     // Same precedence as the user-side resolve (see resolveSettings()) —
-    // this sangh's own saved settings, over the legacy global fallback,
-    // over coded defaults. A sangh nobody is currently editing (no active
-    // code) still resolves to a sane value via the `null` passed here.
-    const s = resolveSettings(activeCode ? (this._adminSanghPoints || {})[activeCode] : null, this._legacyGlobalSettings);
+    // this sangh's own saved settings, over coded defaults. A sangh
+    // nobody is currently editing (no active code) still resolves to a
+    // sane value via the `null` passed here.
+    const s = resolveSettings(activeCode ? (this._adminSanghPoints || {})[activeCode] : null);
 
     document.getElementById('admin-toggle-navkarsi').checked = s.enableNavkarsi;
     document.getElementById('admin-toggle-wakeup').checked = s.enableWakeup;
@@ -7502,7 +7506,7 @@ class KalyanMitra {
   }
 
   // Reads every toggle + points input for the currently-selected sangh and
-  // writes them BOTH in one atomic update() to sangh_settings/{code} — a
+  // writes them BOTH in one atomic update() to sangh_config/{code} — a
   // single write means settings and points can never half-save. Builds a
   // fresh LOCAL object rather than mutating this.settings in place:
   // this.settings is this ADMIN'S OWN session settings (all-defaults,
@@ -7560,12 +7564,12 @@ class KalyanMitra {
 
     const pointsVersion = Date.now();
     try {
-      await db.ref(`sangh_settings/${code}`).update({ settings, points, pointsVersion });
+      await db.ref(`sangh_config/${code}`).update({ settings, points, pointsVersion });
     } catch (e) {
       console.error('Failed to save settings:', e);
       let message = `Failed to save settings (${e.code || e.message || 'unknown error'}).`;
       if (e.code === 'PERMISSION_DENIED') {
-        message += '\n\n' + await this._diagnoseAdminPermissionError();
+        message += '\n\n' + await this._diagnoseAdminPermissionError(code);
       } else {
         message += ' Please check your connection and try again.';
       }
@@ -7591,7 +7595,7 @@ class KalyanMitra {
     // Retroactively rescores every member at the just-saved point values —
     // unchanged from the old _saveAdminPoints(). Deliberately its OWN
     // try/catch: this targets a completely different multi-path write
-    // (every member's users/{uid}/…, not sangh_settings/{code}) under a
+    // (every member's users/{uid}/…, not sangh_config/{code}) under a
     // different rule, and its failure must never be reported as "settings
     // failed to save" when they plainly just did. Non-fatal by design —
     // _migrateToRawPoints()'s pointsVersion guard re-scores each member on
@@ -7605,36 +7609,31 @@ class KalyanMitra {
   }
 
   // Reads the values that decide whether an admin write is allowed, and
-  // returns a plain-language explanation of why they disagree — see the
-  // root cause note above saveAdminSettings(): this app is multi-profile
-  // (auth.js's baseUid/__pN slots), but Firebase rules can only see
-  // auth.uid, which is always the BASE account, never the active profile.
-  // An admin signed into a non-primary slot has role='admin' on THEIR
-  // profile but not on auth.uid, so every admin write is silently denied
-  // by rules that only check auth.uid directly. Only called on an actual
-  // PERMISSION_DENIED (a real network round trip), never speculatively.
-  async _diagnoseAdminPermissionError() {
+  // returns a plain-language explanation of why they disagree. v5's rules
+  // check sangh_config/{code}/admins/{baseUid} — keyed by the Firebase
+  // Auth base account (always what `auth.uid` is, regardless of which of
+  // the account's __pN profile slots is active), set only via the console
+  // (SANGH-RUNBOOK.md's admin-provisioning steps). Only called on an
+  // actual PERMISSION_DENIED (a real network round trip), never
+  // speculatively.
+  async _diagnoseAdminPermissionError(code) {
     try {
       const fbUser = firebase.auth().currentUser;
       const authUid = fbUser && fbUser.uid;
       if (!authUid) return 'No active Firebase sign-in was found — please sign in again.';
+      if (!code) return 'No sangh is selected to diagnose against — pick one from the dropdown and try again.';
 
-      const activeUid = this._currentAuthUser && this._currentAuthUser.uid;
-      const roleSnap = await db.ref(`users/${authUid}/role`).once('value');
-      const authUidRole = roleSnap.val() || '(none)';
+      const adminFlagSnap = await db.ref(`sangh_config/${code}/admins/${authUid}`).once('value');
+      const isAdminOfCode = adminFlagSnap.val() === true;
 
-      if (activeUid && activeUid !== authUid) {
-        return `Your admin role is on profile "${activeUid}", but Firebase rules check account `
-          + `"${authUid}" (role there: "${authUidRole}"). The database rules need to recognise `
-          + `admins on every profile slot for this account — see firebase-rules.json.`;
+      if (!isAdminOfCode) {
+        return `Firebase account "${authUid}" is not listed as an admin of sangh "${code}" — `
+          + `check sangh_config/${code}/admins/${authUid} in the Firebase console (see `
+          + `SANGH-RUNBOOK.md). This is set by hand; there is no in-app way to grant it.`;
       }
-      if (authUidRole !== 'admin') {
-        return `Firebase rules see account "${authUid}" with role "${authUidRole}", not "admin". `
-          + `Either the database rules aren't deployed yet, or this account's role isn't set to `
-          + `"admin" in the users/${authUid}/role field.`;
-      }
-      return `Firebase denied the write even though "${authUid}" has role "admin" — check that `
-        + `the rules deployed in the Firebase console exactly match firebase-rules.json.`;
+      return `Firebase denied the write even though "${authUid}" is listed as an admin of `
+        + `"${code}" — check that the rules deployed in the Firebase console exactly match `
+        + `firebase-rules.json.`;
     } catch (diagErr) {
       console.error('Permission diagnostic itself failed:', diagErr);
       return 'Could not run the permission diagnostic (a separate read failed) — check your connection.';
@@ -7644,7 +7643,7 @@ class KalyanMitra {
   // Retroactively rescores every member of `code` at the just-saved point
   // values — pure in-memory work (this._adminUserRecords already holds
   // every managed member's full daily_logs, populated by
-  // _renderLeaderboardFromSnap()) plus ONE multi-path write, chunked so a
+  // _renderLeaderboardFromUsers()) plus ONE multi-path write, chunked so a
   // very large sangh can't produce a single oversized update. Anyone this
   // fan-out misses (offline at save time, a member outside
   // _adminUserUids, a partial write) self-heals on their own next login —
@@ -7699,7 +7698,7 @@ class KalyanMitra {
     if (!cardEl) return;
 
     const reg = record.registration || {};
-    const photo = record.photo || null;
+    const photo = record.photoUrl || null;
     const name = record.name || '';
     const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
 
@@ -7845,16 +7844,12 @@ class KalyanMitra {
     this._adminSelectedUid = null;
     if (this.autoLockInterval) clearInterval(this.autoLockInterval);
     this._detachAllListeners();
-    // Detach leaderboard listener
-    if (this._leaderboardRef) {
-      this._leaderboardRef.off('value', this._leaderboardListener);
-      this._leaderboardRef = null;
-    }
-    // Detach global settings listener
-    if (this._settingsRef) {
-      this._settingsRef.off('value', this._settingsListener);
-      this._settingsRef = null;
-    }
+    // v5 has no persistent leaderboard listener to detach (renderAdminLeaderboard()
+    // is on-demand — see _fetchAdminUsers()) and no legacy global settings
+    // listener either (see resolveSettings()). The per-sangh sangh_config
+    // listeners started in initAdmin() are NOT torn down here — same as v4
+    // never tore them down either; a logout->login cycle within one page
+    // load re-attaches a fresh set rather than replacing them in place.
 
     // Reset UI
     this._hideLoadingScreen(); // no-op if it wasn't showing — cheap guarantee
