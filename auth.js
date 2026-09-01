@@ -1,9 +1,9 @@
 // ===== MyNiyam V5 — Firebase Google Auth + Firebase-backed Identity =====
 // Firebase Realtime Database is the sole master for everything the app
 // reads, scoped by firebase-rules.json to each member's own record and
-// their sangh's admins. Profile photos live in Firebase Storage
-// (storage-rules.txt), not inline in the database — see uploadPhoto()/
-// fetchPhotoUrl() below. The Sheet (via Apps Script — see
+// their sangh's admins. Profile photos live inline at users/{uid}/photo —
+// see fetchPhoto() below (Firebase Cloud Storage requires the paid Blaze
+// plan, which this project does not use). The Sheet (via Apps Script — see
 // apps-script-additions.gs) is still written to on registration/profile
 // changes as a human-readable mirror, but the app itself never reads from
 // it. There is no migration script — v5 shipped via a full database reset
@@ -576,92 +576,36 @@ const Auth = (() => {
     }
   }
 
-  // Fetch a single user's profile photo URL. Lives at users/{uid}/photoUrl
-  // — a short string, not the ~20-90KB base64 blob v4 used to store inline
-  // — so it rides along cheaply with the smaller, more frequent reads
-  // (_tryFetchIdentityFromFirebase's login-path fetch, renderProfile()'s
-  // own registration read) without ever needing to be excluded from them.
-  // The actual image lives in Firebase Storage (see uploadPhoto() below)
-  // and is fetched by the browser directly from that URL, with normal HTTP
-  // caching — never re-downloaded through this database read again.
-  async function fetchPhotoUrl(uid) {
+  // Fetch a single user's profile photo (a base64 data URL). Lives at its
+  // own path (users/{uid}/photo), deliberately separate from
+  // registration, so the ~20-50KB image never rides along with the
+  // smaller, more frequent reads (_tryFetchIdentityFromFirebase's
+  // login-path fetch, renderProfile()'s own registration read).
+  //
+  // NOTE: v5 briefly moved photos to Firebase Storage, but Firebase now
+  // requires the paid Blaze plan to enable Cloud Storage at all, so this
+  // project (Spark/free) stores them in the database as it always has.
+  // Everything else in the v5 restructure is unaffected — and photos are
+  // now MORE private than the Storage version would have been, since
+  // users/$uid is readable only by that member, their own family
+  // profiles, and their sangh's admins (see firebase-rules.json).
+  async function fetchPhoto(uid) {
     try {
-      const snap = await firebase.database().ref(`users/${uid}/photoUrl`).once('value');
+      const snap = await firebase.database().ref(`users/${uid}/photo`).once('value');
       return snap.val() || null;
     } catch (e) {
-      console.error("Fetch photo URL from Firebase failed:", e);
+      console.error("Fetch photo from Firebase failed:", e);
       return null;
     }
   }
 
-  // Uploads a resized/compressed data URL to Firebase Storage at
-  // profile-photos/{uid}.jpg (see storage-rules.txt — write is restricted
-  // to the owning account's own profile slots) and resolves the public
-  // download URL. Does NOT write users/{uid}/photoUrl itself — callers
-  // write that (a small, fast Realtime Database update) only after this
-  // resolves { success: true }, exactly like updateProfile()'s
-  // check-before-mirror contract.
-  async function uploadPhoto(uid, dataUrl) {
-    if (!dataUrl) return { success: false, error: 'no_data', message: 'No photo to upload.' };
-    try {
-      if (!firebase.storage) {
-        // firebase-storage-compat.js didn't load (blocked, offline, or the
-        // <script> tag is missing from index.html).
-        throw Object.assign(new Error('Firebase Storage SDK is not loaded'), { code: 'storage/sdk-missing' });
-      }
-      const storage = firebase.storage();
-      // The SDK's default is 2 MINUTES of silent retries before it gives
-      // up — which reads to a user as "the button is stuck forever". A
-      // denied/misconfigured bucket should surface as a real error fast.
-      if (typeof storage.setMaxUploadRetryTime === 'function') storage.setMaxUploadRetryTime(15000);
-      if (typeof storage.setMaxOperationRetryTime === 'function') storage.setMaxOperationRetryTime(15000);
-
-      const ref = storage.ref(`profile-photos/${uid}.jpg`);
-      const snapshot = await ref.putString(dataUrl, 'data_url', { contentType: 'image/jpeg' });
-      const url = await snapshot.ref.getDownloadURL();
-      return { success: true, url };
-    } catch (e) {
-      console.error("Photo upload to Storage failed:", e);
-      const code = (e && e.code) || 'storage_error';
-      // Plain-language cause, so a failure names the actual fix rather
-      // than a generic "try again" the user can't act on.
-      let message;
-      if (code === 'storage/sdk-missing') {
-        message = 'Photo upload is unavailable (Storage library failed to load). Please reload the page.';
-      } else if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
-        message = 'Photo upload was denied by Firebase Storage — check that the Storage rules from storage-rules.txt are published.';
-      } else if (code === 'storage/unknown' || code === 'storage/retry-limit-exceeded') {
-        message = 'Could not reach Firebase Storage. Check that Storage is enabled for this project (Console -> Build -> Storage).';
-      } else {
-        message = `Photo upload failed (${code}).`;
-      }
-      return { success: false, error: code, message };
-    }
-  }
-
-  // Removes a user's photo object from Storage — called when an admin
-  // deletes a member (deleteAdminUser(), app.js), so a removed member's
-  // photo doesn't sit in Storage forever with nothing pointing at it.
-  // "Nothing there to delete" is treated as success, not a failure.
-  async function deletePhoto(uid) {
-    try {
-      await firebase.storage().ref(`profile-photos/${uid}.jpg`).delete();
-      return { success: true };
-    } catch (e) {
-      if (e && e.code === 'storage/object-not-found') return { success: true };
-      console.error("Photo delete from Storage failed:", e);
-      return { success: false, error: (e && e.code) || 'storage_error' };
-    }
-  }
-
-  // Mirrors the photo URL onto the Sheet's own copy, purely for a human
+  // Mirrors the photo onto the Sheet's own copy, purely for a human
   // browsing the Sheet by hand — the app itself never reads this back.
-  // Sends the URL (a short string) rather than the base64 blob v4 sent, so
-  // this no longer needs to dodge JSONP's query-string size limit the way
-  // the old base64 payload did.
-  async function updatePhoto(uid, photoUrl) {
+  // allowJsonp:false because the payload is a ~20-50KB base64 data URL,
+  // which could never fit in JSONP's query string.
+  async function updatePhoto(uid, dataUrl) {
     try {
-      const text = await _sheetsRequest({ action: "update_photo", uid, photo: photoUrl });
+      const text = await _sheetsRequest({ action: "update_photo", uid, photo: dataUrl }, { allowJsonp: false });
       console.log("Update photo response:", text);
       try {
         const result = JSON.parse(text);
@@ -723,9 +667,7 @@ const Auth = (() => {
     fetchSanghs,
     fetchStats,
     updateProfile,
-    fetchPhotoUrl,
-    uploadPhoto,
-    deletePhoto,
+    fetchPhoto,
     updatePhoto,
     // Multi-profile identity
     baseUidOf,

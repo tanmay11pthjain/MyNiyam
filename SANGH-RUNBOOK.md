@@ -94,7 +94,7 @@ history), and moving profile photos out of the database into Firebase Storage:
 |---|---|---|
 | `sangh_users/{code}` | `sangh_members/{code}` | same idea, but now write-scoped to that sangh's own admins (v4 let *any* signed-in user write it) |
 | `sangh_settings/{code}` | `sangh_config/{code}` + `sangh_attendance/{code}` | v4 mixed slow-changing config with an ever-growing attendance log on one node every member listened to live — an admin editing a point value re-downloaded the whole attendance history to every member. Split apart, plus a new `admins/{baseUid}` child the security rules use to scope admin writes per-sangh (v4 let any admin write any sangh) |
-| `users/{uid}/photo` (inline base64, ~30-90KB/member) | `users/{uid}/photoUrl` (a short string) + the actual image in Firebase Storage | kept every whole-record read of a member small; see `storage-rules.txt` |
+| `users/{uid}/photo` (inline base64) | *(unchanged)* | v5 briefly moved these to Firebase Storage, but Firebase requires the paid **Blaze** plan to enable Cloud Storage at all, so on this project's free Spark plan they stay in the database. They are still much better protected than in v4 — the `users/$uid` rule below means only that member, their own family profiles, and their sangh's admins can read them |
 | a legacy global `settings` node | *(removed)* | was a stale fallback layer that could silently override a sangh's own saved choices for any niyam it hadn't explicitly re-saved; v5 seeds every sangh's flags explicit instead |
 | `users` readable by any signed-in account | `users/$uid` readable only by that member, their own family profiles, or an admin of *their specific* sangh | the core privacy fix — see `firebase-rules.json` |
 

@@ -17,11 +17,11 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-// v5: profile photos live in Firebase Storage now, not inline base64 in
-// the database — see auth.js's uploadPhoto()/deletePhoto()/fetchPhotoUrl(),
-// which call firebase.storage() directly (storageBucket was already
-// present in firebaseConfig above). Nothing in app.js itself talks to
-// Storage directly, so there's no `const storage` needed here.
+// Profile photos stay inline at users/{uid}/photo (base64 data URL) —
+// Firebase Cloud Storage requires the paid Blaze plan, which this project
+// doesn't use. They're private in v5 regardless: users/$uid is readable
+// only by that member, their own family profiles, and their sangh's
+// admins (see firebase-rules.json).
 
 // ===== RAW NIYAM POINTS — single source of truth =====
 // What a day's raw points are, derived purely from what was actually done
@@ -1620,37 +1620,27 @@ class KalyanMitra {
     const user = this._currentAuthUser;
 
     try {
-      // Photo goes to Storage FIRST — registration requires one (checked
-      // above), so an upload failure must stop registration here rather
-      // than silently completing with no photo. On success this is a
-      // regular https URL; nothing about it needs to be kept out of the
-      // `registration` node the way the old inline base64 blob did.
-      const uploadResult = await Auth.uploadPhoto(this.uid, this._registrationPhotoDataUrl);
-      if (!uploadResult.success) {
-        // uploadPhoto() resolves a plain-language `message` naming the
-        // actual cause (Storage not enabled, rules denied, SDK missing) —
-        // surfaced verbatim below rather than collapsed into a generic
-        // "try again" the user has no way to act on.
-        throw new Error(uploadResult.message || 'Photo upload failed — please try again.');
-      }
-      const photoUrl = uploadResult.url;
-
+      const photoDataUrl = this._registrationPhotoDataUrl;
       const regData = {
         name, dob, gender, phone, city, area, sanghCode,
         sanghName: this._selectedSangh.name,
         sanghCity: this._selectedSangh.city,
-        photo: photoUrl
+        photo: photoDataUrl
       };
 
-      // Save to Firebase — this IS registration now; nothing else has to
-      // succeed for the user to be registered.
+      // Save to Firebase — this IS registration; nothing else has to
+      // succeed for the user to be registered. The photo goes to its own
+      // sibling path (users/{uid}/photo), NOT inside `registration` —
+      // that node is read on every login (_tryFetchIdentityFromFirebase
+      // in auth.js) and must stay small.
+      const { photo, ...regDataForFirebase } = regData;
       await db.ref(`users/${this.uid}`).update({
         name: name,
         role: 'user',
         registered: true,
-        registration: regData,
+        registration: regDataForFirebase,
         registeredAt: new Date().toISOString(),
-        photoUrl: photoUrl
+        photo: photoDataUrl
       });
 
       // Link user to their sangh for admin discovery — sangh_members is a
@@ -1669,12 +1659,12 @@ class KalyanMitra {
       // and logs internally), so there's nothing to .catch() here either.
       Auth.sendRegistration(this.uid, user.email, regData);
 
-      // Cache the just-uploaded photo URL locally so the Profile tab shows
-      // it instantly, and mark the one-time photo prompt as already
+      // Cache the just-saved photo locally so the Profile tab shows it
+      // instantly, and mark the one-time photo prompt as already
       // satisfied — a freshly registered user must never see "please add a
       // photo" again.
       try {
-        localStorage.setItem(`myniyam_photo_${this.uid}`, photoUrl);
+        localStorage.setItem(`myniyam_photo_${this.uid}`, photoDataUrl);
         localStorage.setItem(`myniyam_photo_prompted_${this.uid}`, '1');
       } catch (e) { /* localStorage unavailable — non-fatal */ }
 
@@ -2161,7 +2151,7 @@ class KalyanMitra {
   }
 
   // Renders the switcher's profile list from this._accountProfiles — paints
-  // with cached photos immediately, then upgrades each from Auth.fetchPhotoUrl()
+  // with cached photos immediately, then upgrades each from Auth.fetchPhoto()
   // in the background (mirrors _loadAvatarInto()'s cache-then-fetch shape,
   // just for N profiles instead of one).
   _renderProfileSwitcher() {
@@ -2213,7 +2203,7 @@ class KalyanMitra {
     // Lazily fetch+correct each profile's photo — never blocks the initial
     // render, and a failure for one profile can't affect the others.
     profiles.forEach(p => {
-      Auth.fetchPhotoUrl(p.profileId).then(photo => { // never throws; null on any failure or "no photo"
+      Auth.fetchPhoto(p.profileId).then(photo => { // never throws; null on any failure or "no photo"
         if (!photo) return;
         try { localStorage.setItem(`myniyam_photo_${p.profileId}`, photo); } catch (e) { /* non-fatal */ }
         const avatarWrap = listEl.querySelector(`.profile-switcher-item[data-profile-id="${p.profileId}"] .profile-switcher-avatar`);
@@ -2631,7 +2621,7 @@ class KalyanMitra {
           name: data.name || uid,
           kp: data.profile?.totalKP || 0,
           streak: data.profile?.currentStreak || 0,
-          photo: data.photoUrl || null
+          photo: data.photo || null
         });
         this._adminUserRecords[uid] = data;
       }
@@ -2738,12 +2728,10 @@ class KalyanMitra {
       // logs, lock_status and attendance — all nested under users/{uid})
       await db.ref(`users/${uidToDelete}`).remove();
 
-      // 3. Delete their Storage photo too — otherwise it sits in Storage
-      // forever with nothing left pointing at it. Best-effort: a failure
-      // here must never block the deletion that already succeeded above.
-      Auth.deletePhoto(uidToDelete).catch(e => console.warn('Photo delete failed (non-fatal):', e));
+      // (Their photo needs no separate cleanup — it lives at
+      // users/{uid}/photo, so the remove() above already took it.)
 
-      // 4. If currently viewing this user, return to leaderboard. Calls
+      // 3. If currently viewing this user, return to leaderboard. Calls
       // _showAdminOverview() directly rather than history.back() — this is
       // a programmatic transition after a destructive action (not a user
       // back-gesture), and the alert() below is a blocking dialog whose
@@ -2844,7 +2832,7 @@ class KalyanMitra {
       return `
       <div class="attendance-row${present ? '' : ' is-absent'}" data-uid="${this._escHtml(uid)}">
         <div class="lb-avatar">
-          ${data.photoUrl ? `<img src="${this._escHtml(data.photoUrl)}" alt="">` : `<span class="lb-initial">${this._escHtml(initial)}</span>`}
+          ${data.photo ? `<img src="${this._escHtml(data.photo)}" alt="">` : `<span class="lb-initial">${this._escHtml(initial)}</span>`}
         </div>
         <div class="lb-info"><span class="lb-name">${this._escHtml(name)}</span></div>
         <label class="attendance-present-toggle">
@@ -5945,12 +5933,12 @@ class KalyanMitra {
     // The Google account's own photo is only a sensible placeholder for the
     // PRIMARY profile (it IS that Google identity). For an added profile —
     // e.g. a child's — falling back to it would briefly show the parent's
-    // Google photo under the child's name until fetchPhotoUrl() resolves.
+    // Google photo under the child's name until fetchPhoto() resolves.
     const googlePlaceholder = this._isPrimaryProfile() ? (this._currentAuthUser && this._currentAuthUser.photoURL) : null;
     applyPhoto(cached || googlePlaceholder || null);
 
     if (!profileId) return;
-    const photo = await Auth.fetchPhotoUrl(profileId); // never throws; null on any failure or "no photo"
+    const photo = await Auth.fetchPhoto(profileId); // never throws; null on any failure or "no photo"
     if (photo) {
       applyPhoto(photo);
       try { localStorage.setItem(cacheKey, photo); } catch (e) { /* storage full — non-fatal */ }
@@ -5977,34 +5965,27 @@ class KalyanMitra {
     return this._loadAvatarInto('admin-header-avatar-img', 'admin-header-avatar-placeholder');
   }
 
-  // Bound to the Profile tab's "Change photo" file input. Storage-first:
-  // the upload's success/failure is decided by the Storage write (see
-  // Auth.uploadPhoto()) plus the small users/{uid}/photoUrl database
-  // write that follows it — both must succeed before the UI updates.
-  // Auth.updatePhoto() (the Sheet mirror) runs afterwards in the
-  // background, purely to keep the Sheet's copy current for your own
+  // Bound to the Profile tab's "Change photo" file input. Firebase-first:
+  // the change's success/failure is decided by the users/{uid}/photo
+  // write alone. Auth.updatePhoto() (the Sheet mirror) runs afterwards in
+  // the background, purely to keep the Sheet's copy current for your own
   // reference.
   async _handleProfilePhotoChange(file) {
     const errorEl = document.getElementById('profile-error');
     if (errorEl) errorEl.classList.add('hidden');
     try {
       const dataUrl = await this._resizeImageToDataUrl(file);
-      const uploadResult = await Auth.uploadPhoto(this.uid, dataUrl);
-      if (!uploadResult.success) {
-        throw new Error('Photo upload failed — please try again.');
-      }
-      const photoUrl = uploadResult.url;
-      await db.ref(`users/${this.uid}/photoUrl`).set(photoUrl);
+      await db.ref(`users/${this.uid}/photo`).set(dataUrl);
 
       const avatarEl = document.getElementById('profile-avatar');
       const placeholderEl = document.getElementById('profile-avatar-placeholder');
       if (avatarEl) {
-        avatarEl.src = photoUrl;
+        avatarEl.src = dataUrl;
         avatarEl.classList.remove('hidden');
       }
       if (placeholderEl) placeholderEl.classList.add('hidden');
       try {
-        localStorage.setItem(`myniyam_photo_${this.uid}`, photoUrl);
+        localStorage.setItem(`myniyam_photo_${this.uid}`, dataUrl);
         localStorage.setItem(`myniyam_photo_prompted_${this.uid}`, '1');
       } catch (e) { /* non-fatal */ }
 
@@ -6012,7 +5993,7 @@ class KalyanMitra {
       // above. updatePhoto() resolves { success: false } rather than
       // rejecting on a Sheet-side failure, so both are checked; either way
       // it's just logged, never surfaced to the user.
-      Auth.updatePhoto(this.uid, photoUrl).then(result => {
+      Auth.updatePhoto(this.uid, dataUrl).then(result => {
         if (!result.success) console.warn('Background Sheet photo update failed (non-fatal):', result.error);
       }).catch(e => console.warn('Background Sheet photo update failed (non-fatal):', e));
     } catch (e) {
@@ -6034,7 +6015,7 @@ class KalyanMitra {
       if (localStorage.getItem(promptedKey)) return;
     } catch (e) { /* localStorage unavailable — proceed as if not yet prompted */ }
 
-    const photo = await Auth.fetchPhotoUrl(this.uid); // never throws; null on any failure or "no photo"
+    const photo = await Auth.fetchPhoto(this.uid); // never throws; null on any failure or "no photo"
     try { localStorage.setItem(promptedKey, '1'); } catch (e) { /* non-fatal */ }
 
     if (photo) {
@@ -6557,7 +6538,7 @@ class KalyanMitra {
   // Draws a circular photo (centre-cropped like _resizeImageToDataUrl(),
   // app.js:2773) at (cx, cy) with radius r and a coloured ring; draws a
   // coloured initial circle instead when img is null (no photo, or
-  // fetchPhotoUrl failed) — the poster always shows a complete podium.
+  // fetchPhoto failed) — the poster always shows a complete podium.
   _drawAvatar(ctx, img, cx, cy, r, ringColor, fallbackLetter) {
     ctx.save();
     ctx.beginPath();
@@ -6833,7 +6814,7 @@ class KalyanMitra {
       }
 
       const [images, sanghLabels] = await Promise.all([
-        Promise.all(winners.map(w => Auth.fetchPhotoUrl(w.uid).then(photo => this._loadImage(photo)))),
+        Promise.all(winners.map(w => Auth.fetchPhoto(w.uid).then(photo => this._loadImage(photo)))),
         this._resolveSanghLabels(this._adminSanghCodes || [], {}, true),
         this._ensurePosterFonts(),
       ]);
@@ -7708,7 +7689,7 @@ class KalyanMitra {
     if (!cardEl) return;
 
     const reg = record.registration || {};
-    const photo = record.photoUrl || null;
+    const photo = record.photo || null;
     const name = record.name || '';
     const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
 
