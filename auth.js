@@ -602,15 +602,40 @@ const Auth = (() => {
   // resolves { success: true }, exactly like updateProfile()'s
   // check-before-mirror contract.
   async function uploadPhoto(uid, dataUrl) {
-    if (!dataUrl) return { success: false, error: 'no_data' };
+    if (!dataUrl) return { success: false, error: 'no_data', message: 'No photo to upload.' };
     try {
-      const ref = firebase.storage().ref(`profile-photos/${uid}.jpg`);
+      if (!firebase.storage) {
+        // firebase-storage-compat.js didn't load (blocked, offline, or the
+        // <script> tag is missing from index.html).
+        throw Object.assign(new Error('Firebase Storage SDK is not loaded'), { code: 'storage/sdk-missing' });
+      }
+      const storage = firebase.storage();
+      // The SDK's default is 2 MINUTES of silent retries before it gives
+      // up — which reads to a user as "the button is stuck forever". A
+      // denied/misconfigured bucket should surface as a real error fast.
+      if (typeof storage.setMaxUploadRetryTime === 'function') storage.setMaxUploadRetryTime(15000);
+      if (typeof storage.setMaxOperationRetryTime === 'function') storage.setMaxOperationRetryTime(15000);
+
+      const ref = storage.ref(`profile-photos/${uid}.jpg`);
       const snapshot = await ref.putString(dataUrl, 'data_url', { contentType: 'image/jpeg' });
       const url = await snapshot.ref.getDownloadURL();
       return { success: true, url };
     } catch (e) {
       console.error("Photo upload to Storage failed:", e);
-      return { success: false, error: (e && e.code) || 'storage_error' };
+      const code = (e && e.code) || 'storage_error';
+      // Plain-language cause, so a failure names the actual fix rather
+      // than a generic "try again" the user can't act on.
+      let message;
+      if (code === 'storage/sdk-missing') {
+        message = 'Photo upload is unavailable (Storage library failed to load). Please reload the page.';
+      } else if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
+        message = 'Photo upload was denied by Firebase Storage — check that the Storage rules from storage-rules.txt are published.';
+      } else if (code === 'storage/unknown' || code === 'storage/retry-limit-exceeded') {
+        message = 'Could not reach Firebase Storage. Check that Storage is enabled for this project (Console -> Build -> Storage).';
+      } else {
+        message = `Photo upload failed (${code}).`;
+      }
+      return { success: false, error: code, message };
     }
   }
 

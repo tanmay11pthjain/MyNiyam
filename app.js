@@ -1627,7 +1627,11 @@ class KalyanMitra {
       // `registration` node the way the old inline base64 blob did.
       const uploadResult = await Auth.uploadPhoto(this.uid, this._registrationPhotoDataUrl);
       if (!uploadResult.success) {
-        throw new Error('Photo upload failed — please try again.');
+        // uploadPhoto() resolves a plain-language `message` naming the
+        // actual cause (Storage not enabled, rules denied, SDK missing) —
+        // surfaced verbatim below rather than collapsed into a generic
+        // "try again" the user has no way to act on.
+        throw new Error(uploadResult.message || 'Photo upload failed — please try again.');
       }
       const photoUrl = uploadResult.url;
 
@@ -1678,7 +1682,13 @@ class KalyanMitra {
       document.getElementById('register-screen').classList.add('hidden');
       this.initUser();
     } catch (err) {
-      errorEl.textContent = 'Failed to save. Please try again.';
+      console.error('Registration failed:', err);
+      // Show the specific reason when there is one (see the photo-upload
+      // gate above, which throws a plain-language message) — a bare
+      // "Failed to save" hides whether the problem is the photo, the
+      // database rules, or the connection, none of which the user can
+      // otherwise tell apart.
+      errorEl.textContent = (err && err.message) || 'Failed to save. Please try again.';
       errorEl.classList.remove('hidden');
       btn.disabled = false;
       btn.querySelector('span').textContent = '🙏 Join Kalyan Mitra';

@@ -24,18 +24,22 @@ rules_version = '2';
 // who knows a uid, no sign-in required at all — see SANGH-RUNBOOK.md and
 // the plan's Non-goals). If per-sangh photo privacy becomes a requirement,
 // revisit with Cloud Functions issuing short-lived signed URLs instead.
+// NOTE on the path pattern: a wildcard must be an ENTIRE path segment —
+// `match /profile-photos/{profileId}.jpg` is invalid syntax and silently
+// matches nothing (which denies every upload). So the whole filename is
+// captured as one segment and compared against "{uid}.jpg" directly.
 service firebase.storage {
   match /b/{bucket}/o {
-    match /profile-photos/{profileId}.jpg {
+    match /profile-photos/{fileName} {
       allow read: if request.auth != null;
       allow write: if request.auth != null
-                   && (request.auth.uid == profileId
-                       || profileId.matches(request.auth.uid + '__p[2-5]'))
+                   && (fileName == request.auth.uid + '.jpg'
+                       || fileName.matches(request.auth.uid + '__p[2-5][.]jpg'))
                    && request.resource.size < 2 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
       allow delete: if request.auth != null
-                    && (request.auth.uid == profileId
-                        || profileId.matches(request.auth.uid + '__p[2-5]'));
+                    && (fileName == request.auth.uid + '.jpg'
+                        || fileName.matches(request.auth.uid + '__p[2-5][.]jpg'));
     }
   }
 }
