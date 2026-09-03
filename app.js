@@ -1571,6 +1571,7 @@ class KalyanMitra {
     const phone = document.getElementById('reg-phone').value.trim();
     const city = document.getElementById('reg-city').value.trim();
     const area = document.getElementById('reg-area').value.trim();
+    const rollNo = document.getElementById('reg-rollno').value.trim();
     const sanghCode = document.getElementById('reg-sangh-code').value.trim();
     const errorEl = document.getElementById('register-error');
     const btn = document.getElementById('btn-register');
@@ -1607,6 +1608,14 @@ class KalyanMitra {
       return;
     }
 
+    // Optional — only validated when the user actually typed something.
+    // Digits only, capped at 6 (a pasted phone number is 10).
+    if (rollNo && !/^[0-9]{1,6}$/.test(rollNo)) {
+      errorEl.textContent = 'Roll No. must be numbers only (up to 6 digits).';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
     if (!sanghCode || !this._selectedSangh) {
       errorEl.textContent = 'Please select a Sangh from the dropdown.';
       errorEl.classList.remove('hidden');
@@ -1622,7 +1631,7 @@ class KalyanMitra {
     try {
       const photoDataUrl = this._registrationPhotoDataUrl;
       const regData = {
-        name, dob, gender, phone, city, area, sanghCode,
+        name, dob, gender, phone, city, area, rollNo, sanghCode,
         sanghName: this._selectedSangh.name,
         sanghCity: this._selectedSangh.city,
         photo: photoDataUrl
@@ -2619,6 +2628,7 @@ class KalyanMitra {
         users.push({
           uid,
           name: data.name || uid,
+          rollNo: (data.registration && data.registration.rollNo) || '',
           kp: data.profile?.totalKP || 0,
           streak: data.profile?.currentStreak || 0,
           photo: data.photo || null
@@ -2627,6 +2637,9 @@ class KalyanMitra {
       }
     });
 
+    // Ranking stays purely by AP — that's the whole point of this tab, and
+    // Roll No. is only ever a sort key on the Attendance tab (see
+    // renderAttendance()'s comparator, shared via _sortByRollThenName()).
     users.sort((a, b) => b.kp - a.kp);
 
     if (users.length === 0) {
@@ -2636,14 +2649,18 @@ class KalyanMitra {
 
     listEl.innerHTML = users.map((u, index) => {
       const initial = (u.name || '?').trim().charAt(0).toUpperCase() || '?';
+      // data-search backs _filterLeaderboard() — matched independently of
+      // what .lb-name actually displays, so a roll-number prefix in the
+      // visible name never has to stay in sync with what's searchable.
+      const searchKey = `${u.name} ${u.rollNo}`.toLowerCase();
       return `
-      <div class="leaderboard-card" data-uid="${this._escHtml(u.uid)}">
+      <div class="leaderboard-card" data-uid="${this._escHtml(u.uid)}" data-search="${this._escHtml(searchKey)}">
         <div class="lb-rank">#${index + 1}</div>
         <div class="lb-avatar">
           ${u.photo ? `<img src="${this._escHtml(u.photo)}" alt="">` : `<span class="lb-initial">${this._escHtml(initial)}</span>`}
         </div>
         <div class="lb-info">
-          <span class="lb-name">${this._escHtml(u.name)}</span>
+          <span class="lb-name">${u.rollNo ? `<span class="lb-rollno">#${this._escHtml(u.rollNo)}</span> ` : ''}${this._escHtml(u.name)}</span>
           <span class="lb-stats">${u.kp} AP • 🔥 ${u.streak}</span>
         </div>
         <div style="display: flex; gap: 8px; align-items: center;">
@@ -2674,19 +2691,21 @@ class KalyanMitra {
     this._filterLeaderboard();
   }
 
-  // Filters the Leaderboard by name — toggles display on the EXISTING rows
-  // rather than re-rendering, so a filter never disturbs the click handlers
-  // just bound above. Called on every keystroke and after every rebuild
-  // (see the end of _renderLeaderboardFromUsers() above).
+  // Filters the Leaderboard by name OR roll number — toggles display on the
+  // EXISTING rows rather than re-rendering, so a filter never disturbs the
+  // click handlers just bound above. Matches against each card's
+  // data-search attribute (see _renderLeaderboardFromUsers()), not its
+  // rendered text, so this stays correct regardless of how the name/roll
+  // number are formatted on screen. Called on every keystroke and after
+  // every rebuild (see the end of _renderLeaderboardFromUsers() above).
   _filterLeaderboard() {
     const input = document.getElementById('leaderboard-search');
     const listEl = document.getElementById('admin-leaderboard-list');
     if (!input || !listEl) return;
     const q = input.value.trim().toLowerCase();
     listEl.querySelectorAll('.leaderboard-card').forEach(row => {
-      const nameEl = row.querySelector('.lb-name');
-      const name = nameEl ? nameEl.textContent.toLowerCase() : '';
-      row.style.display = (!q || name.includes(q)) ? '' : 'none';
+      const key = row.dataset.search || '';
+      row.style.display = (!q || key.includes(q)) ? '' : 'none';
     });
   }
 
@@ -2811,11 +2830,17 @@ class KalyanMitra {
       return;
     }
 
-    // Always alphabetical — the raw snapshot order (_eligibleSanghUsers())
-    // is Firebase's lexicographic uid order, meaningless to a human marking
-    // a class.
+    // Roll-number order (members with one first, ascending; unnumbered
+    // members after, alphabetical) — the raw snapshot order
+    // (_eligibleSanghUsers()) is Firebase's lexicographic uid order,
+    // meaningless to a human marking a class. Shared with the Attendance
+    // export's own sort (_collectAttendanceRows()) via
+    // _sortByRollThenName() — they're stated to match each other.
     const members = this._eligibleSanghUsers(this._adminUserRecords)
-      .sort((a, b) => (a.data.name || a.uid).localeCompare(b.data.name || b.uid));
+      .sort((a, b) => this._sortByRollThenName(
+        { name: a.data.name || a.uid, rollNo: (a.data.registration && a.data.registration.rollNo) || '' },
+        { name: b.data.name || b.uid, rollNo: (b.data.registration && b.data.registration.rollNo) || '' }
+      ));
     if (members.length === 0) {
       listEl.innerHTML = '<div class="admin-desc">No users found. Login with a user account first.</div>';
       return;
@@ -2824,17 +2849,21 @@ class KalyanMitra {
     const draft = this._attendanceDraft || {};
     listEl.innerHTML = members.map(({ uid, data }) => {
       const name = data.name || uid;
+      const rollNo = (data.registration && data.registration.rollNo) || '';
       const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
       const saved = (data.attendance && data.attendance[dateKey]) || null;
       const d = draft[uid];
       const present = d ? !!d.present : !!(saved && saved.present);
       const gathas = d ? (d.gathas || 0) : ((saved && saved.gathas) || 0);
+      // data-search backs _filterAttendance() — see _renderLeaderboardFromUsers()'s
+      // identical pattern.
+      const searchKey = `${name} ${rollNo}`.toLowerCase();
       return `
-      <div class="attendance-row${present ? '' : ' is-absent'}" data-uid="${this._escHtml(uid)}">
+      <div class="attendance-row${present ? '' : ' is-absent'}" data-uid="${this._escHtml(uid)}" data-search="${this._escHtml(searchKey)}">
         <div class="lb-avatar">
           ${data.photo ? `<img src="${this._escHtml(data.photo)}" alt="">` : `<span class="lb-initial">${this._escHtml(initial)}</span>`}
         </div>
-        <div class="lb-info"><span class="lb-name">${this._escHtml(name)}</span></div>
+        <div class="lb-info"><span class="lb-name">${rollNo ? `<span class="lb-rollno">#${this._escHtml(rollNo)}</span> ` : ''}${this._escHtml(name)}</span></div>
         <label class="attendance-present-toggle">
           <input type="checkbox" class="attendance-present-checkbox" data-uid="${this._escHtml(uid)}" ${present ? 'checked' : ''}>
           <span>Present</span>
@@ -2859,17 +2888,32 @@ class KalyanMitra {
 
   // Same idea as _filterLeaderboard() — toggles display on existing rows,
   // never re-renders, so an in-progress attendance draft is never disturbed
-  // by typing into the search box.
+  // by typing into the search box. Matches name OR roll number via each
+  // row's data-search attribute.
   _filterAttendance() {
     const input = document.getElementById('attendance-search');
     const listEl = document.getElementById('attendance-list');
     if (!input || !listEl) return;
     const q = input.value.trim().toLowerCase();
     listEl.querySelectorAll('.attendance-row').forEach(row => {
-      const nameEl = row.querySelector('.lb-name');
-      const name = nameEl ? nameEl.textContent.toLowerCase() : '';
-      row.style.display = (!q || name.includes(q)) ? '' : 'none';
+      const key = row.dataset.search || '';
+      row.style.display = (!q || key.includes(q)) ? '' : 'none';
     });
+  }
+
+  // Shared ordering for the Attendance tab (renderAttendance()) and its
+  // Excel export (_collectAttendanceRows()) — deliberately the SAME
+  // comparator so a class register reads identically on screen and on
+  // paper. Members WITH a roll number sort first, ascending NUMERICALLY
+  // (so "10" comes after "9", not before it as a string sort would give);
+  // members without one follow, alphabetical by name. `a`/`b` need only
+  // `{ name, rollNo }` — rollNo may be '' (unset).
+  _sortByRollThenName(a, b) {
+    const ra = a.rollNo, rb = b.rollNo;
+    if (ra && rb) return (parseInt(ra, 10) - parseInt(rb, 10)) || a.name.localeCompare(b.name);
+    if (ra && !rb) return -1;
+    if (!ra && rb) return 1;
+    return a.name.localeCompare(b.name);
   }
 
   // Lazily creates a draft entry for uid, seeded from whatever is CURRENTLY
@@ -3045,7 +3089,9 @@ class KalyanMitra {
       const attendance = this._summarizeAttendance(data.attendance, fromKey, toKey, takenDates);
 
       return {
-        name: data.name || uid, stats, totalNiyams, totalAP, daysLogged, perfectDays,
+        name: data.name || uid,
+        rollNo: (data.registration && data.registration.rollNo) || '',
+        stats, totalNiyams, totalAP, daysLogged, perfectDays,
         daysPresent: attendance.daysPresent,
         daysAbsent: attendance.daysAbsent,
         totalGathas: attendance.totalGathas,
@@ -3135,14 +3181,14 @@ class KalyanMitra {
         "The TOTAL row sums each column down; Attendance % on that row is the sangh-wide ratio, not a sum of percentages."
       ];
       const header = [
-        'Name', ...niyamLabels, 'Total Niyams', 'Total AP', 'Days Logged', 'Perfect Days',
+        'Name', 'Roll No.', ...niyamLabels, 'Total Niyams', 'Total AP', 'Days Logged', 'Perfect Days',
         'Days Present', 'Days Absent', 'Total Gathas', 'Attendance %'
       ];
       const aoa = [noteRow, header];
       rows.forEach(r => {
         const niyamValues = r.stats.map(st => st.amount != null ? st.amount : st.days);
         aoa.push([
-          r.name, ...niyamValues, r.totalNiyams, r.totalAP, r.daysLogged, r.perfectDays,
+          r.name, r.rollNo, ...niyamValues, r.totalNiyams, r.totalAP, r.daysLogged, r.perfectDays,
           r.daysPresent, r.daysAbsent, r.totalGathas, `${r.attendancePct}%`
         ]);
       });
@@ -3162,7 +3208,7 @@ class KalyanMitra {
       const totalMarked = totalDaysPresent + totalDaysAbsent;
       const sanghPct = totalMarked > 0 ? Math.round((totalDaysPresent / totalMarked) * 100) : 0;
       aoa.push([
-        'TOTAL', ...niyamTotals, sumCol(r => r.totalNiyams), sumCol(r => r.totalAP),
+        'TOTAL', '', ...niyamTotals, sumCol(r => r.totalNiyams), sumCol(r => r.totalAP),
         sumCol(r => r.daysLogged), sumCol(r => r.perfectDays),
         totalDaysPresent, totalDaysAbsent, sumCol(r => r.totalGathas), `${sanghPct}%`
       ]);
@@ -3337,6 +3383,7 @@ class KalyanMitra {
       const summary = this._summarizeAttendance(attendance, fromKey, toKey, takenDates);
       return {
         name: data.name || uid,
+        rollNo: (data.registration && data.registration.rollNo) || '',
         presentCells,
         gathaCells,
         daysPresent: summary.daysPresent,
@@ -3346,11 +3393,11 @@ class KalyanMitra {
       };
     });
 
-    // Alphabetical — matches the on-screen marking list (renderAttendance())
-    // and the new "Total Niyams"/attendance columns on the points export, so
-    // every register in this app reads the same way: a class list, not a
-    // leaderboard. The points export alone keeps its Total AP ranking.
-    rows.sort((a, b) => a.name.localeCompare(b.name));
+    // Roll-number order — the SAME comparator renderAttendance() sorts its
+    // on-screen rows with (_sortByRollThenName()), so this export can never
+    // disagree with the marking list it's exported from. The points export
+    // alone keeps its Total AP ranking.
+    rows.sort((a, b) => this._sortByRollThenName(a, b));
     return { dateKeys, rows };
   }
 
@@ -3428,29 +3475,29 @@ class KalyanMitra {
       // already live on the Summary sheet.
       const presentTotals = dateKeys.map((_, i) => rows.reduce((sum, r) => sum + (r.presentCells[i] === 'P' ? 1 : 0), 0));
       const absentTotals = dateKeys.map((_, i) => rows.reduce((sum, r) => sum + (r.presentCells[i] === 'A' ? 1 : 0), 0));
-      const attHeader = ['Name', ...dateKeys, 'Total'];
+      const attHeader = ['Name', 'Roll No.', ...dateKeys, 'Total'];
       const attAoa = [
         attHeader,
-        ['Total Present', ...presentTotals, presentTotals.reduce((a, b) => a + b, 0)],
-        ['Total Absent', ...absentTotals, absentTotals.reduce((a, b) => a + b, 0)],
-        ...rows.map(r => [r.name, ...r.presentCells, '']),
+        ['Total Present', '', ...presentTotals, presentTotals.reduce((a, b) => a + b, 0)],
+        ['Total Absent', '', ...absentTotals, absentTotals.reduce((a, b) => a + b, 0)],
+        ...rows.map(r => [r.name, r.rollNo, ...r.presentCells, '']),
       ];
       const attWs = XLSX.utils.aoa_to_sheet(attAoa);
       attWs['!cols'] = attHeader.map((h, i) => ({ wch: i === 0 ? 20 : 12 }));
 
       const gathaTotals = dateKeys.map((_, i) => rows.reduce((sum, r) => sum + (r.gathaCells[i] || 0), 0));
-      const gathaHeader = ['Name', ...dateKeys, 'Total'];
+      const gathaHeader = ['Name', 'Roll No.', ...dateKeys, 'Total'];
       const gathaAoa = [
         gathaHeader,
-        ['Total Gathas', ...gathaTotals, gathaTotals.reduce((a, b) => a + b, 0)],
-        ...rows.map(r => [r.name, ...r.gathaCells, '']),
+        ['Total Gathas', '', ...gathaTotals, gathaTotals.reduce((a, b) => a + b, 0)],
+        ...rows.map(r => [r.name, r.rollNo, ...r.gathaCells, '']),
       ];
       const gathaWs = XLSX.utils.aoa_to_sheet(gathaAoa);
       gathaWs['!cols'] = gathaHeader.map((h, i) => ({ wch: i === 0 ? 20 : 12 }));
 
-      const summaryHeader = ['Name', 'Days Present', 'Days Absent', 'Total Gathas', 'Attendance %'];
+      const summaryHeader = ['Name', 'Roll No.', 'Days Present', 'Days Absent', 'Total Gathas', 'Attendance %'];
       const summaryAoa = [summaryHeader, ...rows.map(r =>
-        [r.name, r.daysPresent, r.daysAbsent, r.totalGathas, `${r.pct}%`]
+        [r.name, r.rollNo, r.daysPresent, r.daysAbsent, r.totalGathas, `${r.pct}%`]
       )];
       const summaryWs = XLSX.utils.aoa_to_sheet(summaryAoa);
       summaryWs['!cols'] = summaryHeader.map(h => ({ wch: Math.max(12, h.length + 2) }));
@@ -6060,6 +6107,8 @@ class KalyanMitra {
     if (cityEl && document.activeElement !== cityEl) cityEl.value = data.city || '';
     const areaEl = document.getElementById('profile-area');
     if (areaEl && document.activeElement !== areaEl) areaEl.value = data.area || '';
+    const rollNoEl = document.getElementById('profile-rollno');
+    if (rollNoEl && document.activeElement !== rollNoEl) rollNoEl.value = data.rollNo || '';
 
     this._paintSanghChip(data);
   }
@@ -6106,7 +6155,7 @@ class KalyanMitra {
   // actually worked.
   async _mirrorProfileToFirebase(profile) {
     const updates = {};
-    ['name', 'dob', 'phone', 'city', 'area', 'sanghCode'].forEach(k => {
+    ['name', 'dob', 'phone', 'city', 'area', 'rollNo', 'sanghCode'].forEach(k => {
       if (profile[k] !== undefined) updates[k] = profile[k];
     });
     if (Object.keys(updates).length === 0) return;
@@ -6125,6 +6174,7 @@ class KalyanMitra {
     const phone = document.getElementById('profile-phone').value.trim();
     const city = document.getElementById('profile-city').value.trim();
     const area = document.getElementById('profile-area').value.trim();
+    const rollNo = document.getElementById('profile-rollno').value.trim();
     const errorEl = document.getElementById('profile-error');
     const btn = document.getElementById('btn-profile-save');
     const confEl = document.getElementById('profile-save-confirmation');
@@ -6139,6 +6189,12 @@ class KalyanMitra {
       errorEl.classList.remove('hidden');
       return;
     }
+    // Optional — same rule as registration (see handleRegistration()).
+    if (rollNo && !/^[0-9]{1,6}$/.test(rollNo)) {
+      errorEl.textContent = 'Roll No. must be numbers only (up to 6 digits).';
+      errorEl.classList.remove('hidden');
+      return;
+    }
 
     errorEl.classList.add('hidden');
     btn.disabled = true;
@@ -6147,14 +6203,14 @@ class KalyanMitra {
     btnSpan.textContent = 'Saving...';
 
     try {
-      await this._mirrorProfileToFirebase({ phone, city, area });
+      await this._mirrorProfileToFirebase({ phone, city, area, rollNo });
       confEl.classList.remove('hidden');
       setTimeout(() => confEl.classList.add('hidden'), 2500);
       // Background Sheet write — never awaited, never blocks the
       // confirmation above. updateProfile() resolves { success: false }
       // rather than rejecting on a Sheet-side failure, so both are checked;
       // either way it's just logged, never surfaced to the user.
-      Auth.updateProfile(this.uid, { phone, city, area }).then(result => {
+      Auth.updateProfile(this.uid, { phone, city, area, rollNo }).then(result => {
         if (!result.success) console.warn('Background Sheet profile update failed (non-fatal):', result.error);
       }).catch(e => console.warn('Background Sheet profile update failed (non-fatal):', e));
     } catch (e) {
@@ -7702,6 +7758,7 @@ class KalyanMitra {
       : (reg.sanghCode || '');
 
     const rows = [
+      ['🔢', 'Roll No.', this._escHtml(reg.rollNo || '')],
       ['📞', 'Phone', reg.phone ? `<a href="tel:${this._escHtml(reg.phone)}">${this._escHtml(reg.phone)}</a>` : ''],
       ['🎂', 'Date of Birth', this._escHtml(reg.dob || '')],
       ['⚧', 'Gender', this._escHtml(reg.gender || '')],

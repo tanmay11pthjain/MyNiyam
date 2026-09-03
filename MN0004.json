@@ -1,0 +1,63 @@
+{
+  "meta": {
+    "schemaVersion": 5
+  },
+  "sanghs": {
+    "MN0004": {
+      "name": "Shree Vajraswami Tini Mini Pathshala",
+      "city": "Chennai",
+      "active": true
+    }
+  },
+  "sangh_config": {
+    "MN0004": {
+      "settings": {
+        "currentDailyNiyamId": 0,
+        "samayikTarget": 1,
+        "introSeen": false,
+        "enableNavkarsi": true,
+        "enableWakeup": true,
+        "enableSleep": true,
+        "enablePranam": true,
+        "enableAshtaPrakari": true,
+        "enablePooja": true,
+        "enableSamayik": true,
+        "enableRaiya": true,
+        "enablePratikraman": true,
+        "enableBookReading": true,
+        "enableRatriBhojan": true,
+        "enableKandmool": true,
+        "enableScreenTime": true,
+        "enableDailyNiyam": true,
+        "enableNavkarJaapNight": true,
+        "enableNavkarJaap": true,
+        "enableChaityaVandan": true,
+        "enableDevDarshan": true,
+        "enableGuruVandanMurti": true,
+        "enableGuruVandan": true,
+        "enableShaamAarti": true,
+        "enableKhamasmne": true,
+        "enableKatasna": true,
+        "enableAnnadaan": true,
+        "enableSupatraDaan": true,
+        "enableAksharTyag": true,
+        "enableBhojanVivek": true,
+        "enableThaliDhona": true,
+        "enableDharmikKahani": true,
+        "enablePackagedTyag": true,
+        "enableVyavastha": true,
+        "enableBadoKiSeva": true,
+        "enableEkasana": true,
+        "enableAyambil": true,
+        "enableUpvas": true,
+        "enableTap": true
+      },
+      "points": {},
+      "pointsVersion": 0
+    }
+  },
+  "stats": {
+    "users": 0,
+    "sanghs": 1
+  }
+}

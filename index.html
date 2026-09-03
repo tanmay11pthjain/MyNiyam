@@ -32,7 +32,7 @@
        <noscript> fallback covers the rare case of JS being disabled. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-  <link rel="stylesheet" href="styles.css?v=43">
+  <link rel="stylesheet" href="styles.css?v=44">
   <script>
     // Decide the boot state before <body> even exists, so no element lookup
     // is possible here — the previous version of this check ran mid-body and
@@ -331,6 +331,10 @@
         <div class="input-group">
           <label for="reg-area">Area / Locality</label>
           <input type="text" id="reg-area" name="area" placeholder="e.g. Paldi">
+        </div>
+        <div class="input-group">
+          <label for="reg-rollno">Roll No. <span class="input-optional">(optional)</span></label>
+          <input type="text" id="reg-rollno" name="rollNo" inputmode="numeric" maxlength="6" placeholder="e.g. 7">
         </div>
         <div class="input-group sangh-group">
           <label for="reg-sangh">Pathshala/ Sangh</label>
@@ -777,6 +781,10 @@
         <label for="profile-area">Area / Locality</label>
         <input type="text" id="profile-area" placeholder="e.g. Paldi">
       </div>
+      <div class="input-group">
+        <label for="profile-rollno">Roll No. <span class="input-optional">(optional)</span></label>
+        <input type="text" id="profile-rollno" inputmode="numeric" maxlength="6" placeholder="e.g. 7">
+      </div>
 
       <div class="register-error hidden" id="profile-error"></div>
       <button type="button" class="btn-login" id="btn-profile-save">
@@ -855,7 +863,7 @@
           <button class="btn-export" id="btn-open-poster">📸 Generate Poster</button>
           <button class="btn-export" id="btn-refresh-leaderboard" title="Fetch the latest data">🔄 Refresh</button>
         </div>
-        <input type="search" class="admin-search-input" id="leaderboard-search" placeholder="🔍 Search by name...">
+        <input type="search" class="admin-search-input" id="leaderboard-search" placeholder="🔍 Search by name or roll no...">
         <div id="admin-leaderboard-list" class="leaderboard-list">
           <!-- Populated by JS -->
           <div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>
@@ -1133,7 +1141,7 @@
           <button class="btn-export" id="btn-open-attendance-export">📊 Export Attendance</button>
         </div>
 
-        <input type="search" class="admin-search-input" id="attendance-search" placeholder="🔍 Search by name...">
+        <input type="search" class="admin-search-input" id="attendance-search" placeholder="🔍 Search by name or roll no...">
         <div id="attendance-list" class="attendance-list">
           <!-- Populated by JS -->
           <div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>
@@ -1413,7 +1421,7 @@
 
   <!-- Scripts -->
   <script src="data.js?v=53"></script>
-  <script src="auth.js?v=53"></script>
-  <script src="app.js?v=65"></script>
+  <script src="auth.js?v=54"></script>
+  <script src="app.js?v=66"></script>
 </body>
 </html>

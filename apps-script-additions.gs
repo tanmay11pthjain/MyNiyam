@@ -47,15 +47,19 @@ const SANGH_SHEET_NAME  = 'Sanghs';
 // _backfillMissingPhotos() was retired); only the one-time migration
 // tooling from before v5 ever did. You can safely hide 'Photo Data' in the
 // Sheet; the script addresses columns by header name, not position.
+// 'Roll No.' added here only decides the header row for a BRAND NEW sheet
+// (see _createUsersSheet_() below) — it does NOT retro-add a column to an
+// existing sheet. Add it by hand once (any position; columns are matched
+// by header name, not position) if your Users sheet predates this field.
 const USER_HEADERS = [
-  'UID', 'Name', 'Email', 'DOB', 'Gender', 'Phone', 'City', 'Area',
+  'UID', 'Name', 'Email', 'DOB', 'Gender', 'Phone', 'City', 'Area', 'Roll No.',
   'Sangh Code', 'Role', 'Sangh Codes', 'Registered At', 'Photo', 'Photo Data'
 ];
 
 // Logical field -> column header text (matched case-insensitively, trimmed).
 const USER_COLUMNS = {
   uid: 'UID', name: 'Name', email: 'Email', dob: 'DOB', gender: 'Gender', phone: 'Phone',
-  city: 'City', area: 'Area', sanghCode: 'Sangh Code',
+  city: 'City', area: 'Area', rollNo: 'Roll No.', sanghCode: 'Sangh Code',
   role: 'Role', sanghCodes: 'Sangh Codes', registeredAt: 'Registered At',
   photo: 'Photo', photoData: 'Photo Data'
 };
@@ -70,7 +74,7 @@ const SANGH_COLUMNS = { code: 'Code', name: 'Name', city: 'City' };
 // are excluded on purpose: even if a modified client sends them they are
 // ignored here. This whitelist — not the client UI — is what actually enforces
 // "the user cannot change their sangh".
-const PROFILE_EDITABLE_FIELDS = ['phone', 'city', 'area'];
+const PROFILE_EDITABLE_FIELDS = ['phone', 'city', 'area', 'rollNo'];
 
 // A Sheets cell caps out around 50,000 characters; base64 inflates binary by
 // ~33%, so this leaves headroom for the 256x256 JPEG thumbnail the client
@@ -214,6 +218,7 @@ function _profileFromRow_(rec) {
     phone: String(rec.phone || ''),
     city: String(rec.city || ''),
     area: String(rec.area || ''),
+    rollNo: String(rec.rollNo || ''),
     sanghCode: String(rec.sanghCode || ''),
     email: String(rec.email || '')
   };
@@ -355,6 +360,7 @@ function handleRegister(params) {
   _setField_(sheet, colMap, row, 'phone', params.phone || '');
   _setField_(sheet, colMap, row, 'city', params.city || '');
   _setField_(sheet, colMap, row, 'area', params.area || '');
+  _setField_(sheet, colMap, row, 'rollNo', params.rollNo || '');
   _setField_(sheet, colMap, row, 'sanghCode', params.sanghCode || '');
   _setField_(sheet, colMap, row, 'registeredAt', new Date().toISOString());
 

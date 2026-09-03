@@ -425,6 +425,13 @@ body {
   margin-bottom: 6px;
 }
 
+.input-optional {
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: #b0a599;
+}
+
 .input-group input {
   display: block;
   width: 100%;
@@ -4252,6 +4259,7 @@ body.landing-open {
 .lb-initial { color: #fff; font-weight: 800; font-size: 1rem; font-family: 'Outfit', sans-serif; }
 .lb-info { flex: 1; display: flex; flex-direction: column; }
 .lb-name { font-size: 16px; font-weight: 600; color: var(--text-dark); margin-bottom: 4px; }
+.lb-rollno { color: var(--primary); font-weight: 700; }
 .lb-stats { font-size: 13px; color: var(--text-light); }
 .lb-action { font-size: 14px; font-weight: 600; color: var(--secondary); background: #fef0ea; padding: 6px 12px; border-radius: 20px; }
 

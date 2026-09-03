@@ -567,6 +567,7 @@ const Auth = (() => {
         phone: regData.phone,
         city: regData.city,
         area: regData.area,
+        rollNo: regData.rollNo || "",
         sanghCode: regData.sanghCode || "",
         photo: regData.photo || ""
       }, { allowJsonp: false }); // the photo can be ~20KB — never viable over JSONP's query string
@@ -621,9 +622,10 @@ const Auth = (() => {
     }
   }
 
-  // Updates the editable profile fields (phone/city/area) on the Sheet. Unlike
-  // sendRegistration(), this checks and returns the actual success flag — callers
-  // must not mirror to Firebase unless this resolves { success: true }.
+  // Updates the editable profile fields (phone/city/area/rollNo) on the
+  // Sheet. Unlike sendRegistration(), this checks and returns the actual
+  // success flag — callers must not mirror to Firebase unless this
+  // resolves { success: true }.
   async function updateProfile(uid, fields) {
     try {
       const text = await _sheetsRequest({
@@ -631,7 +633,8 @@ const Auth = (() => {
         uid,
         phone: fields.phone,
         city: fields.city,
-        area: fields.area
+        area: fields.area,
+        rollNo: fields.rollNo
       });
       console.log("Update profile response:", text);
       try {
