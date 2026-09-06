@@ -7944,7 +7944,19 @@ class KalyanMitra {
   }
 }
 
+// ===== APP VERSION — shown in the footer, under "Developed by ..." =====
+// Bump this on every commit to match that commit's own version string
+// (see git log — every commit subject IS its version tag, e.g. "v5.3").
+// One constant filled into every `.app-footer-version` span at load
+// (see below) rather than four hardcoded copies in index.html, so the
+// landing/login/user-app/admin-panel footers can never drift out of
+// sync with each other.
+const APP_VERSION = 'v5.3';
+
 // ===== INITIALIZE =====
 document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.app-footer-version').forEach(el => {
+    el.textContent = APP_VERSION;
+  });
   app = new KalyanMitra();
 });

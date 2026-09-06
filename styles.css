@@ -1260,6 +1260,16 @@ body.landing-open {
   color: var(--text-secondary); /* light-background default: #app, #admin-panel */
 }
 
+/* Version string, filled in from APP_VERSION (app.js) at load — smaller
+   and more muted than the two credit lines above it, since it's
+   supplementary, not part of the credit itself. Inherits the same
+   dark-background override just below via opacity rather than a
+   separate color, so it never needs its own dark-mode rule. */
+.app-footer-version {
+  font-size: 0.62rem;
+  opacity: 0.7;
+}
+
 /* Dark-background contexts — the same faded-white tone
    .landing-footer-credit used before this replaced it. */
 #login-screen .app-footer-text,
