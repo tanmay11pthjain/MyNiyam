@@ -70,11 +70,11 @@ const PHOTO_ROW_HEIGHT = 60;
 
 const SANGH_COLUMNS = { code: 'Code', name: 'Name', city: 'City' };
 
-// Only these may be written by update_profile. Sangh, name, dob, email and uid
-// are excluded on purpose: even if a modified client sends them they are
-// ignored here. This whitelist — not the client UI — is what actually enforces
-// "the user cannot change their sangh".
-const PROFILE_EDITABLE_FIELDS = ['phone', 'city', 'area', 'rollNo'];
+// Only these may be written by update_profile. Name, dob, email and uid are
+// excluded on purpose: even if a modified client sends them they are ignored
+// here. sanghCode IS editable — members can switch sangh from the Profile
+// tab; the client only sends it when they actually switched.
+const PROFILE_EDITABLE_FIELDS = ['phone', 'city', 'area', 'rollNo', 'sanghCode'];
 
 // A Sheets cell caps out around 50,000 characters; base64 inflates binary by
 // ~33%, so this leaves headroom for the 256x256 JPEG thumbnail the client

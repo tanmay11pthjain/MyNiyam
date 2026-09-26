@@ -32,7 +32,7 @@
        <noscript> fallback covers the rare case of JS being disabled. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-  <link rel="stylesheet" href="styles.css?v=44">
+  <link rel="stylesheet" href="styles.css?v=45">
   <script>
     // Decide the boot state before <body> even exists, so no element lookup
     // is possible here — the previous version of this check ran mid-body and
@@ -769,6 +769,17 @@
       <div class="profile-readonly-row">
         <span class="profile-readonly-label">Pathshala/ Sangh</span>
         <span class="profile-readonly-value" id="profile-view-sangh"></span>
+        <button type="button" class="profile-sangh-change-btn" id="btn-profile-sangh-change">Change</button>
+      </div>
+      <div class="profile-sangh-picker hidden" id="profile-sangh-picker">
+        <div class="input-group sangh-group profile-sangh-group">
+          <label for="profile-sangh-input">New Pathshala/ Sangh</label>
+          <input type="text" id="profile-sangh-input" autocomplete="off" placeholder="Type sangh code or name...">
+          <input type="hidden" id="profile-sangh-code">
+          <div id="profile-sangh-dropdown" class="sangh-dropdown hidden"></div>
+          <div id="profile-sangh-selected" class="sangh-selected hidden"></div>
+        </div>
+        <button type="button" class="profile-sangh-cancel-btn" id="btn-profile-sangh-cancel">Keep current sangh</button>
       </div>
 
       <div class="input-group">
@@ -1425,7 +1436,7 @@
 
   <!-- Scripts -->
   <script src="data.js?v=53"></script>
-  <script src="auth.js?v=54"></script>
-  <script src="app.js?v=66"></script>
+  <script src="auth.js?v=55"></script>
+  <script src="app.js?v=67"></script>
 </body>
 </html>

@@ -2842,6 +2842,28 @@ body.landing-open {
   text-align: right;
 }
 
+/* Profile tab: the sangh row's "Change" button and the picker it reveals. */
+.profile-sangh-change-btn,
+.profile-sangh-cancel-btn {
+  flex-shrink: 0;
+  background: #fef0ea;
+  color: var(--secondary);
+  border: none;
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.profile-sangh-picker {
+  margin-bottom: 20px;
+}
+
+.profile-sangh-picker .input-group {
+  margin-bottom: 8px;
+}
+
 /* Stats Grid */
 .stats-grid {
   display: grid;

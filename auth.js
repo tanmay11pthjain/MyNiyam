@@ -622,10 +622,11 @@ const Auth = (() => {
     }
   }
 
-  // Updates the editable profile fields (phone/city/area/rollNo) on the
-  // Sheet. Unlike sendRegistration(), this checks and returns the actual
-  // success flag — callers must not mirror to Firebase unless this
-  // resolves { success: true }.
+  // Updates the editable profile fields (phone/city/area/rollNo, plus
+  // sanghCode when the member switched sangh) on the Sheet. Unlike
+  // sendRegistration(), this checks and returns the actual success flag.
+  // sanghCode is left undefined when unchanged — JSON.stringify drops
+  // undefined keys, so the Sheet's handler then skips that column.
   async function updateProfile(uid, fields) {
     try {
       const text = await _sheetsRequest({
@@ -634,7 +635,8 @@ const Auth = (() => {
         phone: fields.phone,
         city: fields.city,
         area: fields.area,
-        rollNo: fields.rollNo
+        rollNo: fields.rollNo,
+        sanghCode: fields.sanghCode
       });
       console.log("Update profile response:", text);
       try {

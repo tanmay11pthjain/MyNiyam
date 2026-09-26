@@ -1885,6 +1885,28 @@ class KalyanMitra {
     overlay.classList.add('show');
   }
 
+  // The one place a member's sangh is changed — shared by the orphan
+  // re-select overlay (_confirmSanghReselect()) and the Profile tab's
+  // "Change" option (saveProfileEdits()). Writes the new sangh into
+  // registration (the single source of truth), adds the member to the new
+  // sangh_members index, then drops them from the old one. Only touches
+  // paths a member may write for themselves under firebase-rules.json.
+  // Callers reload afterwards so every sangh-scoped listener (settings,
+  // point map, attendance) re-attaches against the new code.
+  async _writeSanghChange(sangh, oldCode) {
+    await db.ref(`users/${this.uid}/registration`).update({
+      sanghCode: sangh.code,
+      sanghName: sangh.name || '',
+      sanghCity: sangh.city || '',
+    });
+    await db.ref(`sangh_members/${sangh.code}/${this.uid}`).set({
+      joinedAt: new Date().toISOString()
+    });
+    if (oldCode && oldCode !== sangh.code) {
+      await db.ref(`sangh_members/${oldCode}/${this.uid}`).remove();
+    }
+  }
+
   // Writes the new sangh using only paths a member is already permitted to
   // write directly under firebase-rules.json (users/$uid and
   // sangh_members/$code/$uid, both scoped to auth.uid === $uid or one of
@@ -1907,16 +1929,7 @@ class KalyanMitra {
     if (errorEl) errorEl.classList.add('hidden');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
     try {
-      await db.ref(`users/${this.uid}/registration`).update({
-        sanghCode: sangh.code,
-        sanghName: sangh.name,
-      });
-      await db.ref(`sangh_members/${sangh.code}/${this.uid}`).set({
-        joinedAt: new Date().toISOString()
-      });
-      if (oldCode && oldCode !== sangh.code) {
-        await db.ref(`sangh_members/${oldCode}/${this.uid}`).remove();
-      }
+      await this._writeSanghChange(sangh, oldCode);
       location.reload();
     } catch (e) {
       console.error('Failed to save the new sangh:', e);
@@ -4008,6 +4021,13 @@ class KalyanMitra {
     // Profile
     const btnProfileSave = document.getElementById('btn-profile-save');
     if (btnProfileSave) btnProfileSave.addEventListener('click', () => this.saveProfileEdits());
+
+    // Profile: change sangh — opens a picker; the actual switch happens on
+    // "Save Changes" (see saveProfileEdits()), after a confirmation.
+    const btnSanghChange = document.getElementById('btn-profile-sangh-change');
+    if (btnSanghChange) btnSanghChange.addEventListener('click', () => this._openProfileSanghPicker());
+    const btnSanghCancel = document.getElementById('btn-profile-sangh-cancel');
+    if (btnSanghCancel) btnSanghCancel.addEventListener('click', () => this._closeProfileSanghPicker());
 
     // Profile photo change
     const photoChangeInput = document.getElementById('profile-photo-input');
@@ -6110,6 +6130,10 @@ class KalyanMitra {
     const rollNoEl = document.getElementById('profile-rollno');
     if (rollNoEl && document.activeElement !== rollNoEl) rollNoEl.value = data.rollNo || '';
 
+    // The code saveProfileEdits() compares a newly picked sangh against,
+    // and moves the member OUT of in sangh_members on a switch.
+    this._profileCurrentSanghCode = data.sanghCode || '';
+
     this._paintSanghChip(data);
   }
 
@@ -6119,9 +6143,73 @@ class KalyanMitra {
     return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
-  // Renders the sangh as a read-only chip (no remove button) — this, plus never
-  // calling _setupSanghAutocomplete() here, is the entire client-side sangh lock.
-  // The real enforcement is server-side, in the update_profile Apps Script action.
+  // Reveals the Profile tab's sangh picker. The autocomplete widget is set
+  // up only on the FIRST open per page load — _setupSanghAutocomplete()
+  // adds a document-level click listener each time it runs, so setting it
+  // up on every open would stack those. Every later open just shows the
+  // already-wired picker again. The member's current sangh is left out of
+  // the list: picking it would be a no-op.
+  async _openProfileSanghPicker() {
+    const picker = document.getElementById('profile-sangh-picker');
+    const changeBtn = document.getElementById('btn-profile-sangh-change');
+    const errorEl = document.getElementById('profile-error');
+    if (!picker) return;
+
+    if (!this._profileSanghPickerReady) {
+      let sanghs = [];
+      try {
+        sanghs = await Auth.fetchSanghs();
+      } catch (e) { /* handled by the empty-list check below */ }
+      const choices = sanghs.filter(s => s.code !== this._profileCurrentSanghCode);
+      if (choices.length === 0) {
+        if (errorEl) {
+          errorEl.textContent = sanghs.length === 0
+            ? 'Could not load the sangh list right now. Please try again.'
+            : 'There is no other sangh to switch to right now.';
+          errorEl.classList.remove('hidden');
+        }
+        return;
+      }
+      this._setupSanghAutocomplete({
+        sanghs: choices,
+        ids: {
+          input: 'profile-sangh-input',
+          dropdown: 'profile-sangh-dropdown',
+          selectedDiv: 'profile-sangh-selected',
+          hiddenInput: 'profile-sangh-code',
+        },
+        setSelected: (sangh) => { this._profileNewSangh = sangh; },
+        closeOutsideSelector: '.profile-sangh-group',
+      });
+      this._profileSanghPickerReady = true;
+    }
+
+    if (errorEl) errorEl.classList.add('hidden');
+    picker.classList.remove('hidden');
+    if (changeBtn) changeBtn.classList.add('hidden');
+  }
+
+  // Hides the picker and discards any sangh picked in it, so a later Save
+  // leaves the member's sangh untouched. Clears the widget's own selection
+  // by clicking its chip's ✕ — the only way to reset the widget's internal
+  // state, rather than just hiding the chip on top of a stale selection.
+  _closeProfileSanghPicker() {
+    const picker = document.getElementById('profile-sangh-picker');
+    const changeBtn = document.getElementById('btn-profile-sangh-change');
+    const removeBtn = document.querySelector('#profile-sangh-selected .sangh-chip-remove');
+    if (removeBtn) removeBtn.click();
+    this._profileNewSangh = null;
+    const input = document.getElementById('profile-sangh-input');
+    if (input) input.value = '';
+    const dropdown = document.getElementById('profile-sangh-dropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+    if (picker) picker.classList.add('hidden');
+    if (changeBtn) changeBtn.classList.remove('hidden');
+  }
+
+  // Renders the member's CURRENT sangh as a chip. Changing it goes through
+  // the separate "Change" picker (_openProfileSanghPicker()) and is only
+  // applied on Save, after a confirmation — see saveProfileEdits().
   async _paintSanghChip(data) {
     const el = document.getElementById('profile-view-sangh');
     if (!el) return;
@@ -6196,6 +6284,32 @@ class KalyanMitra {
       return;
     }
 
+    // Sangh change — only when the picker is open. Open but nothing picked
+    // is flagged rather than silently saving everything else, so a member
+    // never walks away believing they switched when they didn't.
+    const pickerEl = document.getElementById('profile-sangh-picker');
+    const pickerOpen = !!pickerEl && !pickerEl.classList.contains('hidden');
+    const oldSanghCode = this._profileCurrentSanghCode || '';
+    let newSangh = null;
+    if (pickerOpen) {
+      if (!this._profileNewSangh) {
+        errorEl.textContent = 'Pick a sangh from the list, or tap "Keep current sangh".';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      if (this._profileNewSangh.code !== oldSanghCode) newSangh = this._profileNewSangh;
+    }
+    if (newSangh) {
+      const ok = confirm(
+        `Move to ${newSangh.name} (${newSangh.code})?\n\n` +
+        `• Your history, points, streak and badges stay with you.\n` +
+        `• Your points will be recalculated using the new sangh's point values.\n` +
+        `• Your current sangh's admin will no longer see you.\n\n` +
+        `The app will reload after saving.`
+      );
+      if (!ok) return; // nothing written — every field stays exactly as it was
+    }
+
     errorEl.classList.add('hidden');
     btn.disabled = true;
     const btnSpan = btn.querySelector('span');
@@ -6204,6 +6318,23 @@ class KalyanMitra {
 
     try {
       await this._mirrorProfileToFirebase({ phone, city, area, rollNo });
+
+      if (newSangh) {
+        await this._writeSanghChange(newSangh, oldSanghCode);
+        // The Sheet mirror IS awaited here (unlike the no-switch path
+        // below) — the reload that follows would otherwise cut the request
+        // off mid-flight. Capped at 4s so a slow Apps Script never holds
+        // the member on this screen; the Sheet is only a mirror.
+        await Promise.race([
+          Auth.updateProfile(this.uid, { phone, city, area, rollNo, sanghCode: newSangh.code }).catch(() => {}),
+          new Promise(resolve => setTimeout(resolve, 4000)),
+        ]);
+        // Every sangh-scoped listener (settings, point map, attendance) is
+        // bound to the old code — reload so they all re-attach cleanly.
+        location.reload();
+        return;
+      }
+
       confEl.classList.remove('hidden');
       setTimeout(() => confEl.classList.add('hidden'), 2500);
       // Background Sheet write — never awaited, never blocks the
@@ -7951,7 +8082,7 @@ class KalyanMitra {
 // (see below) rather than four hardcoded copies in index.html, so the
 // landing/login/user-app/admin-panel footers can never drift out of
 // sync with each other.
-const APP_VERSION = 'v5.3';
+const APP_VERSION = 'v5.32';
 
 // ===== INITIALIZE =====
 document.addEventListener('DOMContentLoaded', () => {
