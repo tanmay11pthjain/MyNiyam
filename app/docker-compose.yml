@@ -1,0 +1,15 @@
+# Local Postgres for dev and tests only. Production uses Supabase (Mumbai).
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: myniyam-db
+    environment:
+      POSTGRES_PASSWORD: myniyam-local
+      POSTGRES_DB: myniyam
+    ports:
+      - "54329:5432"
+    volumes:
+      - ./supabase/local:/docker-entrypoint-initdb.d:ro
+      - myniyam-db:/var/lib/postgresql/data
+volumes:
+  myniyam-db:
