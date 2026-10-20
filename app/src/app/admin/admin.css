@@ -15,6 +15,8 @@
 .page-title h1 { font-size: var(--fs-28); font-weight: 800; }
 .page-title p { color: var(--ink-dim); margin-top: var(--s-1); font-size: var(--fs-16); }
 .section { display: grid; gap: var(--s-3); }
+.page > *, .section > *, .grid-2 > *, .stack-lg > *, .field > * { min-width: 0; }
+.admin .input { min-width: 0; }
 .section > h2 { font-size: var(--fs-18); font-weight: 700; display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); }
 .section > h2 small { font: 500 var(--fs-14) var(--font-body); color: var(--ink-dim); }
 
@@ -75,6 +77,7 @@ button.row:hover, a.row:hover { background: var(--bg-3); }
 .icon-btn:hover { background: var(--bg-3); color: var(--ink); }
 .icon-btn[disabled] { opacity: .3; cursor: default; background: transparent; }
 .icon-btn svg { width: 20px; height: 20px; }
+.admin .btn svg { width: 20px; height: 20px; flex: none; }
 .btn-row { display: flex; gap: var(--s-2); flex-wrap: wrap; }
 .btn-row .btn { width: auto; flex: 1 1 140px; }
 .btn-sm { min-height: 44px; padding: 0 var(--s-4); font-size: var(--fs-16); }
@@ -82,6 +85,7 @@ button.row:hover, a.row:hover { background: var(--bg-3); }
 /* On/off switch: a real checkbox, so it is keyboard and screen-reader friendly */
 .switch-row { display: flex; align-items: center; gap: var(--s-3); min-height: 64px; padding: var(--s-2) var(--s-4); cursor: pointer; }
 .switch-row .grow { flex: 1; }
+.list > * + .switch-row, .list > .switch-row + * { border-top: 1px solid var(--line); }
 .switch-row .t { font: 600 var(--fs-16) var(--font-display); display: block; }
 .switch-row .s { font-size: var(--fs-14); color: var(--ink-dim); display: block; }
 .switch { appearance: none; -webkit-appearance: none; width: 52px; height: 32px; flex: none; margin: 0; border-radius: var(--r-pill); background: var(--line); position: relative; cursor: pointer; transition: background var(--t-fast); }
@@ -168,7 +172,8 @@ textarea.input { min-height: 88px; padding: var(--s-3) var(--s-4); resize: verti
 .poster .p-steps { font-size: 5.2mm; line-height: 1.45; color: #1C2F5E; }
 .poster .p-brand { display: flex; align-items: center; gap: 3mm; font-size: 4mm; color: #56607F; }
 .poster .p-brand img { height: 7mm; width: auto; }
-.poster-wrap { overflow-x: auto; padding: var(--s-4) 0; }
+.poster-wrap { padding: var(--s-4) 0; }
+.poster-fit { overflow: hidden; margin: 0 auto; }
 .poster-scale { transform-origin: top left; }
 @media print {
   @page { size: A4; margin: 0; }
@@ -176,6 +181,6 @@ textarea.input { min-height: 88px; padding: var(--s-3) var(--s-4); resize: verti
   .no-print { display: none !important; }
   .admin { padding: 0; max-width: none; }
   .poster-wrap { padding: 0; overflow: visible; }
-  .poster-scale { transform: none !important; height: auto !important; width: auto !important; }
+  .poster-fit, .poster-scale { transform: none !important; height: auto !important; width: auto !important; overflow: visible !important; }
   .poster { box-shadow: none; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }

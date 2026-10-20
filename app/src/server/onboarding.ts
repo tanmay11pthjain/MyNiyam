@@ -1,5 +1,5 @@
 import "server-only";
-import { asAccount, pgCode, sql } from "./db";
+import { asAccount, pgCode, pgHint, sql } from "./db";
 import { config } from "./config";
 import { parseFormFields, validateAnswers, type AnswerErrors } from "@/lib/forms";
 import { maskPhone } from "@/lib/phone";
@@ -11,9 +11,11 @@ import type { ClassItem, Me, Profile, SanghCard } from "@/lib/api-types";
 type SanghRow = { id: string; name: string; city: string; logo_url: string | null; join_code: string };
 const toCard = (r: SanghRow): SanghCard => ({ id: r.id, name: r.name, city: r.city, logoUrl: r.logo_url, joinCode: r.join_code });
 
-export async function findSanghByCode(code: string): Promise<SanghCard | null> {
-  const [r] = await sql()<SanghRow[]>`select id, name, city, logo_url, join_code from public.sanghs where join_code = ${code}`;
-  return r ? toCard(r) : null;
+/** An approved sangh by its join code. `joinOpen` is false while its admin has paused new joins. */
+export async function findSanghByCode(code: string): Promise<(SanghCard & { joinOpen: boolean }) | null> {
+  const [r] = await sql()<(SanghRow & { join_open: boolean })[]>`
+    select id, name, city, logo_url, join_code, join_open from public.sanghs where join_code = ${code} and status = 'active'`;
+  return r ? { ...toCard(r), joinOpen: r.join_open } : null;
 }
 
 export async function findSanghById(id: string): Promise<SanghCard | null> {
@@ -26,28 +28,40 @@ export async function searchSanghs(q: string, city: string | null): Promise<{ sa
   const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
   const rows = await sql()<SanghRow[]>`
     select id, name, city, logo_url, join_code from public.sanghs
-    where (${q} = '' or name ilike ${like})
+    where status = 'active' and searchable
+      and (${q} = '' or name ilike ${like})
       and (${city}::text is null or lower(city) = lower(${city}))
     order by name limit 20`;
-  const cities = await sql()<{ city: string }[]>`select distinct city from public.sanghs order by city limit 200`;
+  const cities = await sql()<{ city: string }[]>`select distinct city from public.sanghs where status = 'active' and searchable order by city limit 200`;
   return { sanghs: rows.map(toCard), cities: cities.map((c) => c.city) };
 }
 
 export type JoinOutcome =
   | { kind: "joined"; accountId: string }
   | { kind: "logged_in"; accountId: string }
-  | { kind: "other_sangh"; accountId: string; sangh: SanghCard };
+  | { kind: "other_sangh"; accountId: string; sangh: SanghCard }
+  | { kind: "closed" };
 
 /**
  * After the phone is verified: create the account in `sanghId`, or find the existing one.
  * The UNIQUE(phone) constraint makes this safe against double taps and two tabs: exactly one
- * insert wins and everyone else reads the winner's row.
+ * insert wins and everyone else reads the winner's row. A sangh that is pending or has paused
+ * joins refuses new accounts in the database (accounts_join_open); existing members still get in.
  */
 export async function joinSangh(phone: string, sanghId: string): Promise<JoinOutcome> {
-  const inserted = await sql()`
-    insert into public.accounts (phone, sangh_id) values (${phone}, ${sanghId})
-    on conflict (phone) do nothing returning id`;
-  if (inserted.length) return { kind: "joined", accountId: inserted[0].id };
+  const [existing] = await sql()`select id from public.accounts where phone = ${phone}`;
+  if (!existing) {
+    let inserted;
+    try {
+      inserted = await sql()`
+        insert into public.accounts (phone, sangh_id) values (${phone}, ${sanghId})
+        on conflict (phone) do nothing returning id`;
+    } catch (e) {
+      if (pgHint(e) === "joins_closed") return { kind: "closed" };
+      throw e;
+    }
+    if (inserted.length) return { kind: "joined", accountId: inserted[0].id };
+  }
   const [acc] = await sql()`select id, sangh_id from public.accounts where phone = ${phone}`;
   if (!acc) throw new Error("account vanished during join"); // removed between the two statements; caller retries
   if (acc.sangh_id === sanghId) return { kind: "logged_in", accountId: acc.id };

@@ -45,6 +45,7 @@ export function say(err: ApiError | { error: "offline" }): Words {
     case "invalid_answers": return { en: "Please check the answers marked below.", hi: "नीचे दिखाए जवाब देखें।" };
     case "invalid_class": return { en: "Please pick your class again.", hi: "अपनी कक्षा फिर से चुनें।" };
     case "unauthorized": return { en: "Please log in again.", hi: "फिर से लॉग इन करें।" };
+    case "joins_closed": return { en: "This pathshala isn't taking new members right now. Ask your teacher.", hi: "यह पाठशाला अभी नए सदस्य नहीं ले रही। अपने शिक्षक से पूछें।" };
     default: return { en: "Something went wrong on our side. Please try again.", hi: "हमारी तरफ़ से गड़बड़ हुई। फिर कोशिश करें।" };
   }
 }

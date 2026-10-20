@@ -11,5 +11,7 @@ export const GET = route<{ code: string }>("sanghs.byCode", async (_req, ctx, { 
   if (!clean) return fail(ctx, { error: "invalid_code" });
   const sangh = await findSanghByCode(clean);
   if (!sangh) return fail(ctx, { error: "code_not_found" });
-  return ok(ctx, { sangh });
+  const { joinOpen, ...card } = sangh;
+  if (!joinOpen) return fail(ctx, { error: "joins_closed" });
+  return ok(ctx, { sangh: card });
 });

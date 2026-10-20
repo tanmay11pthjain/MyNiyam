@@ -46,6 +46,7 @@ export const POST = route("otp.verify", async (req, ctx) => {
   } catch {
     outcome = await joinSangh(phone, input.sanghId); // the number was freed mid-join; one retry settles it
   }
+  if (outcome.kind === "closed") return fail(ctx, { error: "joins_closed" });
   // The number is proven, so the session is set even when it belongs to another sangh:
   // the screen then offers "Log in there" (keep it) or "Use a different number" (log out).
   if (outcome.kind === "other_sangh") {
