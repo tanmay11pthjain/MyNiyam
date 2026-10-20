@@ -37,7 +37,10 @@ export type ApiError = {
     | "bad_request" | "invalid_phone" | "invalid_code" | "code_not_found" | "too_many_requests"
     | "send_failed" | "wrong_code" | "code_expired" | "no_code" | "other_sangh" | "not_member"
     | "unauthorized" | "not_found" | "consent_required" | "self_exists" | "profile_limit"
-    | "invalid_answers" | "invalid_class" | "forbidden" | "too_large" | "server_error";
+    | "invalid_answers" | "invalid_class" | "forbidden" | "too_large" | "server_error"
+    // admin panel
+    | "joins_closed" | "class_has_members" | "invalid_field" | "duplicate_key" | "no_sangh" | "unsupported_type"
+    | "log_window_closed";
   retryAfterSec?: number;
   attemptsLeft?: number;
   sangh?: SanghCard;

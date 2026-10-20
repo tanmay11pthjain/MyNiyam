@@ -36,7 +36,25 @@ export async function asAccount<T>(accountId: string, fn: (tx: Tx) => Promise<T>
   }) as Promise<T>;
 }
 
+/**
+ * Runs `fn` as an admin: the `authenticated` role with the claim `admin_phone`. Row-level security then
+ * shows only the sanghs listed for that phone in sangh_admins (all sanghs' basic rows for the super admin).
+ */
+export async function asAdmin<T>(phone: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  const claims = JSON.stringify({ admin_phone: phone, role: "authenticated" });
+  return sql().begin(async (tx) => {
+    await tx`select set_config('request.jwt.claims', ${claims}, true)`;
+    await tx`set local role authenticated`;
+    return fn(tx);
+  }) as Promise<T>;
+}
+
 /** Postgres error code, if `e` came from the database. */
 export function pgCode(e: unknown): string | undefined {
   return typeof e === "object" && e !== null && "code" in e ? String((e as { code: unknown }).code) : undefined;
+}
+
+/** The `hint` a database function raised with (we use it as a stable reason), if any. */
+export function pgHint(e: unknown): string | undefined {
+  return typeof e === "object" && e !== null && "hint" in e ? String((e as { hint: unknown }).hint) : undefined;
 }

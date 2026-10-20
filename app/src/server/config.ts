@@ -29,6 +29,20 @@ const schema = z.object({
   MAX_PROFILES_PER_ACCOUNT: int(8),  // also enforced by a trigger in the database
   MAX_BODY_BYTES: int(16_384),
 
+  // Admin panel
+  // Comma-separated +91 numbers that may approve sanghs and assign their admins.
+  SUPER_ADMIN_PHONE: z.string().default(""),
+  ADMIN_SESSION_IDLE_DAYS: int(30),  // an admin session ends after this many days unused
+  RL_ADMIN_PER_IP_MIN: int(120),     // admin API calls per IP per minute
+
+  // Image uploads (logo, profile photos). The browser shrinks them to 512 px JPEG before sending.
+  MAX_UPLOAD_BYTES: int(600_000),
+  // Supabase Storage (server only). Without these, files go to LOCAL_STORAGE_DIR (local dev only).
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+  STORAGE_BUCKET: z.string().default("myniyam"),
+  LOCAL_STORAGE_DIR: z.string().default(".data/storage"),
+
   // MSG91 (server only)
   MSG91_AUTH_KEY: z.string().optional(),
   MSG91_SMS_TEMPLATE_ID: z.string().optional(),
@@ -38,7 +52,9 @@ const schema = z.object({
   MSG91_WHATSAPP_LANGUAGE: z.string().default("en"),
 });
 
-export type Config = z.infer<typeof schema> & { sessionSecret: string; whatsappEnabled: boolean; smsEnabled: boolean };
+export type Config = z.infer<typeof schema> & {
+  sessionSecret: string; whatsappEnabled: boolean; smsEnabled: boolean; superAdmins: string[]; supabaseStorage: boolean;
+};
 
 let cached: Config | null = null;
 
@@ -58,8 +74,14 @@ export function config(): Config {
     if (c.NODE_ENV === "production") throw new Error("SESSION_SECRET is required (32+ random characters).");
     sessionSecret = "dev-only-session-secret-change-me-0123456789";
   }
+  const superAdmins = c.SUPER_ADMIN_PHONE.split(",").map((p) => p.trim()).filter(Boolean);
+  if (superAdmins.some((p) => !/^\+91[6-9]\d{9}$/.test(p))) throw new Error("SUPER_ADMIN_PHONE must be +91 numbers like +919820012345, separated by commas.");
+  const supabaseStorage = Boolean(c.SUPABASE_URL && c.SUPABASE_SERVICE_ROLE_KEY);
+  if (!supabaseStorage && c.NODE_ENV === "production") throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are needed in production for logo and photo uploads.");
   cached = {
     ...c,
+    superAdmins,
+    supabaseStorage,
     sessionSecret,
     smsEnabled: Boolean(c.MSG91_AUTH_KEY && c.MSG91_SMS_TEMPLATE_ID),
     whatsappEnabled: Boolean(c.MSG91_AUTH_KEY && c.MSG91_WHATSAPP_NUMBER && c.MSG91_WHATSAPP_TEMPLATE),
