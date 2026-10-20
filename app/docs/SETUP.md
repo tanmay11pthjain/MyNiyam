@@ -1,5 +1,7 @@
 # Setting up Supabase and MSG91 for MyNiyam
 
+**Current status:** login codes are simulated (`OTP_DELIVERY=simulate`, the code is always `1234`). Part A and B are needed now; Part C and D only when real SMS/WhatsApp is switched on.
+
 Every value goes into `app/.env.local` (copy it from `app/.env.example`). That file is git-ignored. Never paste these values into code, chat or a commit.
 
 Screen and menu names in both dashboards change from time to time. If a label below doesn't match exactly, look for the closest one.
@@ -59,7 +61,7 @@ SESSION_SECRET=<the output>
 
 ## Part C: MSG91 (codes by SMS and WhatsApp)
 
-SMS in India needs DLT registration. That is a government rule, not an MSG91 one, and approvals can take a few days. Start it first. WhatsApp needs Meta approval, which also takes a day or two. Until both are approved, keep `OTP_TEST_MODE=true` on your computer.
+SMS in India needs DLT registration. That is a government rule, not an MSG91 one, and approvals can take a few days. Start it first. WhatsApp needs Meta approval, which also takes a day or two. Until then, MyNiyam runs with simulated codes (`OTP_DELIVERY=simulate`): nothing is sent and the code is always `1234`.
 
 ### C1. Auth key (5 minutes)
 
@@ -118,10 +120,10 @@ If only SMS is ready, leave the WhatsApp lines empty. The app then sends by SMS 
 
 ## Part D: switch it on and test
 
-1. In `app/.env.local`, set `OTP_TEST_MODE=false`.
+1. In `app/.env.local`, set `OTP_DELIVERY=msg91`. Codes become random 4-digit numbers sent by MSG91. The 4-digit length is fixed in the app, so the MSG91 template must use a 4-digit OTP.
 2. Restart the app: stop `npm run dev` and start it again.
 3. Open http://localhost:3100/j/HEER01, enter **your own** number, and check that the code arrives and works.
 4. If it doesn't arrive, the terminal shows a line with `otp_delivery_failed` and MSG91's reason. Send me that line, but not your keys.
 
 Your finished `app/.env.local` should have values for:
-`DATABASE_URL`, `SESSION_SECRET`, `MSG91_AUTH_KEY`, `MSG91_SMS_TEMPLATE_ID`, the four `MSG91_WHATSAPP_*` lines (optional), and `OTP_TEST_MODE=false`.
+`DATABASE_URL`, `SESSION_SECRET`, `MSG91_AUTH_KEY`, `MSG91_SMS_TEMPLATE_ID`, the four `MSG91_WHATSAPP_*` lines (optional), and `OTP_DELIVERY=msg91`.

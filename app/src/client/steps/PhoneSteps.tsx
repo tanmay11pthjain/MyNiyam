@@ -5,6 +5,7 @@ import { api, say } from "../api";
 import { Button, Msg, Title } from "../ui";
 import { formatPhone, normalizeIndianPhone } from "@/lib/phone";
 import type { OtpChannel, SendOtpResponse } from "@/lib/api-types";
+import { OTP_LENGTH, OTP_PATTERN } from "@/lib/otp-code";
 
 type Words = { en: string; hi: string };
 export type Sent = SendOtpResponse & { phone: string; at: number };
@@ -62,7 +63,7 @@ export function PhoneStep({ title, onSent, initialPhone }: {
   );
 }
 
-/** Six-digit code. "Send by SMS instead" appears once the resend wait is over. */
+/** The login code (4 digits). "Send by SMS instead" appears once the resend wait is over. */
 export function OtpStep({ sent, onResent, onVerify, onChangeNumber }: {
   sent: Sent;
   onResent: (s: Sent) => void;
@@ -82,7 +83,7 @@ export function OtpStep({ sent, onResent, onVerify, onChangeNumber }: {
   const wait = Math.max(0, Math.ceil((sent.at + sent.resendAfterSec * 1000 - now) / 1000));
 
   async function verify(c: string) {
-    if (!/^\d{6}$/.test(c)) return;
+    if (!OTP_PATTERN.test(c)) return;
     setBusy("verify"); setErr(null); setNote(null);
     const problem = await onVerify(c);
     setBusy(false);
@@ -103,21 +104,23 @@ export function OtpStep({ sent, onResent, onVerify, onChangeNumber }: {
   const where = sent.channel === "whatsapp" ? "WhatsApp" : "SMS";
   return (
     <div className="screen">
-      <Title en="Enter the code" hi="कोड डालें" lead={<>We sent a 6-digit code on <b>{where}</b> to <b style={{ whiteSpace: "nowrap" }}>{formatPhone(sent.phone)}</b>.</>} />
-      {sent.testMode && <p className="pill kesar mt-4" style={{ alignSelf: "flex-start" }}>Test mode: the code is 123456</p>}
+      <Title en="Enter the code" hi="कोड डालें" lead={sent.simulated
+        ? <>For now no message is sent to <b style={{ whiteSpace: "nowrap" }}>{formatPhone(sent.phone)}</b>. Type 1234.</>
+        : <>We sent a {OTP_LENGTH}-digit code on <b>{where}</b> to <b style={{ whiteSpace: "nowrap" }}>{formatPhone(sent.phone)}</b>.</>} />
+      {sent.simulated && <p className="pill kesar mt-4" style={{ alignSelf: "flex-start" }}>Practice mode: no message is sent. The code is 1234.</p>}
       <form className="stack mt-5" noValidate onSubmit={(e) => { e.preventDefault(); void verify(code); }}>
-        <label className="label sr-only" htmlFor="otp">6-digit code</label>
+        <label className="label sr-only" htmlFor="otp">{OTP_LENGTH}-digit code</label>
         <input
           ref={input} id="otp" className="input otp-input" inputMode="numeric" autoComplete="one-time-code" pattern="\d*"
-          maxLength={6} placeholder="••••••" value={code} aria-invalid={err ? true : undefined} aria-describedby="otp-msg"
+          maxLength={OTP_LENGTH} placeholder={"•".repeat(OTP_LENGTH)} value={code} aria-invalid={err ? true : undefined} aria-describedby="otp-msg"
           onChange={(e) => {
-            const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+            const v = e.target.value.replace(/\D/g, "").slice(0, OTP_LENGTH);
             setCode(v); setErr(null);
-            if (v.length === 6 && !busy) void verify(v);
+            if (v.length === OTP_LENGTH && !busy) void verify(v);
           }}
         />
         <Msg id="otp-msg" text={err ?? note} tone={err ? "err" : "ok"} />
-        <Button type="submit" busy={busy === "verify"} disabled={code.length !== 6}>{busy === "verify" ? "Checking…" : "Continue"}</Button>
+        <Button type="submit" busy={busy === "verify"} disabled={code.length !== OTP_LENGTH}>{busy === "verify" ? "Checking…" : "Continue"}</Button>
       </form>
 
       <div className="stack mt-5">

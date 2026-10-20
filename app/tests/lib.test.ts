@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formatPhone, maskPhone, normalizeIndianPhone } from "@/lib/phone";
 import { joinCodeFromScan, normalizeJoinCode } from "@/lib/join-code";
 import { parseFormFields, validateAnswers } from "@/lib/forms";
+import { OTP_LENGTH, OTP_PATTERN } from "@/lib/otp-code";
 
 describe("phone", () => {
   it.each([
@@ -18,6 +19,15 @@ describe("phone", () => {
   it("formats and masks", () => {
     expect(formatPhone("+919820012345")).toBe("+91 98200 12345");
     expect(maskPhone("+919820012345")).toBe("+91 98•••••345");
+  });
+});
+
+describe("login code", () => {
+  it("is exactly 4 digits", () => {
+    expect(OTP_LENGTH).toBe(4);
+    expect(OTP_PATTERN.test("1234")).toBe(true);
+    expect(OTP_PATTERN.test("0000")).toBe(true);
+    for (const bad of ["123", "12345", "123456", "dddd", "12a4", " 1234", ""]) expect(OTP_PATTERN.test(bad)).toBe(false);
   });
 });
 

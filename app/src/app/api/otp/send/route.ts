@@ -7,7 +7,7 @@ import type { SendOtpResponse } from "@/lib/api-types";
 
 const body = z.object({ phone: z.string().max(20), channel: z.enum(["whatsapp", "sms"]).default("whatsapp") });
 
-// POST /api/otp/send { phone, channel } → { channel, resendAfterSec, expiresInSec, testMode }
+// POST /api/otp/send { phone, channel } → { channel, resendAfterSec, expiresInSec, simulated }
 export const POST = route("otp.send", async (req, ctx) => {
   const input = await readJson(req, body);
   if (!input) return fail(ctx, { error: "bad_request" });
@@ -21,5 +21,5 @@ export const POST = route("otp.send", async (req, ctx) => {
     if (r.reason === "too_many_requests") return fail(ctx, { error: "too_many_requests", retryAfterSec: r.retryAfterSec });
     return fail(ctx, { error: "send_failed" });
   }
-  return ok<SendOtpResponse>(ctx, { channel: r.channel, resendAfterSec: r.resendAfterSec, expiresInSec: r.expiresInSec, testMode: r.testMode });
+  return ok<SendOtpResponse>(ctx, { channel: r.channel, resendAfterSec: r.resendAfterSec, expiresInSec: r.expiresInSec, simulated: r.simulated });
 });

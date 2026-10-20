@@ -1,4 +1,4 @@
-// HTTP checks for every route against a running server in OTP test mode.
+// HTTP checks for every route against a running server with OTP_DELIVERY=simulate.
 //   BASE_URL=http://localhost:3100 node scripts/api-check.mjs
 // Uses made-up numbers in the +91 90000 xxxxx range. Run against local or a test deploy only.
 const BASE = process.env.BASE_URL || "http://localhost:3100";
@@ -55,19 +55,19 @@ check("bad json 400", r.status === 400 && r.json?.error === "bad_request");
 r = await a("/api/otp/send", { body: { phone: "9".repeat(20000) } });
 check("oversized body 413", r.status === 413 && r.json?.error === "too_large");
 r = await a("/api/otp/send", { body: { phone: p1, channel: "whatsapp" } });
-check("send 200 (test mode)", r.status === 200 && r.json?.testMode === true && r.json?.resendAfterSec === 30, JSON.stringify(r.json));
+check("send 200 (simulated)", r.status === 200 && r.json?.simulated === true && r.json?.resendAfterSec === 30, JSON.stringify(r.json));
 r = await a("/api/otp/send", { body: { phone: p1, channel: "sms" } });
 check("resend inside 30 s is 429 with Retry-After", r.status === 429 && Number(r.headers.get("retry-after")) > 0);
 
 const heer = (await a("/api/sanghs/by-code/HEER01")).json.sangh;
 const shan = (await a("/api/sanghs/by-code/SHAN01")).json.sangh;
-r = await a("/api/otp/verify", { body: { intent: "join", phone: p1, code: "000000", sanghId: heer.id } });
+r = await a("/api/otp/verify", { body: { intent: "join", phone: p1, code: "0000", sanghId: heer.id } });
 check("wrong code 400 with attemptsLeft", r.status === 400 && r.json?.error === "wrong_code" && r.json?.attemptsLeft === 4);
 r = await a("/api/me");
 check("no session → 401", r.status === 401);
-r = await a("/api/otp/verify", { body: { intent: "join", phone: p1, code: "123456", sanghId: heer.id } });
+r = await a("/api/otp/verify", { body: { intent: "join", phone: p1, code: "1234", sanghId: heer.id } });
 check("join 200 joined + cookie", r.status === 200 && r.json?.status === "joined");
-r = await a("/api/otp/verify", { body: { intent: "join", phone: p1, code: "123456", sanghId: heer.id } });
+r = await a("/api/otp/verify", { body: { intent: "join", phone: p1, code: "1234", sanghId: heer.id } });
 check("code is single-use (410)", r.status === 410);
 
 r = await a("/api/me");
@@ -93,7 +93,7 @@ await b("/api/sanghs/by-code/SHAN01");
 // The 30 s resend wait applies per number, so use the next allowed send: wait it out via a fresh number instead.
 const p2 = rnd();
 await b("/api/otp/send", { body: { phone: p2 } });
-await b("/api/otp/verify", { body: { intent: "join", phone: p2, code: "123456", sanghId: heer.id } });
+await b("/api/otp/verify", { body: { intent: "join", phone: p2, code: "1234", sanghId: heer.id } });
 await b("/api/session/logout", { body: {} });
 // Now p2 belongs to HEER01; joining SHAN01 must answer 409 naming HEER01.
 // (The per-number limit allows 3 sends per 10 minutes; this is send #2 for p2, after the 30 s wait.)
@@ -101,14 +101,14 @@ console.log("     …waiting 31 s for the resend timer");
 await new Promise((res) => setTimeout(res, 31000));
 r = await b("/api/otp/send", { body: { phone: p2 } });
 check("second send after 30 s ok", r.status === 200);
-r = await b("/api/otp/verify", { body: { intent: "join", phone: p2, code: "123456", sanghId: shan.id } });
+r = await b("/api/otp/verify", { body: { intent: "join", phone: p2, code: "1234", sanghId: shan.id } });
 check("number in another sangh → 409 other_sangh", r.status === 409 && r.json?.sangh?.joinCode === "HEER01");
 
 // Login path for an unknown number
 const c = jar();
 const p3 = rnd();
 await c("/api/otp/send", { body: { phone: p3 } });
-r = await c("/api/otp/verify", { body: { intent: "login", phone: p3, code: "123456" } });
+r = await c("/api/otp/verify", { body: { intent: "login", phone: p3, code: "1234" } });
 check("login with unknown number → 404 not_member", r.status === 404 && r.json?.error === "not_member");
 
 // Admin endpoint without rights

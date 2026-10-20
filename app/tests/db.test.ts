@@ -2,7 +2,7 @@
 // They check the invariants where they are enforced: in Postgres, under concurrency.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { asAccount, sql } from "@/server/db";
-import { sendOtp, verifyOtp, TEST_CODE } from "@/server/otp";
+import { sendOtp, verifyOtp, SIMULATED_CODE as TEST_CODE } from "@/server/otp";
 import { hit } from "@/server/rate-limit";
 import {
   adminRemoveNumber, createProfile, findSanghByCode, getMe, joinSangh, searchSanghs, setupProfile,
@@ -42,8 +42,8 @@ describe("OTP", () => {
   it("counts wrong guesses down and burns the code after 5", async () => {
     const p = phone();
     await sendOtp(p, "whatsapp");
-    for (let left = 4; left >= 1; left--) expect(await verifyOtp(p, "000000")).toEqual({ ok: false, reason: "wrong_code", attemptsLeft: left });
-    expect(await verifyOtp(p, "000000")).toEqual({ ok: false, reason: "code_expired" });
+    for (let left = 4; left >= 1; left--) expect(await verifyOtp(p, "0000")).toEqual({ ok: false, reason: "wrong_code", attemptsLeft: left });
+    expect(await verifyOtp(p, "0000")).toEqual({ ok: false, reason: "code_expired" });
     expect(await verifyOtp(p, TEST_CODE)).toEqual({ ok: false, reason: "no_code" });
   });
 

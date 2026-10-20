@@ -5,26 +5,29 @@ import { sql } from "./db";
 import { deliverOtp } from "./msg91";
 import { log } from "./log";
 import type { OtpChannel } from "@/lib/api-types";
+import { OTP_LENGTH } from "@/lib/otp-code";
 
-export const TEST_CODE = "123456";
+/** The code that always works while OTP_DELIVERY=simulate. */
+export const SIMULATED_CODE = "1234";
 
 function hashCode(phone: string, code: string) {
   return createHmac("sha256", config().sessionSecret).update(`otp:${phone}:${code}`).digest("hex");
 }
 
 export type SendResult =
-  | { ok: true; channel: OtpChannel; resendAfterSec: number; expiresInSec: number; testMode: boolean }
+  | { ok: true; channel: OtpChannel; resendAfterSec: number; expiresInSec: number; simulated: boolean }
   | { ok: false; reason: "too_many_requests"; retryAfterSec: number }
   | { ok: false; reason: "send_failed" };
 
 /**
- * Creates a fresh 6-digit code for `phone` (E.164) and sends it. Server code only.
+ * Creates a fresh 4-digit code for `phone` (E.164) and sends it. Server code only.
  * Limits: OTP_SENDS_PER_WINDOW sends per number per OTP_WINDOW_SEC, and at least
  * OTP_RESEND_AFTER_SEC between two sends. Each send replaces the previous code.
  */
 export async function sendOtp(phone: string, channel: OtpChannel): Promise<SendResult> {
   const c = config();
-  const code = c.OTP_TEST_MODE ? TEST_CODE : String(randomInt(0, 1_000_000)).padStart(6, "0");
+  const simulated = c.OTP_DELIVERY === "simulate";
+  const code = simulated ? SIMULATED_CODE : String(randomInt(0, 10 ** OTP_LENGTH)).padStart(OTP_LENGTH, "0");
 
   const gate = await sql().begin(async (tx) => {
     // One sender at a time per number, so two taps or two tabs can't both slip under the limit.
@@ -56,7 +59,7 @@ export async function sendOtp(phone: string, channel: OtpChannel): Promise<SendR
   if (!gate.ok) return { ok: false, reason: "too_many_requests", retryAfterSec: gate.retryAfterSec };
 
   let used: OtpChannel = channel;
-  if (!c.OTP_TEST_MODE) {
+  if (!simulated) {
     try {
       used = await deliverOtp(phone, code, channel);
     } catch (e) {
@@ -65,7 +68,7 @@ export async function sendOtp(phone: string, channel: OtpChannel): Promise<SendR
       return { ok: false, reason: "send_failed" };
     }
   }
-  return { ok: true, channel: used, resendAfterSec: c.OTP_RESEND_AFTER_SEC, expiresInSec: c.OTP_TTL_SEC, testMode: c.OTP_TEST_MODE };
+  return { ok: true, channel: used, resendAfterSec: c.OTP_RESEND_AFTER_SEC, expiresInSec: c.OTP_TTL_SEC, simulated };
 }
 
 export type VerifyResult =

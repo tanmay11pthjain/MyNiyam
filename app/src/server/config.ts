@@ -2,7 +2,6 @@ import "server-only";
 import { z } from "zod";
 
 // Every tunable lives here, with a default and an env override. Secrets come only from env.
-const bool = z.enum(["true", "false", "1", "0"]).transform((v) => v === "true" || v === "1");
 const int = (d: number) => z.coerce.number().int().positive().default(d);
 const int0 = (d: number) => z.coerce.number().int().nonnegative().default(d);
 
@@ -14,7 +13,8 @@ const schema = z.object({
   SESSION_DAYS: int(60),
 
   // OTP
-  OTP_TEST_MODE: bool.default(false), // dev only: no message is sent and the code is always 123456
+  // "simulate": nothing is sent and the code is always 1234. "msg91": a random code is sent by MSG91.
+  OTP_DELIVERY: z.enum(["simulate", "msg91"]).default("simulate"),
   OTP_TTL_SEC: int(300),             // a code lives 5 minutes
   OTP_SENDS_PER_WINDOW: int(3),      // 3 sends per number...
   OTP_WINDOW_SEC: int(600),          // ...per 10 minutes
@@ -50,8 +50,8 @@ export function config(): Config {
     throw new Error(`Bad or missing environment variables: ${names}. See .env.example.`);
   }
   const c = parsed.data;
-  if (c.OTP_TEST_MODE && c.NODE_ENV === "production" && process.env.ALLOW_OTP_TEST_MODE_IN_PRODUCTION !== "true") {
-    throw new Error("OTP_TEST_MODE is on in production. Turn it off (or set ALLOW_OTP_TEST_MODE_IN_PRODUCTION=true for a private demo).");
+  if (c.OTP_DELIVERY === "simulate" && c.NODE_ENV === "production" && process.env.ALLOW_OTP_SIMULATION_IN_PRODUCTION !== "true") {
+    throw new Error("OTP_DELIVERY=simulate in production lets anyone log in with 1234. Set OTP_DELIVERY=msg91 (or ALLOW_OTP_SIMULATION_IN_PRODUCTION=true for a private demo).");
   }
   let sessionSecret = c.SESSION_SECRET;
   if (!sessionSecret) {

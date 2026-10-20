@@ -9,14 +9,14 @@ Needs Node 22+ and Docker.
 ```bash
 npm install
 npm run db:up          # Postgres 17 on 127.0.0.1:54329 (dev and test databases)
-cp .env.example .env.local   # then set SESSION_SECRET; OTP_TEST_MODE=true until MSG91 keys are in
+cp .env.example .env.local   # then set DATABASE_URL and SESSION_SECRET
 npm run db:migrate
 npm run db:seed        # HEER01 and its classes
 npm run db:seed:dev    # two demo sanghs (SHAN01, HEERK2), local only
 npm run dev            # http://localhost:3100 (fails clearly if the port is taken)
 ```
 
-With `OTP_TEST_MODE=true` no message is sent and the code is always `123456`. The server refuses test mode when `NODE_ENV=production`.
+Login codes are simulated for now (`OTP_DELIVERY=simulate`): no message is sent and the code is always `1234`. The MSG91 delivery code is in place; set `OTP_DELIVERY=msg91` to turn it on. In production the server refuses simulation unless `ALLOW_OTP_SIMULATION_IN_PRODUCTION=true`.
 
 ## Tests
 
@@ -37,7 +37,7 @@ BASE_URL=http://localhost:3100 node scripts/api-check.mjs   # HTTP checks of eve
 - A child profile needs consent (`child_needs_consent` check); at most one "Myself" and 8 profiles per number.
 - Row-level security: a signed-in account sees only its own sangh, classes, account and profiles. The server runs member queries as the `authenticated` role with Supabase-style JWT claims.
 - An admin can remove a number from their own sangh (`admin_remove_account`), which deletes its profiles and frees the number.
-- OTP: 6 digits, 5-minute expiry, single use, 5 wrong tries, 3 sends per number per 10 minutes, 30 s between sends. Per-IP limits on sends, verifies and lookups. All counters live in Postgres, so they work across instances.
+- OTP: 4 digits, 5-minute expiry, single use, 5 wrong tries, 3 sends per number per 10 minutes, 30 s between sends. Per-IP limits on sends, verifies and lookups. All counters live in Postgres, so they work across instances.
 
 ## Environment variables
 
@@ -49,7 +49,7 @@ See `.env.example`. Secrets are read only by server code; nothing is `NEXT_PUBLI
 | `SESSION_SECRET` | signing the session cookie and hashing OTPs (32+ random chars) |
 | `MSG91_AUTH_KEY`, `MSG91_SMS_TEMPLATE_ID` | SMS codes (DLT-approved OTP template) |
 | `MSG91_WHATSAPP_NUMBER`, `MSG91_WHATSAPP_TEMPLATE`, `MSG91_WHATSAPP_NAMESPACE` | WhatsApp codes (approved authentication template) |
-| `OTP_TEST_MODE` | dev only, default `false` |
+| `OTP_DELIVERY` | `simulate` (default, code is always 1234) or `msg91` |
 
 ## Supabase setup
 

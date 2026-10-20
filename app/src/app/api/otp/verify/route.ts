@@ -6,10 +6,11 @@ import { accountByPhone, findSanghById, joinSangh } from "@/server/onboarding";
 import { setSession } from "@/server/session";
 import { normalizeIndianPhone } from "@/lib/phone";
 import type { VerifyOtpResponse } from "@/lib/api-types";
+import { OTP_PATTERN } from "@/lib/otp-code";
 
 const body = z.discriminatedUnion("intent", [
-  z.object({ intent: z.literal("join"), phone: z.string().max(20), code: z.string().regex(/^\d{6}$/), sanghId: z.uuid() }),
-  z.object({ intent: z.literal("login"), phone: z.string().max(20), code: z.string().regex(/^\d{6}$/) }),
+  z.object({ intent: z.literal("join"), phone: z.string().max(20), code: z.string().regex(OTP_PATTERN), sanghId: z.uuid() }),
+  z.object({ intent: z.literal("login"), phone: z.string().max(20), code: z.string().regex(OTP_PATTERN) }),
 ]);
 
 // POST /api/otp/verify

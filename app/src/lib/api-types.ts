@@ -25,7 +25,7 @@ export type Me = {
 
 export type OtpChannel = "whatsapp" | "sms";
 
-export type SendOtpResponse = { channel: OtpChannel; resendAfterSec: number; expiresInSec: number; testMode: boolean };
+export type SendOtpResponse = { channel: OtpChannel; resendAfterSec: number; expiresInSec: number; simulated: boolean };
 
 export type VerifyOtpResponse =
   | { status: "joined" }            // new account created in the chosen sangh
