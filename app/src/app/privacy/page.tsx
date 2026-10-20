@@ -10,7 +10,7 @@ export default function Page() {
       <header className="bar"><Link href="/" className="logo" aria-label="MyNiyam home"><img src="/brand/wordmark.png" alt="MyNiyam" width={880} height={188} /></Link></header>
       <main className="screen prose">
         <h1>Privacy notice</h1>
-        <p className="pill kesar" style={{ justifySelf: "start" }}>Draft: placeholder text</p>
+        <p className="pill kesar" style={{ alignSelf: "flex-start" }}>Draft: placeholder text</p>
         <h2>What we keep</h2>
         <p>Your mobile number, the pathshala you joined, and for each person on your number: their name, class and the answers your pathshala asks for. Date of birth, photo and location are asked only if your pathshala turns them on.</p>
         <h2>Why</h2>

@@ -12,7 +12,7 @@ type Words = { en: string; hi: string };
 /** Step 1: find the pathshala by code, QR or name search. */
 export function FindStep({ initialCode, onFound }: { initialCode?: string; onFound: (s: SanghCard) => void }) {
   const [mode, setMode] = useState<"code" | "scan" | "search">("code");
-  const [code, setCode] = useState(initialCode ?? "");
+  const [code, setCode] = useState((initialCode ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, JOIN_CODE_LENGTH));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Words | null>(null);
   const tried = useRef<string | null>(null);
@@ -107,7 +107,7 @@ function SearchPanel({ onPick, onBack }: { onPick: (s: SanghCard) => void; onBac
       <Title en="Find your pathshala" hi="अपनी पाठशाला खोजें" />
       <div className="stack mt-5">
         <label className="label" htmlFor="q">Pathshala name <span className="hi" lang="hi">पाठशाला का नाम</span></label>
-        <input id="q" className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. Heer" autoComplete="off" />
+        <input id="q" className="input" type="search" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. Heer" autoComplete="off" />
         {cities.length > 1 && (
           <div className="chips" role="group" aria-label="City">
             <button type="button" className="chip" aria-pressed={city === null} onClick={() => setCity(null)}>All cities</button>

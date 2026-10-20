@@ -16,7 +16,7 @@ const STATUS: Record<ApiError["error"], number> = {
   bad_request: 400, invalid_phone: 400, invalid_code: 400, wrong_code: 400, consent_required: 400,
   invalid_answers: 400, invalid_class: 400, code_not_found: 404, not_found: 404, not_member: 404,
   no_code: 410, code_expired: 410, other_sangh: 409, self_exists: 409, profile_limit: 409,
-  unauthorized: 401, forbidden: 403, too_many_requests: 429, send_failed: 502, server_error: 500,
+  unauthorized: 401, forbidden: 403, too_large: 413, too_many_requests: 429, send_failed: 502, server_error: 500,
 };
 
 export function fail(ctx: Ctx, body: ApiError): NextResponse {
@@ -40,11 +40,14 @@ function clientIp(req: NextRequest): string {
   return createHash("sha256").update(ip.trim()).digest("hex").slice(0, 24);
 }
 
+export class TooLarge extends Error {}
+
+/** Parses and checks the JSON body. Returns null when it is malformed; throws TooLarge over the cap (→ 413). */
 export async function readJson<S extends z.ZodType>(req: NextRequest, schema: S): Promise<z.infer<S> | null> {
   const len = Number(req.headers.get("content-length") || 0);
-  if (len > config().MAX_BODY_BYTES) return null;
+  if (len > config().MAX_BODY_BYTES) throw new TooLarge();
   const text = await req.text();
-  if (text.length > config().MAX_BODY_BYTES) return null;
+  if (text.length > config().MAX_BODY_BYTES) throw new TooLarge();
   try {
     const r = schema.safeParse(JSON.parse(text));
     return r.success ? r.data : null;
@@ -68,6 +71,7 @@ export function route<P = unknown>(name: string, fn: (req: NextRequest, ctx: Ctx
     try {
       res = await fn(req, ctx, await segment.params);
     } catch (e) {
+      if (e instanceof TooLarge) return fail(ctx, { error: "too_large" });
       log.error("unhandled", { route: name, requestId: ctx.requestId, error: (e as Error).message });
       res = fail(ctx, { error: "server_error" });
     }

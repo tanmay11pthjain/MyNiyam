@@ -72,7 +72,7 @@ export function JoinFlow() {
 
       {step.name === "other" && (
         <div className="screen">
-          <Title en="This number is already in a pathshala" hi="यह नंबर पहले से एक पाठशाला में है" lead="One number can belong to only one pathshala." />
+          <Title en={`This number is already in ${step.theirs.name}`} hi={`यह नंबर पहले से ${step.theirs.name} में है`} lead="One number can belong to only one pathshala." />
           <div className="card sangh-card mt-5">
             <SanghLogo name={step.theirs.name} url={step.theirs.logoUrl} />
             <h2>{step.theirs.name}</h2>

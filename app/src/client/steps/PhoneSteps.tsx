@@ -104,7 +104,7 @@ export function OtpStep({ sent, onResent, onVerify, onChangeNumber }: {
   return (
     <div className="screen">
       <Title en="Enter the code" hi="कोड डालें" lead={<>We sent a 6-digit code on <b>{where}</b> to <b style={{ whiteSpace: "nowrap" }}>{formatPhone(sent.phone)}</b>.</>} />
-      {sent.testMode && <p className="pill kesar mt-4" style={{ justifySelf: "start" }}>Test mode: the code is 123456</p>}
+      {sent.testMode && <p className="pill kesar mt-4" style={{ alignSelf: "flex-start" }}>Test mode: the code is 123456</p>}
       <form className="stack mt-5" noValidate onSubmit={(e) => { e.preventDefault(); void verify(code); }}>
         <label className="label sr-only" htmlFor="otp">6-digit code</label>
         <input

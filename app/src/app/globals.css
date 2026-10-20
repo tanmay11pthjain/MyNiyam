@@ -215,8 +215,10 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 @keyframes flicker { 50% { transform: scale(1.04, .96); } }
 
 @media (min-width: 768px) {
-  .frame { padding-top: var(--s-6); }
+  /* On big screens keep the column compact instead of pinning buttons to the window bottom. */
+  .frame { padding-top: var(--s-6); min-height: auto; }
   .screen { padding-top: var(--s-5); }
+  .welcome { padding: var(--s-8) 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

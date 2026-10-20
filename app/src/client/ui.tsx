@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 // Small shared pieces of the onboarding screens.
 
@@ -44,8 +44,9 @@ export function Lamps({ total, lit }: { total: number; lit: number }) {
   );
 }
 
-/** A heading with its Hindi line under it. */
+/** A heading with its Hindi line under it. Each screen has one, so a new screen starts at the top. */
 export function Title({ en, hi, lead }: { en: string; hi: string; lead?: ReactNode }) {
+  useEffect(() => { window.scrollTo(0, 0); }, []);
   return (
     <div>
       <h1>{en}</h1>

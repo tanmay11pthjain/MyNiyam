@@ -19,7 +19,8 @@ export function WhoScreen() {
   const load = useCallback(() => api<Me>("/api/me").then((r) => {
     if (r.ok) {
       setMe(r.data);
-      if (r.data.profiles.length === 0) setView({ name: "add" });
+      // Runs again whenever the screen is shown (Next keeps hidden routes alive), so start fresh.
+      setView(r.data.profiles.length === 0 ? { name: "add" } : { name: "pick" });
     } else if (r.err.error === "unauthorized") router.replace("/login");
     else setLoadErr(say(r.err));
   }), [router]);
