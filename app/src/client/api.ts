@@ -57,4 +57,5 @@ export const fieldError: Record<string, Words> = {
   out_of_range: { en: "That number is out of range.", hi: "यह अंक सही सीमा में नहीं है।" },
   bad_date: { en: "Pick a real date.", hi: "सही तारीख चुनें।" },
   bad_option: { en: "Pick one of the options.", hi: "कोई एक विकल्प चुनें।" },
+  bad_location: { en: "Tap the button again to share your location.", hi: "जगह बताने के लिए बटन फिर दबाएँ।" },
 };

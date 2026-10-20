@@ -16,7 +16,7 @@ export function Home() {
     void api<Me>("/api/me").then((r) => {
       if (r.ok) {
         const p = r.data.profiles.find((x) => x.id === r.data.activeProfileId);
-        if (!p || !p.setupDone) router.replace("/who");
+        if (!p || !p.setupDone || p.missing?.length) router.replace("/who"); // new required questions are asked first
         else setMe(r.data);
       } else if (r.err.error === "unauthorized") router.replace("/");
       else setErr(say(r.err));

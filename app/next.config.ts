@@ -31,8 +31,8 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "DENY" },
-          // Camera only for the QR scanner on this site; nothing else.
-          { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=()" },
+          // Camera for the QR scanner, location for a join form's "home location" question; this site only.
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(self), payment=()" },
           ...(dev ? [] : [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }]),
         ],
       },

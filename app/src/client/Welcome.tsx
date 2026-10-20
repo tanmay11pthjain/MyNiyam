@@ -12,7 +12,7 @@ export function Welcome() {
     void api<Me>("/api/me").then((r) => {
       if (!r.ok) return;
       const active = r.data.profiles.find((p) => p.id === r.data.activeProfileId);
-      router.replace(active?.setupDone ? "/home" : "/who");
+      router.replace(active?.setupDone && !active.missing?.length ? "/home" : "/who");
     });
   }, [router]);
 

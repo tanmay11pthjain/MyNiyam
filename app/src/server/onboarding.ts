@@ -1,7 +1,7 @@
 import "server-only";
 import { asAccount, pgCode, pgHint, sql } from "./db";
 import { config } from "./config";
-import { parseFormFields, validateAnswers, type AnswerErrors } from "@/lib/forms";
+import { missingRequired, parseFormFields, validateAnswers, type AnswerErrors, type FormField } from "@/lib/forms";
 import { maskPhone } from "@/lib/phone";
 import type { ClassItem, Me, Profile, SanghCard } from "@/lib/api-types";
 
@@ -74,26 +74,35 @@ export async function accountByPhone(phone: string): Promise<{ id: string } | nu
   return acc ? { id: acc.id } : null;
 }
 
-type ProfileRow = { id: string; name: string; relation: "self" | "child"; role: Profile["role"]; class_id: string | null; setup_done_at: Date | null };
-const toProfile = (p: ProfileRow): Profile => ({
+type ProfileRow = {
+  id: string; name: string; relation: "self" | "child"; role: Profile["role"]; class_id: string | null; setup_done_at: Date | null;
+  photo_url?: string | null; answers?: Record<string, string | number> | null;
+};
+const toProfile = (p: ProfileRow, fields?: FormField[]): Profile => ({
   id: p.id, name: p.name, relation: p.relation, role: p.role, classId: p.class_id, setupDone: p.setup_done_at !== null,
+  photoUrl: p.photo_url ?? null,
+  answers: p.answers ?? {},
+  // Only for people who finished joining: newly required questions are asked the next time they open the app.
+  missing: fields && p.setup_done_at ? missingRequired(fields, { answers: p.answers ?? {}, classId: p.class_id, photoUrl: p.photo_url ?? null }) : [],
 });
 
 export async function getMe(accountId: string, profileId: string | null): Promise<Me> {
   return asAccount(accountId, async (tx) => {
     const [acc] = await tx`select a.phone, s.id, s.name, s.city, s.logo_url, s.join_code, s.form_fields
       from public.accounts a join public.sanghs s on s.id = a.sangh_id`;
-    const classes = await tx<{ id: string; name: string; name_hi: string | null }[]>`
-      select id, name, name_hi from public.classes order by sort_order, name`;
+    const classes = await tx<{ id: string; name: string; name_hi: string | null; hidden: boolean; age_min: number | null; age_max: number | null }[]>`
+      select id, name, name_hi, hidden, age_min, age_max from public.classes order by sort_order, name`;
     const profiles = await tx<ProfileRow[]>`
-      select id, name, relation, role, class_id, setup_done_at from public.profiles
-      where account_id = ${accountId} order by created_at`;
+      select p.id, p.name, p.relation, p.role, p.class_id, p.setup_done_at, p.photo_url, pa.answers
+      from public.profiles p left join public.profile_answers pa on pa.profile_id = p.id
+      where p.account_id = ${accountId} order by p.created_at`;
+    const fields = parseFormFields(acc.form_fields);
     return {
       phone: maskPhone(acc.phone),
       sangh: toCard(acc as SanghRow),
-      classes: classes.map((c): ClassItem => ({ id: c.id, name: c.name, nameHi: c.name_hi })),
-      formFields: parseFormFields(acc.form_fields),
-      profiles: profiles.map(toProfile),
+      classes: classes.map((c): ClassItem => ({ id: c.id, name: c.name, nameHi: c.name_hi, hidden: c.hidden, ageMin: c.age_min, ageMax: c.age_max })),
+      formFields: fields,
+      profiles: profiles.map((p) => toProfile(p, fields)),
       activeProfileId: profiles.some((p) => p.id === profileId) ? profileId : null,
     };
   });
@@ -130,26 +139,47 @@ export type SetupResult =
   | { ok: false; reason: "not_found" | "invalid_class" }
   | { ok: false; reason: "invalid_answers"; fields: AnswerErrors };
 
-/** Saves the class and the sangh's questions for one profile. Can be repeated (it overwrites). */
+/**
+ * Saves the class and the sangh's questions for one profile. Can be repeated (it overwrites).
+ * Follows the sangh's current join form: the class is needed only if the form asks for it,
+ * a class hidden from new joins can't be picked (unless the person is already in it), and a
+ * required photo must have been uploaded first (POST /api/profiles/:id/photo).
+ */
 export async function setupProfile(
-  accountId: string, profileId: string, classId: string, rawAnswers: Record<string, unknown>,
+  accountId: string, profileId: string, classId: string | null, rawAnswers: Record<string, unknown>,
 ): Promise<SetupResult> {
   return asAccount(accountId, async (tx) => {
-    const [p] = await tx`select id from public.profiles where id = ${profileId} and account_id = ${accountId} for update`;
+    const [p] = await tx`select id, class_id, photo_url from public.profiles where id = ${profileId} and account_id = ${accountId} for update`;
     if (!p) return { ok: false as const, reason: "not_found" as const };
-    const [cls] = await tx`select id from public.classes where id = ${classId}`; // RLS: own sangh only
-    if (!cls) return { ok: false as const, reason: "invalid_class" as const };
     const [s] = await tx`select form_fields from public.sanghs`;
-    const checked = validateAnswers(parseFormFields(s.form_fields), rawAnswers);
-    if (!checked.ok) return { ok: false as const, reason: "invalid_answers" as const, fields: checked.errors };
+    const fields = parseFormFields(s.form_fields);
+    const classField = fields.find((f) => f.type === "class");
+    if (classId) {
+      const [cls] = await tx`select id, hidden from public.classes where id = ${classId}`; // RLS: own sangh only
+      if (!cls || (cls.hidden && p.class_id !== classId)) return { ok: false as const, reason: "invalid_class" as const };
+    } else if (classField?.required) {
+      return { ok: false as const, reason: "invalid_class" as const };
+    }
+    const checked = validateAnswers(fields, rawAnswers);
+    const errors: AnswerErrors = checked.ok ? {} : { ...checked.errors };
+    if (fields.some((f) => f.type === "photo" && f.required) && !p.photo_url) errors.photo = "required";
+    if (!checked.ok || Object.keys(errors).length) return { ok: false as const, reason: "invalid_answers" as const, fields: errors };
     await tx`
       insert into public.profile_answers (profile_id, answers) values (${profileId}, ${tx.json(checked.answers)})
       on conflict (profile_id) do update set answers = excluded.answers, updated_at = now()`;
     const [row] = await tx<ProfileRow[]>`
       update public.profiles set class_id = ${classId}, setup_done_at = coalesce(setup_done_at, now())
       where id = ${profileId}
-      returning id, name, relation, role, class_id, setup_done_at`;
-    return { ok: true as const, profile: toProfile(row) };
+      returning id, name, relation, role, class_id, setup_done_at, photo_url`;
+    return { ok: true as const, profile: toProfile({ ...row, answers: checked.answers }, fields) };
+  });
+}
+
+/** A member's own profile photo. The picture is already stored; this records where. */
+export async function setProfilePhoto(accountId: string, profileId: string, url: string): Promise<boolean> {
+  return asAccount(accountId, async (tx) => {
+    const r = await tx`update public.profiles set photo_url = ${url} where id = ${profileId} and account_id = ${accountId} returning id`;
+    return r.length === 1;
   });
 }
 

@@ -4,7 +4,7 @@ import { setupProfile } from "@/server/onboarding";
 import { readSession } from "@/server/session";
 
 const body = z.object({
-  classId: z.uuid(),
+  classId: z.uuid().nullable().default(null), // null when the pathshala's form doesn't ask for a class
   answers: z.record(z.string().max(40), z.union([z.string().max(200), z.number(), z.null()])).default({}),
 });
 

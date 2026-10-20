@@ -1,10 +1,11 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, fieldError, say } from "./api";
+import { api, say } from "./api";
+import { shrinkImage, upload } from "./images";
+import { JoinForm, type JoinValues } from "./JoinFields";
 import { Button, Chevron, Frame, Msg, Title } from "./ui";
 import type { ApiError, Me, Profile } from "@/lib/api-types";
-import type { FormField } from "@/lib/forms";
 
 type Words = { en: string; hi: string };
 type View = { name: "pick" } | { name: "add" } | { name: "setup"; profile: Profile };
@@ -66,7 +67,7 @@ export function WhoScreen() {
     <Frame>
       <div className="screen">
         <Title en="Who is using MyNiyam?" hi="MyNiyam कौन इस्तेमाल कर रहा है?" lead={<>{me.sangh.name} · {me.phone}</>} />
-        <PickList profiles={me.profiles} className={className} onPicked={(p) => (p.setupDone ? router.push("/home") : setView({ name: "setup", profile: p }))} />
+        <PickList profiles={me.profiles} className={className} onPicked={(p) => (p.setupDone && !p.missing?.length ? router.push("/home") : setView({ name: "setup", profile: p }))} />
         <div className="stack push">
           <Button kind="secondary" onClick={() => setView({ name: "add" })}>Add someone on this number</Button>
         </div>
@@ -161,103 +162,69 @@ function AddPerson({ hasSelf, sanghName, onAdded }: { hasSelf: boolean; sanghNam
 }
 
 function SetupPerson({ me, profile, onDone }: { me: Me; profile: Profile; onDone: () => void }) {
-  const [classId, setClassId] = useState<string | null>(profile.classId);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<JoinValues>({
+    classId: profile.classId,
+    photoUrl: profile.photoUrl ?? null,
+    answers: Object.fromEntries(Object.entries(profile.answers ?? {}).map(([k, v]) => [k, String(v)])),
+  });
   const [fieldErrs, setFieldErrs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Words | null>(null);
+  const fields = me.formFields;
+  const catchUp = profile.setupDone && (profile.missing?.length ?? 0) > 0;
 
   async function finish() {
-    if (!classId) { setErr({ en: "Please pick a class.", hi: "कक्षा चुनें।" }); return; }
-    const missing = Object.fromEntries(me.formFields.filter((f) => f.required && !answers[f.key]?.trim()).map((f) => [f.key, "required"]));
+    const missing: Record<string, string> = {};
+    for (const f of fields) {
+      if (!f.required) continue;
+      const empty = f.type === "class" ? !values.classId : f.type === "photo" ? !values.photoUrl : !values.answers[f.key]?.trim();
+      if (empty) missing[f.key] = "required";
+    }
     if (Object.keys(missing).length) { setFieldErrs(missing); setErr(say({ error: "invalid_answers" })); return; }
     setBusy(true); setErr(null); setFieldErrs({});
-    const r = await api<{ profile: Profile }>(`/api/profiles/${profile.id}`, { method: "PATCH", body: { classId, answers } });
+    const r = await api<{ profile: Profile }>(`/api/profiles/${profile.id}`, { method: "PATCH", body: { classId: values.classId, answers: values.answers } });
     setBusy(false);
     if (r.ok) onDone();
     else {
       const e = r.err as ApiError;
       if (e.fields) setFieldErrs(e.fields);
+      if (e.error === "invalid_class") setFieldErrs({ ...fieldErrs, class: "required" });
       setErr(say(r.err));
     }
+  }
+
+  async function uploadPhoto(file: File): Promise<boolean> {
+    try {
+      const r = await upload<{ photoUrl: string }>(`/api/profiles/${profile.id}/photo`, await shrinkImage(file, 512));
+      if (r.ok) { setValues((v) => ({ ...v, photoUrl: r.data.photoUrl })); setFieldErrs((e) => ({ ...e, photo: "" })); return true; }
+      setErr(say(r.err));
+    } catch {
+      setErr({ en: "That file isn't a picture we can read. Try another photo.", hi: "यह फ़ोटो नहीं खुल रही। दूसरी फ़ोटो चुनें।" });
+    }
+    return false;
   }
 
   const self = profile.relation === "self";
   return (
     <div className="screen">
-      <Title en={self ? "Pick your class" : `Pick ${profile.name}'s class`} hi="कक्षा चुनें" lead={`Your class at ${me.sangh.name}.`} />
-      <div className="stack mt-5" role="radiogroup" aria-label="Class">
-        {me.classes.map((c) => (
-          <button key={c.id} type="button" role="radio" className="choice" aria-checked={classId === c.id} onClick={() => { setClassId(c.id); setErr(null); }}>
-            <span className="radio-dot" aria-hidden="true" />
-            <span className="grow"><span className="t">{c.name}</span>{c.nameHi && <span className="s" lang="hi">{c.nameHi}</span>}</span>
-          </button>
-        ))}
-        {me.classes.length === 0 && <div className="notice"><b>No classes yet</b><span>Your pathshala hasn&apos;t added classes. Ask your teacher.</span></div>}
-      </div>
-
-      {me.formFields.length > 0 && (
-        <div className="stack-lg mt-6">
-          {me.formFields.map((f) => (
-            <Field key={f.key} field={f} value={answers[f.key] ?? ""} error={fieldErrs[f.key]}
-              onChange={(v) => { setAnswers({ ...answers, [f.key]: v }); setFieldErrs({ ...fieldErrs, [f.key]: "" }); }} />
-          ))}
-        </div>
+      {catchUp ? (
+        <Title en="A few new questions" hi="कुछ नए सवाल" lead={`${me.sangh.name} added questions. Please answer them${self ? "" : ` for ${profile.name}`} to carry on.`} />
+      ) : (
+        <Title en={self ? "A little about you" : `A little about ${profile.name}`} hi="थोड़ी जानकारी" lead={`What ${me.sangh.name} asks everyone who joins.`} />
       )}
+      <div className="mt-5">
+        {fields.length > 0 ? (
+          <JoinForm fields={fields} classes={me.classes} values={values} errors={fieldErrs} onPhoto={uploadPhoto}
+            onChange={(v, key) => { setValues(v); setFieldErrs({ ...fieldErrs, [key]: "" }); setErr(null); }} />
+        ) : (
+          <p className="lead">Nothing more to fill in.</p>
+        )}
+      </div>
 
       <div className="stack push">
         <Msg text={err} />
-        <Button busy={busy} onClick={() => void finish()}>{busy ? "Saving…" : "Finish and open MyNiyam"}</Button>
+        <Button busy={busy} onClick={() => void finish()}>{busy ? "Saving…" : catchUp ? "Save and carry on" : "Finish and open MyNiyam"}</Button>
       </div>
-    </div>
-  );
-}
-
-function Field({ field: f, value, error, onChange }: { field: FormField; value: string; error?: string; onChange: (v: string) => void }) {
-  const id = `f-${f.key}`;
-  const words = error ? fieldError[error] ?? fieldError.required : null;
-  const label = (
-    <label className="label" htmlFor={id}>
-      {f.label.en} {f.label.hi && <span className="hi" lang="hi">{f.label.hi}</span>} {!f.required && <span className="opt">(optional)</span>}
-    </label>
-  );
-  const common = { id, "aria-invalid": error ? true : undefined, "aria-describedby": `${id}-msg` } as const;
-  let control;
-  if (f.type === "select") {
-    control = f.options.length <= 5 ? (
-      <div className="chips" role="group" aria-labelledby={id}>
-        {f.options.map((o) => (
-          <button key={o.value} type="button" className="chip" aria-pressed={value === o.value} onClick={() => onChange(value === o.value ? "" : o.value)}>{o.en}</button>
-        ))}
-      </div>
-    ) : (
-      <select {...common} className="input" value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">Choose…</option>
-        {f.options.map((o) => <option key={o.value} value={o.value}>{o.en}{o.hi ? ` · ${o.hi}` : ""}</option>)}
-      </select>
-    );
-    if (f.options.length <= 5) {
-      return (
-        <div className="stack">
-          <span className="label" id={id}>{f.label.en} {f.label.hi && <span className="hi" lang="hi">{f.label.hi}</span>} {!f.required && <span className="opt">(optional)</span>}</span>
-          {control}
-          <Msg id={`${id}-msg`} text={words} />
-        </div>
-      );
-    }
-  } else if (f.type === "date") {
-    control = <input {...common} className="input" type="date" value={value} max={new Date().toISOString().slice(0, 10)} onChange={(e) => onChange(e.target.value)} />;
-  } else if (f.type === "number") {
-    control = <input {...common} className="input" inputMode="numeric" value={value} onChange={(e) => onChange(e.target.value)} />;
-  } else {
-    control = <input {...common} className="input" value={value} placeholder={"placeholder" in f ? f.placeholder : f.type === "location" ? "Your area or town" : undefined}
-      maxLength={f.type === "text" ? f.max : 80} autoComplete={f.type === "location" ? "address-level2" : "off"} onChange={(e) => onChange(e.target.value)} />;
-  }
-  return (
-    <div className="stack">
-      {label}
-      {control}
-      <Msg id={`${id}-msg`} text={words} />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import type { FormField } from "./forms";
 
 export type SanghCard = { id: string; name: string; city: string; logoUrl: string | null; joinCode: string };
 
-export type ClassItem = { id: string; name: string; nameHi: string | null };
+export type ClassItem = { id: string; name: string; nameHi: string | null; hidden?: boolean; ageMin?: number | null; ageMax?: number | null };
 
 export type Profile = {
   id: string;
@@ -12,6 +12,10 @@ export type Profile = {
   role: "student" | "volunteer" | "admin";
   classId: string | null;
   setupDone: boolean;
+  photoUrl?: string | null;
+  answers?: Record<string, string | number>;
+  /** Required questions not answered yet (the admin added them after this person joined). */
+  missing?: string[];
 };
 
 export type Me = {
