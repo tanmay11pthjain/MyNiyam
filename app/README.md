@@ -57,3 +57,5 @@ See `.env.example`. Secrets are read only by server code; nothing is `NEXT_PUBLI
 2. Put its transaction-pooler connection string in `DATABASE_URL`.
 3. `npm run db:migrate && npm run db:seed`.
 4. Optional: schedule cleanup with pg_cron: `select cron.schedule('myniyam-sweep', '*/15 * * * *', 'select private.sweep()');`
+
+Step-by-step setup for Supabase and MSG91: [docs/SETUP.md](docs/SETUP.md).
