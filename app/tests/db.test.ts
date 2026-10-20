@@ -21,6 +21,7 @@ afterAll(async () => { await sql().end(); });
 async function joined(sanghId = heer) {
   const p = phone();
   const r = await joinSangh(p, sanghId);
+  if (r.kind === "closed") throw new Error("sangh is not taking members");
   return { phone: p, accountId: r.accountId };
 }
 
@@ -81,7 +82,7 @@ describe("one number, one sangh", () => {
     const rs = await Promise.all(Array.from({ length: 10 }, () => joinSangh(p, heer)));
     expect(rs.filter((r) => r.kind === "joined")).toHaveLength(1);
     expect(rs.filter((r) => r.kind === "logged_in")).toHaveLength(9);
-    expect(new Set(rs.map((r) => r.accountId)).size).toBe(1);
+    expect(new Set(rs.map((r) => ("accountId" in r ? r.accountId : null))).size).toBe(1);
     const [{ c }] = await sql()`select count(*)::int as c from public.accounts where phone = ${p}`;
     expect(c).toBe(1);
   });
