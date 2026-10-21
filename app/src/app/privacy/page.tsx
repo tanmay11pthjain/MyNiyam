@@ -7,7 +7,9 @@ export const metadata: Metadata = { title: "Privacy · MyNiyam" };
 export default function Page() {
   return (
     <div className="frame">
-      <header className="bar"><Link href="/" className="logo" aria-label="MyNiyam home"><img src="/brand/wordmark.png" alt="MyNiyam" width={880} height={188} /></Link></header>
+      {/* "/" is the static landing page, so a full page load. */}
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+      <header className="bar"><a href="/" className="logo" aria-label="MyNiyam home"><img src="/brand/wordmark.png" alt="MyNiyam" width={880} height={188} /></a></header>
       <main className="screen prose">
         <h1>Privacy notice</h1>
         <p className="pill kesar" style={{ alignSelf: "flex-start" }}>Draft: placeholder text</p>

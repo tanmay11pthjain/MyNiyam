@@ -9,9 +9,10 @@ const dev = process.env.NODE_ENV !== "production";
 const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline'",
+  // The landing page (public/landing.html) loads its two fonts from Google Fonts.
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: blob: https:",
-  "font-src 'self'",
+  "font-src 'self' https://fonts.gstatic.com",
   "connect-src 'self'",
   "media-src 'self' blob:",
   "frame-ancestors 'none'",
@@ -51,7 +52,15 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     // The QR code on the pathshala poster holds https://<app>/j/HEER01.
-    return [{ source: "/j/:code", destination: "/join?code=:code", permanent: false }];
+    return [
+      { source: "/j/:code", destination: "/join?code=:code", permanent: false },
+      // Signed-in members go straight to their Today screen; everyone else sees the landing page.
+      { source: "/", has: [{ type: "cookie", key: "mn_session" }], destination: "/home", permanent: false },
+    ];
+  },
+  async rewrites() {
+    // "/" is the landing page (a static page in public/), not the app's own start screen.
+    return { beforeFiles: [{ source: "/", destination: "/landing.html" }] };
   },
 };
 

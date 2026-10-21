@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useEffect, type ReactNode } from "react";
 
 // Small shared pieces of the onboarding screens.
@@ -16,10 +15,12 @@ export function Frame({ onBack, backLabel = "Back", lamps, right, children }: {
             {backLabel}
           </button>
         ) : (
-          <Link href="/" className="logo" aria-label="MyNiyam home">
+          // A plain link: "/" is the static landing page (or /home when signed in), so it needs a full page load.
+          // eslint-disable-next-line @next/next/no-html-link-for-pages
+          <a href="/" className="logo" aria-label="MyNiyam home">
             <img className="day-only" src="/brand/wordmark.png" alt="MyNiyam" width={880} height={188} />
             <img className="night-only" src="/brand/wordmark-night.png" alt="MyNiyam" width={880} height={188} />
-          </Link>
+          </a>
         )}
         {lamps && <Lamps {...lamps} />}
         {right}
@@ -27,6 +28,12 @@ export function Frame({ onBack, backLabel = "Back", lamps, right, children }: {
       {children}
     </div>
   );
+}
+
+/** "/" is a static page (the landing page, or /home when signed in), so it needs a full page load. */
+export function goToLanding() {
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+  window.location.assign("/");
 }
 
 /** One diya per stage of joining; a stage's lamp lights when it is done. */

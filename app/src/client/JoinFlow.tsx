@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, say } from "./api";
-import { Button, CityLine, Frame, SanghLogo, Title } from "./ui";
+import { Button, CityLine, Frame, goToLanding, SanghLogo, Title } from "./ui";
 import { FindStep } from "./steps/FindStep";
 import { OtpStep, PhoneStep, type Sent } from "./steps/PhoneSteps";
 import type { ApiError, SanghCard, VerifyOtpResponse } from "@/lib/api-types";
@@ -113,7 +113,7 @@ export function LoginFlow() {
   }
 
   return (
-    <Frame onBack={sent ? () => { setPhone(sent.phone); setSent(null); } : () => router.push("/")}>
+    <Frame onBack={sent ? () => { setPhone(sent.phone); setSent(null); } : () => goToLanding()}>
       {!sent ? (
         <PhoneStep
           initialPhone={phone}

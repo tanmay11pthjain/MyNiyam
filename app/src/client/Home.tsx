@@ -6,7 +6,7 @@ import { api, say } from "./api";
 import { Icon } from "./admin/icons";
 import { HistoryTab } from "./HistoryTab";
 import { TodayTab } from "./TodayTab";
-import { Button, Frame } from "./ui";
+import { Button, Frame, goToLanding } from "./ui";
 import type { Me, Profile } from "@/lib/api-types";
 
 type Tab = "today" | "history" | "profile";
@@ -36,7 +36,7 @@ export function Home() {
         const p = r.data.profiles.find((x) => x.id === r.data.activeProfileId);
         if (!p || !p.setupDone || p.missing?.length) router.replace("/who"); // new required questions are asked first
         else setMe(r.data);
-      } else if (r.err.error === "unauthorized") router.replace("/");
+      } else if (r.err.error === "unauthorized") goToLanding();
       else setErr(say(r.err));
     });
   }, [router]);
@@ -91,7 +91,7 @@ function ProfileTab({ p, me, cls }: { p: Profile; me: Me; cls?: string }) {
       <div className="stack">
         <Link className="btn btn-secondary" href={`/who?edit=${p.id}`}>Edit my details</Link>
         <Button kind="secondary" onClick={() => router.push("/who")}>Switch person</Button>
-        <Button kind="quiet" busy={leaving} onClick={async () => { setLeaving(true); await api("/api/session/logout", { body: {} }); router.replace("/"); }}>Log out</Button>
+        <Button kind="quiet" busy={leaving} onClick={async () => { setLeaving(true); await api("/api/session/logout", { body: {} }); goToLanding(); }}>Log out</Button>
       </div>
       <p className="hint center"><Link href="/privacy">Privacy</Link> · MyNiyam v{process.env.NEXT_PUBLIC_APP_VERSION} ({process.env.NEXT_PUBLIC_APP_COMMIT})</p>
     </div>
