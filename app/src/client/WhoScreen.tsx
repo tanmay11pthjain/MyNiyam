@@ -21,7 +21,8 @@ export function WhoScreen() {
     if (r.ok) {
       setMe(r.data);
       // Runs again whenever the screen is shown (Next keeps hidden routes alive), so start fresh.
-      setView(r.data.profiles.length === 0 ? { name: "add" } : { name: "pick" });
+      const edit = r.data.profiles.find((p) => p.id === new URLSearchParams(window.location.search).get("edit"));
+      setView(r.data.profiles.length === 0 ? { name: "add" } : edit ? { name: "setup", profile: edit } : { name: "pick" });
     } else if (r.err.error === "unauthorized") router.replace("/login");
     else setLoadErr(say(r.err));
   }), [router]);

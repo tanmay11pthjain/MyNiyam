@@ -11,7 +11,7 @@ Mobile-first, English for now. Pathshala admins log in with the same phone + OTP
 - **Setup**: join code, QR, PNG, A4 poster, join on/off, name search on/off, details and logo; classes; the join form builder with live preview.
 - **Super admin** (`SUPER_ADMIN_PHONE` only): approve new pathshalas, add them, assign admins.
 
-Demo locally: `npm run db:seed:dev`, then log in at /admin/login with 99999 00001 and code 1234. See [docs/SETUP.md](docs/SETUP.md) Part E.
+Demo locally: `npm run db:seed:dev`. Admin: /admin/login with 99999 00001. Student: /login with 70000 00001 (Meena, Aarav and Siya Shah). Code is always 1234. See [docs/SETUP.md](docs/SETUP.md) Part E and F.
 
 ## Run it locally
 

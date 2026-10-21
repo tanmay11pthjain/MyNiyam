@@ -1,7 +1,37 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "landing", "runtimeExecutable": "python", "runtimeArgs": ["-m", "http.server", "4100", "--directory", "landing"], "port": 4100 },
-    { "name": "app", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "app", "run", "dev"], "port": 3100 }
+    {
+      "name": "landing",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4100",
+        "--directory",
+        "landing"
+      ],
+      "port": 4100
+    },
+    {
+      "name": "app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "dev"
+      ],
+      "port": 3100
+    },
+    {
+      "name": "app-local-db",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set DATABASE_URL=postgres://postgres:myniyam-local@127.0.0.1:54329/myniyam&& set NEXT_DIST_DIR=.next-local&& set SUPER_ADMIN_PHONE=+918431567935&& cd app && node scripts/check-port.mjs 3101 && npx next dev -p 3101"
+      ],
+      "port": 3101
+    }
   ]
 }

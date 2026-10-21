@@ -1,16 +1,34 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, say } from "./api";
+import { Icon } from "./admin/icons";
+import { HistoryTab } from "./HistoryTab";
+import { TodayTab } from "./TodayTab";
 import { Button, Frame } from "./ui";
-import type { Me } from "@/lib/api-types";
+import type { Me, Profile } from "@/lib/api-types";
 
-/** Home after joining. The niyam log itself is the next piece of work; this proves the person landed. */
+type Tab = "today" | "history" | "profile";
+
+const Calendar = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" />
+  </svg>
+);
+
+const TABS: { id: Tab; label: string; icon: () => React.ReactNode }[] = [
+  { id: "today", label: "Today", icon: Icon.niyam },
+  { id: "history", label: "History", icon: Calendar },
+  { id: "profile", label: "Profile", icon: Icon.people },
+];
+
+/** The app after joining: Today, History and Profile, with the person's name always one tap from switching. */
 export function Home() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [err, setErr] = useState<{ en: string; hi: string } | null>(null);
-  const [leaving, setLeaving] = useState(false);
+  const [tab, setTab] = useState<Tab>("today");
 
   useEffect(() => {
     void api<Me>("/api/me").then((r) => {
@@ -28,25 +46,51 @@ export function Home() {
 
   const p = me.profiles.find((x) => x.id === me.activeProfileId)!;
   const cls = me.classes.find((c) => c.id === p.classId);
+
   return (
-    <Frame>
-      <main className="screen center">
-        <svg className="welcome-lamp" viewBox="0 0 96 96" aria-hidden="true">
-          <path className="flame" d="M48 10c9 10.5 12 17.6 12 24.8A12 12 0 0 1 48 47a12 12 0 0 1-12-12.2C36 27.6 39 20.5 48 10z" />
-          <path className="base" d="M10 56h76c-2.4 14.4-17.6 24-38 24S12.4 70.4 10 56z" />
-        </svg>
-        <h1>Jai Jinendra, {p.name}</h1>
-        <p className="hi" lang="hi">जय जिनेन्द्र</p>
-        <p className="lead">You&apos;re in {me.sangh.name}{cls ? `, ${cls.name}` : ""}.</p>
-        <div className="card mt-6" style={{ textAlign: "left" }}>
-          <p><b>Your niyams will show up here.</b></p>
-          <p className="hint mt-4">Your pathshala is setting them up. <span lang="hi">आपकी पाठशाला नियम तैयार कर रही है।</span></p>
-        </div>
-        <div className="stack push">
-          <Button kind="secondary" onClick={() => router.push("/who")}>Switch person</Button>
-          <Button kind="quiet" busy={leaving} onClick={async () => { setLeaving(true); await api("/api/session/logout", { body: {} }); router.replace("/"); }}>Log out</Button>
-        </div>
+    <Frame right={
+      <Link href="/who" className="who-chip" aria-label={`${p.name}. Switch person`}>
+        <span className="avatar kesar" aria-hidden="true">{p.name.charAt(0).toUpperCase()}</span>
+        <span className="who-name">{p.name}</span>
+      </Link>
+    }>
+      <main className="screen app-main">
+        <p className="sangh-line">{me.sangh.name}{cls ? ` · ${cls.name}` : ""}</p>
+        {tab === "today" && <TodayTab />}
+        {tab === "history" && <HistoryTab />}
+        {tab === "profile" && <ProfileTab p={p} me={me} cls={cls?.name} />}
+        <footer className="app-foot">
+          Presented by Heer Sena · Developed by Tanmay Dhelariya · v{process.env.NEXT_PUBLIC_APP_VERSION} ({process.env.NEXT_PUBLIC_APP_COMMIT})
+        </footer>
       </main>
+      <nav className="tabbar" aria-label="Main">
+        {TABS.map((t) => (
+          <button key={t.id} type="button" aria-current={tab === t.id ? "page" : undefined} onClick={() => { setTab(t.id); window.scrollTo(0, 0); }}>
+            <t.icon />{t.label}
+          </button>
+        ))}
+      </nav>
     </Frame>
+  );
+}
+
+function ProfileTab({ p, me, cls }: { p: Profile; me: Me; cls?: string }) {
+  const router = useRouter();
+  const [leaving, setLeaving] = useState(false);
+  return (
+    <div className="stack-lg">
+      <section className="card prof">
+        <span className="avatar kesar big" aria-hidden="true">{p.name.charAt(0).toUpperCase()}</span>
+        <h1>{p.name}</h1>
+        <p className="hint">{p.relation === "self" ? "Myself" : "Child"}{cls ? ` · ${cls}` : ""}</p>
+        <p className="hint">{me.sangh.name}, {me.sangh.city} · {me.phone}</p>
+      </section>
+      <div className="stack">
+        <Link className="btn btn-secondary" href={`/who?edit=${p.id}`}>Edit my details</Link>
+        <Button kind="secondary" onClick={() => router.push("/who")}>Switch person</Button>
+        <Button kind="quiet" busy={leaving} onClick={async () => { setLeaving(true); await api("/api/session/logout", { body: {} }); router.replace("/"); }}>Log out</Button>
+      </div>
+      <p className="hint center"><Link href="/privacy">Privacy</Link> · MyNiyam v{process.env.NEXT_PUBLIC_APP_VERSION} ({process.env.NEXT_PUBLIC_APP_COMMIT})</p>
+    </div>
   );
 }

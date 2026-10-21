@@ -4,8 +4,8 @@ import { useEffect, type ReactNode } from "react";
 
 // Small shared pieces of the onboarding screens.
 
-export function Frame({ onBack, backLabel = "Back", lamps, children }: {
-  onBack?: () => void; backLabel?: string; lamps?: { total: number; lit: number }; children: ReactNode;
+export function Frame({ onBack, backLabel = "Back", lamps, right, children }: {
+  onBack?: () => void; backLabel?: string; lamps?: { total: number; lit: number }; right?: ReactNode; children: ReactNode;
 }) {
   return (
     <div className="frame">
@@ -22,6 +22,7 @@ export function Frame({ onBack, backLabel = "Back", lamps, children }: {
           </Link>
         )}
         {lamps && <Lamps {...lamps} />}
+        {right}
       </header>
       {children}
     </div>

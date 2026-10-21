@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const dev = process.env.NODE_ENV !== "production";
 
@@ -18,7 +20,16 @@ const csp = [
   "object-src 'none'",
 ].join("; ");
 
+// The footer shows the version and the commit it was built from. Hosts set their own commit variable.
+const version = (JSON.parse(readFileSync("./package.json", "utf8")) as { version: string }).version;
+const commit = (process.env.VERCEL_GIT_COMMIT_SHA || process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || "").slice(0, 7) || (() => {
+  try { return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); } catch { return "dev"; }
+})();
+
 const nextConfig: NextConfig = {
+  // A second dev server (for example one on the local database) needs its own build folder.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+  env: { NEXT_PUBLIC_APP_VERSION: version, NEXT_PUBLIC_APP_COMMIT: commit },
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
