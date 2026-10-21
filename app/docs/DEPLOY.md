@@ -45,36 +45,41 @@ Do **not** run `db:seed:dev` or `db:reset` on Supabase.
 
 ## Part 2: GitHub (your existing repo)
 
-The code goes into your existing repo, https://github.com/tanmay11pthjain/MyNiyam. That repo already has the older v5 app at its root. Its history has been merged in, so **nothing is lost or overwritten**: the v5 files stay at the root, and the new app sits in the `app` folder beside them.
+The code goes into your existing repo, https://github.com/tanmay11pthjain/MyNiyam. The old v5 app has been **removed** from it: after this push the repo holds only the new app (in the `app` folder). The v5 files still exist in the repo's history, so they can be brought back if ever needed.
 
 1. In the terminal, go to the project folder:
    ```
-   cd C:Users	anmaDesktopMyNiyam
+   cd C:\Users\tanma\Desktop\MyNiyam
    ```
 2. Push:
    ```
    git push -u origin main
    ```
    If Git asks you to sign in, use the browser window it opens. Never use `--force`.
-3. Refresh the GitHub page. You should see the `app` folder next to the old files.
+3. Refresh the GitHub page. You should see `app`, `landing` and a few notes, and none of the v5 files.
 
 `app/.env.local` is git-ignored, so your passwords and keys are not uploaded.
 
-If your v5 app is already on Vercel from this repo, that site keeps working: its files did not change. The new app gets its own, second Vercel project in Part 3.
+If v5 was already on Vercel from this repo, that site will stop working after the push, because its files are gone. Part 3 points that same Vercel project at the new app, so it keeps the same address.
 
 ---
 
 ## Part 3: Vercel
 
+**If v5 is already on Vercel from this repo** (most likely), reuse that project so the address stays the same:
+
+1. Go to https://vercel.com, open the MyNiyam project, then **Settings → Build and Deployment** (sometimes called **General**).
+2. **Root Directory:** set it to `app` and save.
+3. **Framework Preset:** set it to **Next.js** and save. Leave the build and output commands on their defaults.
+4. Go to **Settings → Environment Variables** and add the variables in the table below (step 5 below shows how to make `SESSION_SECRET`). Delete any old v5 variables (for example Firebase keys) that the new app does not use.
+5. Go to **Deployments**, open the newest one and click **Redeploy** (or just push again). Then continue at step 7 below.
+
+**If there is no Vercel project yet:**
+
 1. Go to https://vercel.com and **sign in with GitHub**.
-2. Click **Add New… → Project**, find `MyNiyam` and click **Import**. This makes a **new, second** project; your existing v5 project is not touched.
-   If it isn't listed, click **Adjust GitHub App Permissions** and allow the repository.
-3. On the setup screen:
-   - **Project Name:** something like `myniyam-app`, so it is easy to tell apart from the v5 project.
-   - **Root Directory:** click **Edit** and pick `app`. This matters: the new app lives in that folder (the root still holds v5).
-   - **Framework Preset:** Next.js (it should pick this by itself).
-   - Leave the build and output settings as they are.
-4. Open **Environment Variables** and add these one by one (name on the left, value on the right):
+2. Click **Add New… → Project**, find `MyNiyam` and click **Import**.
+3. Set **Root Directory** to `app`. **Framework Preset:** Next.js.
+4. The environment variables (name on the left, value on the right):
 
    | Name | Value |
    | --- | --- |
@@ -100,7 +105,7 @@ If your v5 app is already on Vercel from this repo, that site keeps working: its
    - open `https://<your address>/admin/login`, log in with **99999 00001**, code **1234**.
 8. The footer shows the version and the commit Vercel built, so you can tell which version the team is seeing.
 
-From now on, every `git push` to `main` makes Vercel build and publish the new version by itself (the v5 project rebuilds too, with no change).
+From now on, every `git push` to `main` makes Vercel build and publish the new version by itself.
 
 ### Your own super admin login (optional)
 
