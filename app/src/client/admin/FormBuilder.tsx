@@ -76,11 +76,8 @@ function Builder({ page }: { page: FormPage }) {
       <div className="builder">
         <div className="stack-lg">
           <div className="stack">
-            <div className="fcard" aria-label="Always asked">
-              <div className="fcard-head"><span className="grow"><span className="t" style={{ font: "700 var(--fs-16) var(--font-display)" }}>Name</span><br /><span className="type-tag">Always asked</span></span></div>
-            </div>
-            <div className="fcard">
-              <div className="fcard-head"><span className="grow"><span style={{ font: "700 var(--fs-16) var(--font-display)" }}>Mobile number</span><br /><span className="type-tag">Always asked · checked with a code</span></span></div>
+            <div className="fcard locked">
+              <div className="fcard-head"><span className="grow"><span style={{ font: "700 var(--fs-16) var(--font-display)" }}>Name and mobile number</span><br /><span className="type-tag">Always asked. The number is checked with a code.</span></span></div>
             </div>
             {fields.map((f, i) => (
               <FieldCard key={f.key} field={f} index={i} count={fields.length} open={open === f.key}
@@ -93,7 +90,7 @@ function Builder({ page }: { page: FormPage }) {
 
           {missingStd.length > 0 && (
             <section className="section">
-              <h2>Turn on a standard question</h2>
+              <h2>Add a common question</h2>
               <div className="chips">
                 {missingStd.map((s) => (
                   <button key={s.key} type="button" className="chip" onClick={() => { setFields([...fields, { ...s }]); setOpen(s.key); }}>+ {s.label.en}</button>
@@ -147,7 +144,7 @@ function FieldCard({ field: f, index, count, open, onToggle, onMove, onChange, o
         <button type="button" className="grow" aria-expanded={open} aria-controls={id} onClick={onToggle}
           style={{ border: 0, background: "none", textAlign: "left", cursor: "pointer", padding: "var(--s-1) 0", minHeight: 44 }}>
           <span style={{ font: "700 var(--fs-16) var(--font-display)", display: "block" }}>{name}</span>
-          <span className="type-tag">{std ? "Standard" : "Your question"} · {TYPE_NAME[f.type]}{f.required ? " · required" : ""}</span>
+          <span className="type-tag">{TYPE_NAME[f.type]}{f.required ? " · must answer" : " · can skip"}</span>
         </button>
         <UpDown index={index} count={count} label={name} onMove={onMove} />
         <button type="button" className="icon-btn" aria-label={`Edit ${name}`} aria-expanded={open} onClick={onToggle}><Icon.edit /></button>
@@ -162,7 +159,7 @@ function FieldCard({ field: f, index, count, open, onToggle, onMove, onChange, o
               onChange={(e) => onChange({ ...f, label: { ...f.label, hi: e.target.value || undefined } })} /></div>
           {f.type === "select" && !std && <OptionsEditor field={f} onChange={onChange} />}
           {f.type === "select" && std && <p className="hint">Choices: {f.options.map((o) => o.en).join(", ")}</p>}
-          <div className="list"><Switch label="Required" sub={f.required ? "New members must answer." : "New members may skip it."} checked={f.required} onChange={(v) => onChange({ ...f, required: v })} /></div>
+          <div className="list"><Switch label="Must answer" sub={f.required ? "Members can't carry on without it." : "Members may skip it."} checked={f.required} onChange={(v) => onChange({ ...f, required: v })} /></div>
           <Button kind="quiet" onClick={onRemove}>
             <span style={{ color: "var(--danger)", display: "inline-flex", gap: 8, alignItems: "center" }}><Icon.trash />{std ? "Stop asking this" : "Delete this question"}</span>
           </Button>

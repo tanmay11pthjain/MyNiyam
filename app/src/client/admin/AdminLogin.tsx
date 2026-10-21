@@ -13,8 +13,9 @@ export function AdminLogin() {
       {!sent ? (
         <PhoneStep
           initialPhone={phone}
-          title={{ en: "Pathshala admin", hi: "पाठशाला एडमिन", lead: "Log in with your mobile number to run your pathshala." }}
+          title={{ en: "Pathshala admin", hi: "पाठशाला एडमिन", lead: "Log in with the mobile number MyNiyam has as your pathshala's admin." }}
           onSent={setSent}
+          forAdmin
         />
       ) : (
         <OtpStep

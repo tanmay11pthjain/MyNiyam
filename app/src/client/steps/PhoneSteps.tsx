@@ -22,8 +22,9 @@ export function PrivacyNotice() {
 }
 
 /** Asks for the number and sends the first code on WhatsApp. */
-export function PhoneStep({ title, onSent, initialPhone }: {
+export function PhoneStep({ title, onSent, initialPhone, forAdmin }: {
   title: { en: string; hi: string; lead: string }; onSent: (s: Sent) => void; initialPhone?: string;
+  forAdmin?: boolean; // the admin log-in: no member hints or member privacy notice
 }) {
   const [digits, setDigits] = useState(initialPhone?.replace(/^\+91/, "") ?? "");
   const [busy, setBusy] = useState(false);
@@ -52,13 +53,13 @@ export function PhoneStep({ title, onSent, initialPhone }: {
             onChange={(e) => { setDigits(e.target.value.replace(/[^\d ]/g, "")); setErr(null); }}
           />
         </div>
-        <p className="hint" id="phone-hint">Children can use a parent&apos;s number. <span lang="hi">बच्चे माता-पिता का नंबर इस्तेमाल करें।</span></p>
+        {!forAdmin && <p className="hint" id="phone-hint">Children can use a parent&apos;s number. <span lang="hi">बच्चे माता-पिता का नंबर इस्तेमाल करें।</span></p>}
         <Msg id="phone-msg" text={err} />
         <Button type="submit" busy={busy} disabled={digits.replace(/\D/g, "").length < 10}>
           {busy ? "Sending code…" : "Send code on WhatsApp"}
         </Button>
       </form>
-      <div className="mt-5"><PrivacyNotice /></div>
+      {!forAdmin && <div className="mt-5"><PrivacyNotice /></div>}
     </div>
   );
 }

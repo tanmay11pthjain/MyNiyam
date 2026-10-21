@@ -28,7 +28,7 @@ const TABS = [
 /** Wraps every /admin page: checks the session, opens a sangh, and draws the header and tabs. */
 export function AdminApp({ children }: { children: ReactNode }) {
   const path = usePathname();
-  if (path === "/admin/login") return <ToastHost><div className="admin bare">{children}</div></ToastHost>;
+  if (path === "/admin/login") return <ToastHost>{children}</ToastHost>;
   return <ToastHost><Gate path={path}>{children}</Gate></ToastHost>;
 }
 
