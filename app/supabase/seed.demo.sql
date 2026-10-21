@@ -1,19 +1,22 @@
 -- DEMO ACCOUNTS for a presentation. Safe on the live database: it only adds, and runs once.
 -- Remove them all later with `npm run db:demo:remove`.
 --
---   Admin1            99999 00001   admin of HEER01 (log in at /admin/login)
---   User1, 2, 3       70000 00001   one family: User1 (adult), User2 and User3 (children)
---   User4             70000 00002   an adult on their own number
+--   Admin1   99999 00001   admin of HEER01 (log in at /admin/login)
+--   User1    70000 00001   a member of HEER01 (log in at /login)
 --
 -- Login codes are simulated (1234) only for numbers listed in DEMO_PHONES on the server.
--- HEER01 gets five starter niyams only if it has none yet. Demo people get 14 days of history.
+-- HEER01 gets five starter niyams only if it has none yet. User1 gets 14 days of history.
+-- An earlier, bigger demo (User2 to User4) is trimmed back to these two.
 do $$
 declare
   heer uuid := (select id from public.sanghs where join_code = 'HEER01');
   fam record; acc uuid; prof uuid; cls uuid; n record; d int;
 begin
   if heer is null then raise exception 'HEER01 not found: run npm run db:seed first'; end if;
-  if exists (select 1 from public.accounts where phone in ('+917000000001', '+917000000002')) then
+  delete from public.accounts where phone = '+917000000002';
+  delete from public.profiles p using public.accounts a
+    where a.id = p.account_id and a.phone = '+917000000001' and p.name in ('User2', 'User3');
+  if exists (select 1 from public.accounts where phone = '+917000000001') then
     raise notice 'demo accounts already exist; nothing to do';
     return;
   end if;
@@ -33,10 +36,7 @@ begin
   end if;
 
   for fam in select * from (values
-    ('+917000000001', 'User1', 'self',  'Yuva and adults',     'female', '1985-03-02'),
-    ('+917000000001', 'User2', 'child', 'Bal (age 8 to 12)',   'male',   '2016-07-19'),
-    ('+917000000001', 'User3', 'child', 'Shishu (age 4 to 7)', 'female', '2020-01-11'),
-    ('+917000000002', 'User4', 'self',  'Yuva and adults',     'male',   '1990-11-30')
+    ('+917000000001', 'User1', 'self', 'Yuva and adults', 'female', '1985-03-02')
   ) as t(phone, name, relation, class_name, gender, dob)
   loop
     select id into acc from public.accounts where phone = fam.phone;
@@ -57,7 +57,7 @@ begin
   -- logging window, so the window check is set aside for this insert only.
   alter table public.niyam_logs disable trigger niyam_logs_window;
   for prof in select p.id from public.profiles p join public.accounts a on a.id = p.account_id
-              where a.phone in ('+917000000001', '+917000000002') loop
+              where a.phone = '+917000000001' loop
     for d in 1..14 loop
       continue when (hashtext(prof::text || d::text) % 10 + 10) % 10 < 2;
       for n in select id, type, target, options from public.niyams where sangh_id = heer and status = 'active' loop

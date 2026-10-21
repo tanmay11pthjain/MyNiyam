@@ -7,8 +7,7 @@ Login codes stay **simulated** (always 1234), but only for the demo numbers belo
 | Who | Number | Where to log in |
 | --- | --- | --- |
 | Admin1 (admin of HEER01) | 99999 00001 | `/admin/login` |
-| User1 (adult), User2 and User3 (children) | 70000 00001 | `/login` |
-| User4 (adult) | 70000 00002 | `/login` |
+| User1 (a member of HEER01) | 70000 00001 | `/login` |
 
 The code is always **1234**.
 
@@ -36,8 +35,8 @@ Your `app/.env.local` already points `DATABASE_URL` at Supabase, so these comman
    npm run db:seed:demo
    ```
    You should see `ran supabase/seed.demo.sql`. Running it a second time changes nothing.
-   It adds Admin1 as a HEER01 admin, User1 to User4 with 14 days of history, and five starter niyams **only if HEER01 has no niyams yet**.
-5. Check in Supabase: **Table Editor → profiles** shows User1, User2, User3 and User4.
+   It adds Admin1 as a HEER01 admin, User1 with 14 days of history, and five starter niyams **only if HEER01 has no niyams yet**.
+5. Check in Supabase: **Table Editor → profiles** shows User1.
 
 Do **not** run `db:seed:dev` or `db:reset` on Supabase.
 
@@ -87,7 +86,7 @@ If v5 was already on Vercel from this repo, that site will stop working after th
    | `SESSION_SECRET` | a **new** random value (see step 5) |
    | `OTP_DELIVERY` | `simulate` |
    | `ALLOW_OTP_SIMULATION_IN_PRODUCTION` | `true` |
-   | `DEMO_PHONES` | `+919999900001,+917000000001,+917000000002` |
+   | `DEMO_PHONES` | `+919999900001,+917000000001` |
    | `DB_POOL_MAX` | `3` |
    | `SUPABASE_URL` | from `app/.env.local` (needed for logo and photo uploads) |
    | `SUPABASE_SERVICE_ROLE_KEY` | from `app/.env.local` (needed for logo and photo uploads) |
