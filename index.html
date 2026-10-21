@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="MyNiyam V4 — Admin-controlled spiritual companion for daily Jain sadhana.">
+  <meta name="theme-color" content="#E8722A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MyNiyam">
+  <title>MyNiyam - Aapka Adhyatmik Saathi 🙏</title>
+  <!-- Favicon — cropped from the actual logo artwork (logo.png), just the
+       folded-hands glyph, on the app's own cream (--bg) tile. -->
+  <link rel="icon" type="image/png" href="favicon.png?v=3">
+  <!-- PWA manifest — see manifest.json. apple-touch-icon covers iOS, which
+       ignores the manifest's own icons list for home-screen purposes. -->
+  <link rel="manifest" href="manifest.json?v=2">
+  <link rel="apple-touch-icon" href="icon-192.png?v=2">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- The app no longer READS from Sheets (Firebase is master — see
+       auth.js), but it still WRITES there in the background (registration,
+       profile edits, photo uploads all mirror to the Sheet for your own
+       reference), and fetchSanghs() has a transitional Sheet fallback until
+       the one-time migration populates sanghs/ in Firebase — preconnecting
+       lets whichever of those fires first skip DNS/TLS setup. -->
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="preconnect" href="https://script.googleusercontent.com">
+  <link rel="preconnect" href="https://my-niyam-default-rtdb.firebaseio.com">
+  <!-- Non-blocking font load: the stylesheet fetches with media="print" (so it
+       doesn't block rendering), then swaps to "all" once loaded. The
+       <noscript> fallback covers the rare case of JS being disabled. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
+  <link rel="stylesheet" href="styles.css?v=45">
+  <script>
+    // Decide the boot state before <body> even exists, so no element lookup
+    // is possible here — the previous version of this check ran mid-body and
+    // reached for #login-screen before it was parsed, threw, and got
+    // silently swallowed by its own try/catch, which is why the loading
+    // screen never actually appeared. Working purely off documentElement
+    // sidesteps that whole class of bug.
+    try {
+      var hasSession = !!localStorage.getItem('myniyam_session');
+      if (!hasSession) {
+        // Firebase compat's default persistence is 'local', which stores its
+        // own restored-session key independently of 'myniyam_session'. A
+        // visitor with only this key (e.g. mid-way through the very first
+        // Sheet round-trip) is still a genuine returning user.
+        for (var i = 0; i < localStorage.length; i++) {
+          if (localStorage.key(i).indexOf('firebase:authUser:') === 0) { hasSession = true; break; }
+        }
+      }
+      if (hasSession) document.documentElement.classList.add('booting-session');
+    } catch (e) { /* storage blocked — boot normally into landing/login */ }
+  </script>
+</head>
+<body class="landing-open">
+
+  <!-- ===== LANDING PAGE ===== -->
+  <div id="landing-screen">
+
+    <!-- Scroll-progress bar — position:fixed, so it stays pinned to the
+         viewport regardless of #landing-screen's own internal scrolling.
+         Filled by _setupLandingScrollEffects() as the visitor scrolls. -->
+    <div class="landing-progress-bar" id="landing-progress-bar"></div>
+
+    <!-- HERO -->
+    <section class="landing-hero" id="landing-hero">
+      <div class="login-bg-glow"></div>
+      <div class="login-particles" id="landing-particles"></div>
+      <div class="landing-hero-content">
+        <div class="login-lotus">
+          <div class="lotus-petal p1"></div>
+          <div class="lotus-petal p2"></div>
+          <div class="lotus-petal p3"></div>
+          <div class="lotus-petal p4"></div>
+          <div class="lotus-petal p5"></div>
+          <div class="lotus-petal p6"></div>
+          <div class="lotus-petal p7"></div>
+          <div class="lotus-petal p8"></div>
+          <div class="lotus-center"></div>
+        </div>
+        <h1 class="landing-title">
+          <img class="mn-logo-img" src="logo.png?v=1" alt="MyNiyam">
+        </h1>
+        <p class="landing-subtitle">Aapka Adhyatmik Saathi</p>
+        <p class="landing-tagline">Your daily companion for Jain sadhana — Navkarsi, Samayik, Pratikraman and Swadhyay, tracked and celebrated with your Sangh.</p>
+        <button class="landing-cta landing-cta-primary">🙏 Fill My Niyam</button>
+        <div class="landing-scroll-cue">↓ Discover MyNiyam</div>
+      </div>
+    </section>
+
+    <!-- LIVE STATS -->
+    <section class="landing-stats-band landing-reveal" id="landing-stats-band">
+      <div class="landing-stat">
+        <span class="landing-stat-value" id="landing-stat-users">—</span>
+        <span class="landing-stat-label">Sadhaks on MyNiyam</span>
+      </div>
+      <div class="landing-stat">
+        <span class="landing-stat-value" id="landing-stat-sanghs">—</span>
+        <span class="landing-stat-label">Sanghs &amp; Pathshalas</span>
+      </div>
+    </section>
+
+    <!-- WHY DAILY NIYAM MATTERS -->
+    <section class="landing-section landing-reveal">
+      <h2 class="landing-section-heading">नियम — Why Daily Niyam Matters</h2>
+      <p class="landing-section-intro">In Jain tradition, a niyam is a small daily vow — a promise kept not once, but every single day. It is in this daily repetition that true discipline is born.</p>
+      <div class="landing-cards">
+        <div class="landing-card">
+          <span class="landing-card-icon">🕉️</span>
+          <h3 class="landing-card-title">Discipline</h3>
+          <p class="landing-card-text">A niyam trains the mind before it trains the body — showing up daily, even when it's inconvenient.</p>
+        </div>
+        <div class="landing-card">
+          <span class="landing-card-icon">🔥</span>
+          <h3 class="landing-card-title">Consistency</h3>
+          <p class="landing-card-text">Spiritual growth isn't one grand gesture — it's the quiet, unbroken thread of daily practice.</p>
+        </div>
+        <div class="landing-card">
+          <span class="landing-card-icon">🌱</span>
+          <h3 class="landing-card-title">Small Vows Compound</h3>
+          <p class="landing-card-text">One Samayik, one Pratikraman, one day at a time — small acts of sadhana add up to a lifetime of merit.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="landing-section landing-reveal">
+      <h2 class="landing-section-heading">How MyNiyam Works</h2>
+      <div class="landing-steps">
+        <div class="landing-step">
+          <span class="landing-step-number">1</span>
+          <span class="landing-step-icon">🏛️</span>
+          <h3 class="landing-step-title">Join Your Sangh</h3>
+          <p class="landing-step-text">Sign in and connect with your Pathshala or Sangh.</p>
+        </div>
+        <div class="landing-step">
+          <span class="landing-step-number">2</span>
+          <span class="landing-step-icon">📿</span>
+          <h3 class="landing-step-title">Log Your Niyams Daily</h3>
+          <p class="landing-step-text">Mark your Navkarsi, Samayik, Pratikraman and more, each day.</p>
+        </div>
+        <div class="landing-step">
+          <span class="landing-step-number">3</span>
+          <span class="landing-step-icon">🔥</span>
+          <h3 class="landing-step-title">Build Your Streak</h3>
+          <p class="landing-step-text">Watch your discipline grow, day after day.</p>
+        </div>
+        <div class="landing-step">
+          <span class="landing-step-number">4</span>
+          <span class="landing-step-icon">🏆</span>
+          <h3 class="landing-step-title">Celebrate Together</h3>
+          <p class="landing-step-text">Your Sangh sees the leaderboard and celebrates every sadhak's progress.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHAT YOU CAN TRACK -->
+    <section class="landing-section landing-reveal">
+      <h2 class="landing-section-heading">What You Can Track</h2>
+      <div class="landing-niyam-grid" id="landing-niyam-grid"><!-- Populated by JS: _renderLandingNiyamGrid() --></div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="landing-footer landing-reveal">
+      <button class="landing-cta landing-cta-primary">🙏 Fill My Niyam</button>
+      <p class="landing-footer-url">🌐 myniyam.heersena.com</p>
+      <div class="app-footer">
+        <img src="logo-icon.webp?v=1" alt="" class="app-footer-icon">
+        <div class="app-footer-text">
+          <span>Presented by Heer Sena</span>
+          <span>Developed by Tanmay Dhelariya</span>
+        <span class="app-footer-version"></span>
+        </div>
+      </div>
+    </footer>
+
+    <!-- STICKY CTA BAR — its button is picked up by the same
+         `.landing-cta` querySelectorAll in _ensureLandingReady() that wires
+         the hero/footer buttons, so no separate JS binding is needed. -->
+    <div class="landing-sticky-cta" id="landing-sticky-cta">
+      <button class="landing-cta">🙏 Fill My Niyam</button>
+    </div>
+  </div>
+  <!-- ===== LOADING SCREEN ===== -->
+  <!-- Visibility is driven entirely by the `booting-session` class on <html>
+       (see the <head> script and styles.css) — not by a `hidden` class on
+       this element — so there's a single source of truth for "are we still
+       resolving a returning session?" that CSS, the boot script, and
+       _hideLoadingScreen() in app.js all agree on. Hidden again by whichever
+       of initUser() / initAdmin() / showRegistrationForm() / showLoginScreen()
+       turns out to be the real destination. The Retry button only appears if
+       that check is still unresolved after ~10s. -->
+  <div id="loading-screen">
+    <div class="login-bg-glow"></div>
+    <div class="loading-content">
+      <div class="login-lotus">
+        <div class="lotus-petal p1"></div>
+        <div class="lotus-petal p2"></div>
+        <div class="lotus-petal p3"></div>
+        <div class="lotus-petal p4"></div>
+        <div class="lotus-petal p5"></div>
+        <div class="lotus-petal p6"></div>
+        <div class="lotus-petal p7"></div>
+        <div class="lotus-petal p8"></div>
+        <div class="lotus-center"></div>
+      </div>
+      <img class="mn-logo-img mn-logo-img--animate" src="logo.png?v=1" alt="MyNiyam">
+      <div class="loading-spinner"></div>
+      <p class="loading-text">Loading your niyams…</p>
+      <button type="button" class="loading-retry-btn hidden" id="btn-loading-retry">Retry</button>
+    </div>
+  </div>
+
+  <script>
+    // Skip the landing entirely for a returning visitor — runs synchronously
+    // during parse, before it can paint, so there's no flash of it. Keyed off
+    // the SAME `booting-session` class the <head> script already computed
+    // (rather than re-reading storage here) so the two can never disagree.
+    // This hide is permanent for the rest of the session — unlike the login
+    // screen, the landing page never needs to reappear once dismissed.
+    if (document.documentElement.classList.contains('booting-session')) {
+      document.getElementById('landing-screen').classList.add('hidden');
+      document.body.classList.remove('landing-open');
+    }
+  </script>
+
+  <!-- Persistent database-error warning — see _showDbErrorBanner() in app.js.
+       Shown only when a realtime listener fails (e.g. Firebase rules denying
+       access); sits above whichever screen is active. -->
+  <div id="db-error-banner" class="hidden"></div>
+
+  <!-- ===== PWA INSTALL REMINDER ===== -->
+  <!-- Bottom banner (never top — #db-error-banner above already owns the
+       top). Visibility is driven entirely by _updateInstallBanner() in
+       app.js — see its own comment for the full rule (phone, not already
+       installed, signed in as a member, not recently dismissed). The
+       Install button only ever appears when a real beforeinstallprompt was
+       captured; otherwise #pwa-install-subtext carries manual
+       "Add to Home Screen" instructions instead. -->
+  <div id="pwa-install-banner" class="hidden">
+    <div class="pwa-install-content">
+      <span class="pwa-install-icon">📲</span>
+      <div class="pwa-install-text">
+        <strong>Install MyNiyam</strong>
+        <span id="pwa-install-subtext">Add to your home screen for quick access</span>
+      </div>
+    </div>
+    <div class="pwa-install-actions">
+      <button type="button" class="pwa-install-btn hidden" id="btn-pwa-install">Install</button>
+      <button type="button" class="pwa-install-dismiss" id="btn-pwa-dismiss" aria-label="Dismiss">✕</button>
+    </div>
+  </div>
+
+  <!-- ===== LOGIN SCREEN ===== -->
+  <div id="login-screen">
+    <div class="login-bg-glow"></div>
+    <div class="login-particles" id="login-particles"></div>
+    <div class="login-card">
+      <div class="login-lotus">
+        <div class="lotus-petal p1"></div>
+        <div class="lotus-petal p2"></div>
+        <div class="lotus-petal p3"></div>
+        <div class="lotus-petal p4"></div>
+        <div class="lotus-petal p5"></div>
+        <div class="lotus-petal p6"></div>
+        <div class="lotus-petal p7"></div>
+        <div class="lotus-petal p8"></div>
+        <div class="lotus-center"></div>
+      </div>
+      <h1 class="login-title">
+        <img class="mn-logo-img" src="logo.png?v=1" alt="MyNiyam">
+      </h1>
+      <p class="login-subtitle">Aapka Adhyatmik Saathi</p>
+      <div class="login-error hidden" id="login-error"></div>
+      <button class="btn-google-signin" id="btn-google-signin">
+        <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+        <span>Sign in with Google</span>
+      </button>
+      <div class="login-footer">🙏 Jai Jinendra</div>
+    </div>
+    <div class="app-footer">
+      <img src="logo-icon.webp?v=1" alt="" class="app-footer-icon">
+      <div class="app-footer-text">
+        <span>Presented by Heer Sena</span>
+        <span>Developed by Tanmay Dhelariya</span>
+        <span class="app-footer-version"></span>
+      </div>
+    </div>
+  </div>
+  <!-- ===== REGISTRATION FORM ===== -->
+  <div id="register-screen" class="hidden">
+    <div class="login-bg-glow"></div>
+    <div class="register-card">
+      <h1 class="login-title">📝 Complete Your Profile</h1>
+      <p class="login-subtitle">Just a few details to get started</p>
+      <form id="register-form" autocomplete="on">
+        <div class="input-group photo-picker-group">
+          <label>Profile Photo</label>
+          <div class="photo-picker">
+            <img class="photo-picker-preview hidden" id="reg-photo-preview" alt="">
+            <div class="photo-picker-placeholder" id="reg-photo-placeholder">📷</div>
+            <label class="photo-picker-btn" for="reg-photo-input">Choose Photo</label>
+            <input type="file" id="reg-photo-input" accept="image/*" class="hidden">
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="reg-name">Full Name</label>
+          <input type="text" id="reg-name" name="name" autocomplete="name" placeholder="Your full name">
+        </div>
+        <div class="input-group">
+          <label for="reg-dob">Date of Birth</label>
+          <input type="date" id="reg-dob" name="dob" min="1920-01-01">
+        </div>
+        <div class="input-group">
+          <label>Gender</label>
+          <div class="gender-pills" id="reg-gender-pills">
+            <button type="button" class="gender-pill" data-value="Male">Male</button>
+            <button type="button" class="gender-pill" data-value="Female">Female</button>
+          </div>
+          <input type="hidden" id="reg-gender">
+        </div>
+        <div class="input-group">
+          <label for="reg-phone">Phone Number</label>
+          <input type="tel" id="reg-phone" name="phone" autocomplete="tel" placeholder="10-digit phone number" maxlength="10">
+        </div>
+        <div class="input-group">
+          <label for="reg-city">City / Town / Village</label>
+          <input type="text" id="reg-city" name="city" placeholder="e.g. Ahmedabad">
+        </div>
+        <div class="input-group">
+          <label for="reg-area">Area / Locality</label>
+          <input type="text" id="reg-area" name="area" placeholder="e.g. Paldi">
+        </div>
+        <div class="input-group">
+          <label for="reg-rollno">Roll No. <span class="input-optional">(optional)</span></label>
+          <input type="text" id="reg-rollno" name="rollNo" inputmode="numeric" maxlength="6" placeholder="e.g. 7">
+        </div>
+        <div class="input-group sangh-group">
+          <label for="reg-sangh">Pathshala/ Sangh</label>
+          <input type="text" id="reg-sangh" autocomplete="off" placeholder="Type sangh code or name...">
+          <input type="hidden" id="reg-sangh-code">
+          <div id="sangh-dropdown" class="sangh-dropdown hidden"></div>
+          <div id="sangh-selected" class="sangh-selected hidden"></div>
+        </div>
+        <div class="register-error hidden" id="register-error"></div>
+        <button type="button" class="btn-login" id="btn-register">
+          <span>🙏 Join MyNiyam</span>
+        </button>
+        <!-- Only shown when registering an ADDED (non-primary) profile — see
+             showRegistrationForm() in app.js. -->
+        <button type="button" class="btn-cancel-registration hidden" id="btn-cancel-registration">
+          Cancel
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== USER DASHBOARD ===== -->
+  <div id="app" class="app-hidden">
+
+    <!-- Header: Brand + Sangh + Points + Streak + Logout -->
+    <header id="app-header">
+      <div class="header-brand">
+        <span class="brand-name"><img class="mn-logo-img" src="logo.png?v=1" alt="MyNiyam"></span>
+        <span class="brand-sangh" id="brand-sangh"></span>
+      </div>
+      <div class="header-top">
+        <div class="kp-section">
+          <span class="kp-icon">⭐</span>
+          <span class="karma-points" id="karma-points">10 AP</span>
+          <span class="kp-period-label">Today</span>
+        </div>
+        <div class="header-right">
+          <button class="header-avatar-btn" id="header-avatar-btn" title="Switch Profile">
+            <img class="header-avatar-img hidden" id="header-avatar-img" src="" alt="">
+            <span class="header-avatar-placeholder" id="header-avatar-placeholder">👤</span>
+          </button>
+          <!-- <div class="streak-section" id="streak-section">
+            <div class="streak-flame" id="streak-flame">🕯️</div>
+            <span class="streak-count" id="streak-count">0</span>
+          </div> -->
+          <button class="btn-header-logout" id="btn-user-logout" title="Logout">↩</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Lock Banner -->
+    <div id="lock-banner" class="lock-banner hidden">
+      <span class="lock-banner-icon">🔒</span>
+      <span class="lock-banner-text">Today's entry is locked. Want to unlock? Contact your pathshala/ sangh admin.</span>
+    </div>
+
+    <!-- TAB: HOME -->
+    <main id="tab-home" class="tab-content active">
+
+      <!-- Panchang Card -->
+      <section id="panchang-section">
+        <div class="panchang-card">
+          <div class="panchang-header">
+            <span class="panchang-icon">📅</span>
+            <span class="panchang-date" id="panchang-date">Loading...</span>
+          </div>
+          <div class="panchang-location" id="panchang-location"></div>
+          <div class="sun-times">
+            <div class="time-item">
+              <div class="time-icon">🌅</div>
+              <div class="time-label">Sunrise</div>
+              <div class="time-value" id="sunrise-time">--:--</div>
+            </div>
+            <div class="time-item">
+              <div class="time-icon">🙏</div>
+              <div class="time-label">Navkarsi</div>
+              <div class="time-value" id="navkarsi-time">--:--</div>
+            </div>
+            <div class="time-item">
+              <div class="time-icon">🌇</div>
+              <div class="time-label">Sunset</div>
+              <div class="time-value" id="sunset-time">--:--</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Daily Progress -->
+      <section id="daily-progress-section">
+        <div class="daily-progress-card">
+          <div class="daily-progress-header">
+            <span class="daily-progress-title">Today's Sadhana</span>
+            <span class="daily-progress-text" id="daily-progress-text">0/5 Complete</span>
+          </div>
+          <div class="daily-progress-track">
+            <div class="daily-progress-fill" id="daily-progress-fill" style="width: 0%"></div>
+          </div>
+          <div class="daily-kp" id="daily-kp">+0 AP earned today</div>
+        </div>
+      </section>
+
+      <!-- Activity Cards -->
+      <section id="activities-section">
+        
+        <!-- CATEGORY: MORNING RITUALS -->
+        <div class="category-section" id="cat-morning">
+          <h3 class="category-title">🌅 Morning Rituals</h3>
+          
+          <div class="activity-compact" id="navkarsi-card">
+            <div class="lock-indicator hidden" id="navkarsi-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon" data-niyam-icon="navkarsi">🚰</span>
+              <div class="compact-info">
+                <span class="card-title" data-niyam-label="navkarsi">Navkarsi</span>
+                <span class="card-title-hindi" data-niyam-hindi="navkarsi">नवकारसी</span>
+              </div>
+            </div>
+            <div class="compact-actions">
+              <button class="btn-complete-small" id="btn-navkarsi" data-point-key="navkarsi" data-point-format="+{n} AP">+10 AP</button>
+              <button class="btn-undo-small hidden" id="btn-navkarsi-undo">Undo</button>
+            </div>
+          </div>
+
+          <div class="activity-compact" id="wakeup-card">
+            <div class="lock-indicator hidden" id="wakeup-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon" data-niyam-icon="wakeup">🌅</span>
+              <div class="compact-info">
+                <span class="card-title" data-niyam-label="wakeup">Wake &lt; 7AM</span>
+                <span class="card-title-hindi" data-niyam-hindi="wakeup">7AM से पहले उठें</span>
+              </div>
+            </div>
+            <div class="compact-actions">
+              <button class="btn-complete-small" id="btn-wakeup" data-point-key="wakeUpEarly" data-point-format="+{n} AP">+10 AP</button>
+              <button class="btn-undo-small hidden" id="btn-wakeup-undo">Undo</button>
+            </div>
+          </div>
+          
+          <div class="activity-compact" id="sleep-card">
+            <div class="lock-indicator hidden" id="sleep-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon" data-niyam-icon="sleep">🌙</span>
+              <div class="compact-info">
+                <span class="card-title" data-niyam-label="sleep">Sleep &lt; 12AM</span>
+                <span class="card-title-hindi" data-niyam-hindi="sleep">12AM से पहले सो जाएं</span>
+              </div>
+            </div>
+            <div class="compact-actions">
+              <button class="btn-complete-small" id="btn-sleep" data-point-key="sleepEarly" data-point-format="+{n} AP">+10 AP</button>
+              <button class="btn-undo-small hidden" id="btn-sleep-undo">Undo</button>
+            </div>
+          </div>
+          
+          <div class="activity-compact" id="pranam-card">
+            <div class="lock-indicator hidden" id="pranam-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon" data-niyam-icon="pranam">🙇</span>
+              <div class="compact-info">
+                <span class="card-title" data-niyam-label="pranam">Mata Pita Pranam</span>
+                <span class="card-title-hindi" data-niyam-hindi="pranam">माता पिता प्रणाम</span>
+              </div>
+            </div>
+            <div class="compact-actions">
+              <button class="btn-complete-small" id="btn-pranam" data-point-key="pranam" data-point-format="+{n} AP">+20 AP</button>
+              <button class="btn-undo-small hidden" id="btn-pranam-undo">Undo</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- CATEGORY: SADHANA -->
+        <div class="category-section" id="cat-sadhana">
+          <h3 class="category-title">🧘 Sadhana</h3>
+          
+          <div class="activity-compact" id="pooja-card">
+            <div class="lock-indicator hidden" id="pooja-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon" data-niyam-icon="pooja">🪔</span>
+              <div class="compact-info">
+                <span class="card-title" data-niyam-label="pooja">Jin Pooja</span>
+                <span class="card-title-hindi" data-niyam-hindi="pooja">जिन पूजा</span>
+              </div>
+            </div>
+            <div class="compact-actions pooja-complex-actions">
+              <label class="ashta-toggle">
+                <input type="checkbox" id="ashta-checkbox">
+                <span data-point-key="ashtaPrakari" data-point-format="Ashta (+{n})">Ashta (+50)</span>
+              </label>
+              <button class="btn-complete-small" id="btn-pooja" data-point-key="pooja" data-point-format="+{n} AP">+10 AP</button>
+              <button class="btn-undo-small hidden" id="btn-pooja-undo">Undo</button>
+            </div>
+          </div>
+          
+          <div class="activity-compact" id="samayik-card">
+            <div class="lock-indicator hidden" id="samayik-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon" data-niyam-icon="samayik">🧘</span>
+              <div class="compact-info">
+                <span class="card-title" data-niyam-label="samayik">Samayik</span>
+                <span class="card-title-hindi" data-niyam-hindi="samayik">सामायिक</span>
+                <span class="card-kp" data-point-key="samayik" data-point-format="+{n}/ea">+20/ea</span>
+              </div>
+            </div>
+            <div class="compact-actions counter-actions">
+              <button class="btn-counter-small btn-minus" id="btn-samayik-minus">−</button>
+              <span class="counter-val" id="samayik-count">0</span>
+              <button class="btn-counter-small btn-plus" id="btn-samayik-plus">+</button>
+            </div>
+          </div>
+          <!-- PRATIKRAMAN -->
+          <div class="activity-card" id="pratikraman-card">
+            <div class="lock-indicator hidden" id="pratikraman-lock">🔒</div>
+            <div class="card-header">
+              <div class="card-title-area">
+                <span class="card-icon" data-niyam-icon="pratikraman">🙏</span>
+                <span class="card-title" data-niyam-label="pratikraman">Pratikraman</span>
+                <span class="card-title-hindi" data-niyam-hindi="pratikraman">प्रतिक्रमण</span>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="pratikraman-slots">
+                <button class="slot-btn" id="pratikraman-morning" onclick="app.completePratikraman('morning')">
+                  <span class="slot-icon">🌅</span>
+                  <span class="slot-label">Morning</span>
+                  <span class="card-kp" data-point-key="devasiya" data-point-format="+{n} AP">+30 AP</span>
+                  <span class="slot-check" id="pratikraman-morning-check">○</span>
+                </button>
+                <button class="slot-btn" id="pratikraman-evening" onclick="app.completePratikraman('evening')">
+                  <span class="slot-icon">🌙</span>
+                  <span class="slot-label">Evening</span>
+                  <span class="card-kp" data-point-key="raiya" data-point-format="+{n} AP">+30 AP</span>
+                  <span class="slot-check" id="pratikraman-evening-check">○</span>
+                </button>
+              </div>
+              <div class="card-status" id="pratikraman-status">0/2 completed</div>
+            </div>
+            <div class="card-bonus" id="pratikraman-bonus"></div>
+          </div>
+          
+          <div class="activity-compact" id="book-card">
+            <div class="lock-indicator hidden" id="book-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon" data-niyam-icon="book">📖</span>
+              <div class="compact-info">
+                <span class="card-title" data-niyam-label="book">Dharmik Book Reading (30m)</span>
+                <span class="card-title-hindi" data-niyam-hindi="book">धार्मिक पुस्तक पढ़ना</span>
+                <span class="card-kp" data-point-key="bookReading" data-point-format="+{n}/ea">+20/ea</span>
+              </div>
+            </div>
+            <div class="compact-actions counter-actions">
+              <button class="btn-counter-small btn-minus" id="btn-book-minus">−</button>
+              <span class="counter-val" id="book-count">0</span>
+              <button class="btn-counter-small btn-plus" id="btn-book-plus">+</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- CATEGORY: TYAG & DISCIPLINE -->
+        <div class="category-section" id="cat-tyag">
+          <h3 class="category-title">🛡️ Tyag &amp; Discipline</h3>
+
+          <div class="activity-compact" id="ratribhojan-card">
+            <div class="lock-indicator hidden" id="ratribhojan-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon" data-niyam-icon="ratribhojan">🚫</span>
+              <div class="compact-info">
+                <span class="card-title" data-niyam-label="ratribhojan">Ratri Bhojan Tyag</span>
+                <span class="card-title-hindi" data-niyam-hindi="ratribhojan">रात्रि भोजन त्याग</span>
+              </div>
+            </div>
+            <div class="compact-actions">
+              <button class="btn-complete-small" id="btn-ratribhojan" data-point-key="ratriBhojan" data-point-format="+{n} AP">+20 AP</button>
+              <button class="btn-undo-small hidden" id="btn-ratribhojan-undo">Undo</button>
+            </div>
+          </div>
+
+          <div class="activity-compact" id="kandmool-card">
+            <div class="lock-indicator hidden" id="kandmool-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon" data-niyam-icon="kandmool">🥔</span>
+              <div class="compact-info">
+                <span class="card-title" data-niyam-label="kandmool">Kandmool Tyag</span>
+                <span class="card-title-hindi" data-niyam-hindi="kandmool">कंदमूल त्याग</span>
+              </div>
+            </div>
+            <div class="compact-actions">
+              <button class="btn-complete-small" id="btn-kandmool" data-point-key="kandmool" data-point-format="+{n} AP">+20 AP</button>
+              <button class="btn-undo-small hidden" id="btn-kandmool-undo">Undo</button>
+            </div>
+          </div>
+          
+          <div class="activity-compact screentime-container" id="screentime-card">
+            <div class="lock-indicator hidden" id="screentime-lock">🔒</div>
+            <div class="compact-left">
+              <span class="card-icon" data-niyam-icon="screentime">📱</span>
+              <div class="compact-info">
+                <span class="card-title" data-niyam-label="screentime">Screen Time</span>
+                <span class="card-title-hindi" data-niyam-hindi="screentime">स्क्रीन टाइम</span>
+                <span class="card-kp kp-negative" data-point-key="screenTimePenalty" data-point-format="-{n}/hr">-5/hr</span>
+              </div>
+            </div>
+            <div class="compact-actions screentime-actions">
+              <div class="time-input-group">
+                <button class="btn-counter-small btn-minus" id="btn-screen-h-minus">−</button>
+                <span class="counter-val" id="screen-h-count">0h</span>
+                <button class="btn-counter-small btn-plus" id="btn-screen-h-plus">+</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="activity-card niyam-card" id="niyam-card">
+            <div class="lock-indicator hidden" id="niyam-lock">🔒</div>
+            <div class="card-header">
+              <div class="card-title-area">
+                <span class="card-icon" data-niyam-icon="dailyniyam">✨</span>
+                <span class="card-title" data-niyam-label="dailyniyam">Aaj Ka Niyam</span>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="niyam-text" id="niyam-text">Loading...</div>
+            </div>
+            <div class="card-actions">
+              <button class="btn-complete btn-niyam" id="btn-niyam">
+                <span class="btn-icon">✓</span> <span data-point-key="dailyNiyam" data-point-format="+{n} AP">+10 AP</span>
+              </button>
+              <button class="btn-undo hidden" id="btn-niyam-undo">
+                <span class="btn-icon">↩</span> Undo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- CATEGORY: DEV-GURU BHAKTI (data.js's NIYAM_REGISTRY, section: 'bhakti')
+             Cards are generated by _renderRegistryCards() (app.js) — this
+             container starts empty on purpose. -->
+        <div class="category-section" id="cat-bhakti">
+          <h3 class="category-title">🙏 Dev-Guru Bhakti</h3>
+        </div>
+
+        <!-- CATEGORY: AACHAR (data.js's NIYAM_REGISTRY, section: 'aachar')
+             Cards are generated by _renderRegistryCards() (app.js) — this
+             container starts empty on purpose. -->
+        <div class="category-section" id="cat-aachar">
+          <h3 class="category-title">⭐ Aachar</h3>
+        </div>
+
+      </section>
+
+      <!-- Submit / Finalize Day -->
+      <section id="submit-section">
+        <button class="btn-submit-day" id="btn-submit-day">✅ Submit Today's Entry</button>
+        <p class="submit-day-note" id="submit-day-note"></p>
+      </section>
+
+      <!-- Motivation -->
+      <section id="motivation-section">
+        <div class="motivation-card">
+          <div class="motivation-text" id="motivation-text"></div>
+          <div class="social-proof" id="social-proof"></div>
+        </div>
+      </section>
+      <div class="bottom-spacer"></div>
+    </main>
+
+    <!-- TAB: ACHIEVEMENTS -->
+    <div id="tab-achievements" class="tab-content">
+      <div class="achievements-container">
+        <h2 class="section-heading">📊 Your Lifetime Stats</h2>
+        <div class="stats-grid" id="stats-grid"><!-- Populated by JS: _renderLifetimeStats() --></div>
+        <h2 class="section-heading">🏆 Trophy Shelf</h2>
+        <div class="badges-grid" id="badges-grid"></div>
+      </div>
+      <div class="bottom-spacer"></div>
+    </div>
+
+    <!-- TAB: HISTORY -->
+    <div id="tab-history" class="tab-content">
+      <h2 class="section-heading">📅 My Progress History</h2>
+      <button class="btn-export btn-niyam-stats-trigger" id="btn-niyam-stats-history">📊 Monthly Niyam Stats</button>
+      <p class="streak-saver-status" id="streak-saver-status"></p>
+      <div class="history-nav">
+        <button id="btn-history-prev" class="btn-history-nav">← Prev</button>
+        <span id="history-month-label" class="history-month-label">July 2026</span>
+        <button id="btn-history-next" class="btn-history-nav">Next →</button>
+      </div>
+      <div class="history-list" id="history-list"></div>
+
+      <!-- My Attendance — shares the month stepper above (#btn-history-prev/
+           -next, #history-month-label) rather than getting its own, so the
+           two sections can never show different months. Populated by
+           renderMyAttendance() (app.js), called from renderHistory(). -->
+      <h2 class="section-heading">📋 My Attendance</h2>
+      <p class="admin-desc">Pathshala attendance for the month selected above.</p>
+      <div class="stats-grid" id="my-attendance-summary"></div>
+      <div class="niyam-stats-list" id="my-attendance-list"></div>
+
+      <div class="bottom-spacer"></div>
+    </div>
+
+    <!-- TAB: PROFILE -->
+    <div id="tab-profile" class="tab-content">
+      <h2 class="section-heading">👤 My Profile</h2>
+
+      <div class="profile-header">
+        <div class="profile-avatar-wrap">
+          <img class="profile-avatar hidden" id="profile-avatar" src="" alt="">
+          <div class="profile-avatar-placeholder" id="profile-avatar-placeholder">👤</div>
+          <label class="profile-photo-change-btn" for="profile-photo-input" title="Change photo">📷</label>
+          <input type="file" id="profile-photo-input" accept="image/*" class="hidden">
+        </div>
+        <div class="profile-header-info">
+          <span class="profile-header-name" id="profile-header-name"></span>
+          <span class="profile-header-email" id="profile-header-email"></span>
+        </div>
+      </div>
+
+      <p class="profile-sync-status hidden" id="profile-sync-status">🔄 Syncing with sangh records...</p>
+
+      <div class="profile-readonly-row">
+        <span class="profile-readonly-label">Full Name</span>
+        <span class="profile-readonly-value" id="profile-view-name"></span>
+      </div>
+      <div class="profile-readonly-row">
+        <span class="profile-readonly-label">Date of Birth</span>
+        <span class="profile-readonly-value" id="profile-view-dob"></span>
+      </div>
+      <div class="profile-readonly-row">
+        <span class="profile-readonly-label">Gender</span>
+        <span class="profile-readonly-value" id="profile-view-gender"></span>
+      </div>
+      <div class="profile-readonly-row">
+        <span class="profile-readonly-label">Pathshala/ Sangh</span>
+        <span class="profile-readonly-value" id="profile-view-sangh"></span>
+        <button type="button" class="profile-sangh-change-btn" id="btn-profile-sangh-change">Change</button>
+      </div>
+      <div class="profile-sangh-picker hidden" id="profile-sangh-picker">
+        <div class="input-group sangh-group profile-sangh-group">
+          <label for="profile-sangh-input">New Pathshala/ Sangh</label>
+          <input type="text" id="profile-sangh-input" autocomplete="off" placeholder="Type sangh code or name...">
+          <input type="hidden" id="profile-sangh-code">
+          <div id="profile-sangh-dropdown" class="sangh-dropdown hidden"></div>
+          <div id="profile-sangh-selected" class="sangh-selected hidden"></div>
+        </div>
+        <button type="button" class="profile-sangh-cancel-btn" id="btn-profile-sangh-cancel">Keep current sangh</button>
+      </div>
+
+      <div class="input-group">
+        <label for="profile-phone">Phone Number</label>
+        <input type="tel" id="profile-phone" autocomplete="tel" placeholder="10-digit phone number" maxlength="10">
+      </div>
+      <div class="input-group">
+        <label for="profile-city">City / Town / Village</label>
+        <input type="text" id="profile-city" placeholder="e.g. Ahmedabad">
+      </div>
+      <div class="input-group">
+        <label for="profile-area">Area / Locality</label>
+        <input type="text" id="profile-area" placeholder="e.g. Paldi">
+      </div>
+      <div class="input-group">
+        <label for="profile-rollno">Roll No. <span class="input-optional">(optional)</span></label>
+        <input type="text" id="profile-rollno" inputmode="numeric" maxlength="6" placeholder="e.g. 7">
+      </div>
+
+      <div class="register-error hidden" id="profile-error"></div>
+      <button type="button" class="btn-login" id="btn-profile-save">
+        <span>💾 Save Changes</span>
+      </button>
+      <div class="save-confirmation hidden" id="profile-save-confirmation">✅ Profile updated!</div>
+
+      <div class="profile-switch-section">
+        <h3 class="sub-heading">👥 Family Profiles</h3>
+        <p class="profile-switch-desc">Track niyams for other family members under this same Google account.</p>
+        <button type="button" class="btn-export" id="btn-switch-profile">🔄 Switch Profile</button>
+      </div>
+
+      <div class="bottom-spacer"></div>
+    </div>
+
+    <!-- Shared credit footer — visible under whichever tab is active,
+         since it's a sibling of the .tab-content divs, not inside one.
+         --nav-clearance because #bottom-nav below is fixed. -->
+    <div class="app-footer app-footer--nav-clearance">
+      <img src="logo-icon.webp?v=1" alt="" class="app-footer-icon">
+      <div class="app-footer-text">
+        <span>Presented by Heer Sena</span>
+        <span>Developed by Tanmay Dhelariya</span>
+        <span class="app-footer-version"></span>
+      </div>
+    </div>
+
+    <!-- BOTTOM NAV (User: 4 tabs) -->
+    <nav id="bottom-nav">
+      <button class="nav-item active" data-tab="home">
+        <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+      </button>
+      <button class="nav-item" data-tab="history">
+        <span class="nav-icon">📅</span><span class="nav-label">History</span>
+      </button>
+      <button class="nav-item" data-tab="achievements">
+        <span class="nav-icon">🏆</span><span class="nav-label">Badges</span>
+      </button>
+      <button class="nav-item" data-tab="profile">
+        <span class="nav-icon">👤</span><span class="nav-label">Profile</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ===== ADMIN PANEL ===== -->
+  <div id="admin-panel" class="hidden">
+    <header id="admin-header">
+      <div class="admin-header-content">
+        <div class="admin-brand-top">
+          <span class="brand-name"><img class="mn-logo-img" src="logo.png?v=1" alt="MyNiyam"></span>
+          <div class="admin-brand-right">
+            <span class="admin-role-tag">👑 Admin</span>
+            <!-- Same markup/CSS as the user header's #header-avatar-btn —
+                 distinct ids because #app stays in the DOM (display:none,
+                 not removed) during an admin session, so both headers exist
+                 at once and duplicate ids would break every getElementById
+                 the avatar-loading code does. -->
+            <button class="header-avatar-btn" id="admin-header-avatar-btn" title="Switch Profile">
+              <img class="header-avatar-img hidden" id="admin-header-avatar-img" src="" alt="">
+              <span class="header-avatar-placeholder" id="admin-header-avatar-placeholder">👤</span>
+            </button>
+            <button class="btn-header-logout" id="btn-admin-logout" title="Logout">↩ Logout</button>
+          </div>
+        </div>
+        <span class="brand-sangh" id="admin-brand-sangh"></span>
+      </div>
+    </header>
+
+    <!-- ADMIN TAB: LEADERBOARD -->
+    <div id="admin-tab-leaderboard" class="admin-tab-content active">
+      <div class="admin-section">
+        <h2 class="section-heading">🏆 Leaderboard</h2>
+        <p class="admin-desc">Click a user to view their detailed progress.</p>
+        <div class="export-bar">
+          <button class="btn-export" id="btn-open-export">📊 Export to Excel</button>
+          <button class="btn-export" id="btn-open-poster">📸 Generate Poster</button>
+          <button class="btn-export" id="btn-refresh-leaderboard" title="Fetch the latest data">🔄 Refresh</button>
+        </div>
+        <input type="search" class="admin-search-input" id="leaderboard-search" placeholder="🔍 Search by name or roll no...">
+        <div id="admin-leaderboard-list" class="leaderboard-list">
+          <!-- Populated by JS -->
+          <div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN TAB: SETTINGS -->
+    <div id="admin-tab-settings" class="admin-tab-content">
+      <div class="admin-section">
+        <h2 class="section-heading">⚙️ Target Settings</h2>
+        <p class="admin-desc">Set daily targets for the user's spiritual practice.</p>
+
+        <!-- Populated by _renderNiyamRegistryErrors() (app.js) — lists any
+             NIYAM_REGISTRY entry that failed registerNiyams()'s validation,
+             so a bad edit to data.js is loud here instead of console-only.
+             Empty and hidden when the registry is healthy. -->
+        <div class="niyam-registry-errors hidden" id="niyam-registry-errors"></div>
+
+        <!-- Per-sangh niyam points — a path (sangh_settings/{code}) separate
+             from the global `settings` node the toggles below save to.
+             Moved to the top since every group below now carries points
+             inputs, not just a block further down. Saved together with
+             everything else in Save Settings; see _saveAdminPoints(). -->
+        <div class="settings-group hidden" id="admin-points-sangh-group">
+          <h3 class="settings-group-title">🕌 Editing Settings For</h3>
+          <div class="setting-item">
+            <label for="admin-points-sangh" style="flex:0 0 100px;">Sangh</label>
+            <select id="admin-points-sangh" style="flex:1; max-width:200px;">
+              <!-- Populated by JS -->
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">🌅 Morning Rituals</h3>
+          <div class="setting-item niyam-row" data-toggle-id="admin-toggle-navkarsi">
+            <div class="niyam-row-label"><label for="admin-toggle-navkarsi" data-niyam-label="navkarsi:admin">Navkarsi</label><span class="niyam-row-hindi" data-niyam-hindi="navkarsi:admin">नवकारसी</span></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-navkarsi" placeholder="10">
+              <input type="checkbox" id="admin-toggle-navkarsi">
+            </div>
+          </div>
+          <div class="setting-item niyam-row" data-toggle-id="admin-toggle-wakeup">
+            <div class="niyam-row-label"><label for="admin-toggle-wakeup" data-niyam-label="wakeup:admin">Wake up &lt; 7AM</label><span class="niyam-row-hindi" data-niyam-hindi="wakeup:admin">7AM से पहले उठें</span></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-wakeUpEarly" placeholder="10">
+              <input type="checkbox" id="admin-toggle-wakeup">
+            </div>
+          </div>
+          <div class="setting-item niyam-row" data-toggle-id="admin-toggle-sleep">
+            <div class="niyam-row-label"><label for="admin-toggle-sleep" data-niyam-label="sleep:admin">Sleep &lt; 12AM</label><span class="niyam-row-hindi" data-niyam-hindi="sleep:admin">12AM से पहले सो जाएं</span></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-sleepEarly" placeholder="10">
+              <input type="checkbox" id="admin-toggle-sleep">
+            </div>
+          </div>
+          <div class="setting-item niyam-row" data-toggle-id="admin-toggle-pranam">
+            <div class="niyam-row-label"><label for="admin-toggle-pranam" data-niyam-label="pranam:admin">Mata Pita Pranam</label><span class="niyam-row-hindi" data-niyam-hindi="pranam:admin">माता पिता प्रणाम</span></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-pranam" placeholder="20">
+              <input type="checkbox" id="admin-toggle-pranam">
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">🧘 Sadhana</h3>
+          <div class="setting-item niyam-row" data-toggle-id="admin-toggle-pooja">
+            <div class="niyam-row-label"><label for="admin-toggle-pooja" data-niyam-label="pooja:admin">Jin Pooja</label><span class="niyam-row-hindi" data-niyam-hindi="pooja:admin">जिन पूजा</span></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-pooja" placeholder="10">
+              <input type="checkbox" id="admin-toggle-pooja">
+            </div>
+          </div>
+          <div class="setting-item niyam-row niyam-row-sub" data-toggle-id="admin-toggle-ashtaPrakari" data-parent-toggle-id="admin-toggle-pooja">
+            <div class="niyam-row-label"><label for="admin-toggle-ashtaPrakari" data-niyam-label="pooja#1" data-niyam-prefix="↳ ">↳ Ashta Prakari</label><span class="niyam-row-hindi" data-niyam-hindi="pooja#1">अष्टप्रकारी पूजा</span></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-ashtaPrakari" placeholder="50">
+              <input type="checkbox" id="admin-toggle-ashtaPrakari">
+            </div>
+          </div>
+          <div class="setting-item niyam-row" data-toggle-id="admin-toggle-samayik">
+            <div class="niyam-row-label">
+              <label for="admin-toggle-samayik" data-niyam-label="samayik:admin">Samayik</label>
+              <span class="niyam-row-hindi" data-niyam-hindi="samayik:admin">सामायिक</span>
+              <span class="niyam-row-hint">per samayik</span>
+            </div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-samayik" placeholder="20">
+              <input type="checkbox" id="admin-toggle-samayik">
+            </div>
+          </div>
+          <div class="setting-item niyam-row" data-toggle-id="admin-toggle-pratikraman">
+            <div class="niyam-row-label"><label for="admin-toggle-pratikraman" data-niyam-label="pratikraman:admin">Pratikraman</label><span class="niyam-row-hindi" data-niyam-hindi="pratikraman:admin">प्रतिक्रमण — देवसि</span></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-devasiya" placeholder="30">
+              <input type="checkbox" id="admin-toggle-pratikraman">
+            </div>
+          </div>
+          <div class="setting-item niyam-row niyam-row-sub" data-toggle-id="admin-toggle-raiya" data-parent-toggle-id="admin-toggle-pratikraman">
+            <div class="niyam-row-label"><label for="admin-toggle-raiya" data-niyam-label="pratikraman#1" data-niyam-prefix="↳ ">↳ Raiya</label><span class="niyam-row-hindi" data-niyam-hindi="pratikraman#1">राइअ</span></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-raiya" placeholder="30">
+              <input type="checkbox" id="admin-toggle-raiya">
+            </div>
+          </div>
+          <div class="setting-item niyam-row" data-toggle-id="admin-toggle-book">
+            <div class="niyam-row-label">
+              <label for="admin-toggle-book" data-niyam-label="book:admin">Book Reading</label>
+              <span class="niyam-row-hindi" data-niyam-hindi="book:admin">धार्मिक पुस्तक पढ़ना</span>
+              <span class="niyam-row-hint">per 30 min</span>
+            </div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-bookReading" placeholder="20">
+              <input type="checkbox" id="admin-toggle-book">
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">🛡️ Tyag &amp; Discipline</h3>
+          <div class="setting-item niyam-row" data-toggle-id="admin-toggle-ratribhojan">
+            <div class="niyam-row-label"><label for="admin-toggle-ratribhojan" data-niyam-label="ratribhojan:admin">Ratri Bhojan Tyag</label><span class="niyam-row-hindi" data-niyam-hindi="ratribhojan:admin">रात्रि भोजन त्याग</span></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-ratriBhojan" placeholder="20">
+              <input type="checkbox" id="admin-toggle-ratribhojan">
+            </div>
+          </div>
+          <div class="setting-item niyam-row" data-toggle-id="admin-toggle-kandmool">
+            <div class="niyam-row-label"><label for="admin-toggle-kandmool" data-niyam-label="kandmool:admin">Kandmool Tyag</label><span class="niyam-row-hindi" data-niyam-hindi="kandmool:admin">कंदमूल त्याग</span></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-kandmool" placeholder="20">
+              <input type="checkbox" id="admin-toggle-kandmool">
+            </div>
+          </div>
+          <div class="setting-item niyam-row" data-toggle-id="admin-toggle-screentime">
+            <div class="niyam-row-label">
+              <label for="admin-toggle-screentime" data-niyam-label="screentime:admin">Screen Time Tracking</label>
+              <span class="niyam-row-hindi" data-niyam-hindi="screentime:admin">स्क्रीन टाइम</span>
+              <span class="niyam-row-hint">penalty per hour</span>
+            </div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-screenTimePenalty" placeholder="5">
+              <input type="checkbox" id="admin-toggle-screentime">
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">✨ Daily Niyam</h3>
+          <div class="setting-item niyam-row" data-toggle-id="admin-toggle-niyam">
+            <div class="niyam-row-label"><label for="admin-toggle-niyam" data-niyam-label="dailyniyam:admin">Enable Daily Niyam</label><span class="niyam-row-hindi" data-niyam-hindi="dailyniyam:admin">दैनिक नियम</span></div>
+            <div class="niyam-row-controls">
+              <input type="number" min="0" step="1" id="admin-points-dailyNiyam" placeholder="10">
+              <input type="checkbox" id="admin-toggle-niyam">
+            </div>
+          </div>
+          <div class="setting-item">
+            <label for="admin-select-niyam" style="flex:0 0 100px;">Select Niyam</label>
+            <select id="admin-select-niyam" style="flex:1; max-width:200px;">
+              <!-- Populated by JS -->
+            </select>
+          </div>
+        </div>
+
+        <!-- Generated by _renderAdminNiyamRows() (app.js) from data.js's
+             NIYAM_REGISTRY — one merged row (or main+sub row pair) per
+             entry, starts empty on purpose. -->
+        <div id="admin-registry-niyams"></div>
+
+        <button class="btn-save-settings" id="btn-save-settings">💾 Save Settings</button>
+        <div class="save-confirmation hidden" id="save-confirmation">✅ Settings saved!</div>
+      </div>
+    </div>
+
+    <!-- ADMIN TAB: USER PROGRESS -->
+    <div id="admin-tab-progress" class="admin-tab-content">
+      <div class="admin-section">
+
+        <!-- AGGREGATE OVERVIEW (default view) -->
+        <div id="admin-overview">
+          <h2 class="section-heading">📊 Overall Progress</h2>
+          <div class="overview-summary-row">
+            <div class="overview-card">
+              <span class="overview-value" id="ov-total-users">0</span>
+              <span class="overview-label">Total Users</span>
+            </div>
+            <div class="overview-card">
+              <span class="overview-value" id="ov-active-today">0</span>
+              <span class="overview-label">Active Today</span>
+            </div>
+            <div class="overview-card">
+              <span class="overview-value" id="ov-total-kp">0</span>
+              <span class="overview-label">Total AP</span>
+            </div>
+          </div>
+
+          <h3 class="sub-heading">Today's Activity Breakdown</h3>
+          <div class="admin-today-grid" id="admin-overview-grid"></div>
+        </div>
+
+        <!-- INDIVIDUAL USER VIEW (shown on "View" click) -->
+        <div id="admin-individual" class="hidden">
+          <div id="admin-user-banner" class="admin-user-banner">
+            <button id="btn-back-leaderboard" class="btn-back-lb">← Back</button>
+            <span id="admin-viewing-name" class="admin-viewing-name">Viewing: User</span>
+            <button id="btn-delete-user" class="btn-delete-user" onclick="app.deleteAdminUser()">🗑️ Remove</button>
+          </div>
+
+          <!-- Personal details card — populated by renderAdminUserDetails().
+               Hidden by that function itself when a record has nothing to
+               show (e.g. no registration on file). -->
+          <div id="admin-profile-details" class="admin-profile-details hidden"><!-- Populated by JS --></div>
+
+          <h2 class="section-heading">📊 User Progress</h2>
+
+          <div class="admin-profile-card">
+            <div class="admin-profile-header">
+              <span class="admin-profile-icon" id="admin-user-level-icon">🏅</span>
+              <div class="admin-profile-info">
+                <span class="admin-profile-title" id="admin-user-level">0 Badges Earned</span>
+              </div>
+              <div class="admin-profile-streak">
+                <span id="admin-user-streak-flame">🕯️</span>
+                <span id="admin-user-streak">0 day streak</span>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn-export btn-niyam-stats-trigger" id="btn-niyam-stats-admin">📊 Monthly Niyam Stats</button>
+
+          <h3 class="sub-heading">🏆 Badges Earned</h3>
+          <div class="admin-badges-list" id="admin-badges-list">
+            <p class="admin-no-badges">No badges earned yet.</p>
+          </div>
+
+          <h3 class="sub-heading">📅 Activity History</h3>
+          <div class="history-nav">
+            <button id="btn-admin-history-prev" class="btn-history-nav">← Prev</button>
+            <span id="admin-history-month-label" class="history-month-label">July 2026</span>
+            <button id="btn-admin-history-next" class="btn-history-nav">Next →</button>
+          </div>
+          <div class="history-list" id="admin-history-list"></div>
+
+          <h3 class="sub-heading">📊 Lifetime Stats</h3>
+          <div class="stats-grid" id="admin-stats-grid"><!-- Populated by JS: _renderLifetimeStats() --></div>
+
+          <h3 class="sub-heading">🔓 Unlock Today's Entry</h3>
+          <p class="admin-desc">Enabled only when this member's entry for today is locked (by their own submit or midnight auto-lock).</p>
+          <button class="btn-unlock-day" id="btn-unlock-day" disabled>🔓 Unlock Today's Submissions</button>
+
+          <div class="settings-group danger-zone" style="margin-top:24px">
+            <h3 class="settings-group-title">⚠️ Danger Zone</h3>
+            <button class="btn-reset" id="btn-admin-reset">Reset All User Progress</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ADMIN TAB: ATTENDANCE -->
+    <div id="admin-tab-attendance" class="admin-tab-content">
+      <div class="admin-section">
+        <h2 class="section-heading">📋 Attendance</h2>
+        <p class="admin-desc">Mark today's attendance and gatha count for each member, then save.</p>
+
+        <div class="input-group">
+          <label for="attendance-date">Date</label>
+          <input type="date" id="attendance-date">
+        </div>
+
+        <div class="export-bar">
+          <button class="btn-export" id="btn-attendance-mark-all">✅ Mark All Present</button>
+          <button class="btn-export" id="btn-open-attendance-export">📊 Export Attendance</button>
+        </div>
+
+        <input type="search" class="admin-search-input" id="attendance-search" placeholder="🔍 Search by name or roll no...">
+        <div id="attendance-list" class="attendance-list">
+          <!-- Populated by JS -->
+          <div style="text-align:center; padding: 20px; color: #795548;">Loading users...</div>
+        </div>
+
+        <div class="attendance-save-bar">
+          <span class="attendance-unsaved hidden" id="attendance-unsaved-indicator">● Unsaved changes</span>
+          <button class="btn-login" id="btn-save-attendance">💾 Save Attendance</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spacer so bottom nav doesn't overlap content -->
+    <div class="bottom-spacer"></div>
+
+    <!-- Shared credit footer — see #app's identical block. -->
+    <div class="app-footer app-footer--nav-clearance">
+      <img src="logo-icon.webp?v=1" alt="" class="app-footer-icon">
+      <div class="app-footer-text">
+        <span>Presented by Heer Sena</span>
+        <span>Developed by Tanmay Dhelariya</span>
+        <span class="app-footer-version"></span>
+      </div>
+    </div>
+
+    <!-- ADMIN BOTTOM NAV -->
+    <nav id="admin-bottom-nav">
+      <button class="nav-item active" data-tab="admin-leaderboard">
+        <span class="nav-icon">🏆</span><span class="nav-label">Leaders</span>
+      </button>
+      <button class="nav-item" data-tab="admin-settings">
+        <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
+      </button>
+      <button class="nav-item" data-tab="admin-progress">
+        <span class="nav-icon">📊</span><span class="nav-label">Progress</span>
+      </button>
+      <button class="nav-item" data-tab="admin-attendance">
+        <span class="nav-icon">📋</span><span class="nav-label">Attend</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ===== OVERLAYS ===== -->
+
+  <!-- Admin Day Detail -->
+  <div id="day-detail-overlay" class="overlay hidden">
+    <div class="overlay-content day-detail-content">
+      <button class="btn-close-overlay" id="btn-close-day-detail">✕</button>
+      <h2 class="day-detail-user" id="day-detail-user">User Name</h2>
+      <h3 class="day-detail-date" id="day-detail-date">Mon, 19 Jul</h3>
+      <div class="day-detail-summary" id="day-detail-summary"></div>
+      <div class="day-detail-grid" id="day-detail-grid"></div>
+    </div>
+  </div>
+
+  <!-- Streak Saver — Past Day Edit -->
+  <div id="day-edit-overlay" class="overlay hidden">
+    <div class="overlay-content day-edit-content">
+      <button class="btn-close-overlay" id="btn-close-day-edit">✕</button>
+      <h2 class="summary-title">🛡️ Streak Saver</h2>
+      <h3 class="day-edit-date" id="day-edit-date">Mon, 19 Jul</h3>
+      <p class="day-edit-hint">Update what you actually did this day. Saving uses one streak saver.</p>
+      <div class="day-edit-grid" id="day-edit-grid"></div>
+      <p class="day-edit-error hidden" id="day-edit-error"></p>
+      <div class="day-edit-actions">
+        <button class="btn-continue" id="btn-save-day-edit">Save</button>
+        <button class="btn-cancel" id="btn-cancel-day-edit">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Badge Unlock -->
+  <div id="badge-unlock-overlay" class="overlay hidden">
+    <div class="overlay-content badge-unlock-content">
+      <div class="badge-unlock-glow"></div>
+      <div class="badge-unlock-icon" id="badge-unlock-icon">🏆</div>
+      <h2 class="badge-unlock-title">New Achievement!</h2>
+      <p class="badge-unlock-name" id="badge-unlock-name"></p>
+      <p class="badge-unlock-desc" id="badge-unlock-desc"></p>
+      <span class="badge-unlock-rarity" id="badge-unlock-rarity">Common</span>
+      <button class="btn-continue" id="btn-close-badge">Wonderful! ✨</button>
+    </div>
+  </div>
+
+  <!-- Submit Confirm -->
+  <div id="submit-confirm-overlay" class="overlay hidden">
+    <div class="overlay-content submit-confirm-content">
+      <h2 class="summary-title">✅ Submit Today's Entry?</h2>
+      <p class="submit-confirm-text" id="submit-confirm-text"></p>
+      <div class="overlay-actions">
+        <button class="btn-cancel" id="btn-cancel-submit">Cancel</button>
+        <button class="btn-continue" id="btn-confirm-submit">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logout Confirmation — shared by both the user and admin logout
+       buttons (see setupUserEventListeners()/setupAdminEventListeners()). -->
+  <div id="logout-confirm-overlay" class="overlay hidden">
+    <div class="overlay-content logout-confirm-content">
+      <h2 class="summary-title">👋 Log out?</h2>
+      <p class="submit-confirm-text">You'll need to sign in with Google again next time.</p>
+      <div class="overlay-actions">
+        <button class="btn-cancel" id="btn-cancel-logout">Cancel</button>
+        <button class="btn-continue" id="btn-confirm-logout">Log out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sangh Transfer Notice -->
+  <div id="sangh-transfer-overlay" class="overlay hidden">
+    <div class="overlay-content">
+      <h2 class="summary-title">🔄 Sangh Updated</h2>
+      <p class="submit-confirm-text" id="sangh-transfer-text"></p>
+      <button class="btn-continue" id="btn-close-sangh-transfer">OK</button>
+    </div>
+  </div>
+
+  <!-- Sangh Re-selection — shown when a member's registered sangh no
+       longer exists (removed via the Firebase Console; see
+       SANGH-RUNBOOK.md and _promptSanghReselectIfOrphaned() in app.js).
+       Deliberately NOT the shared .overlay class — see its own CSS block
+       in styles.css for why — and has no cancel button: a member must
+       choose a sangh before continuing, since every admin view (the
+       leaderboard, attendance, exports) is scoped by sangh membership. -->
+  <div id="sangh-reselect-overlay" class="sangh-lock-overlay hidden">
+    <div class="overlay-content">
+      <h2 class="summary-title">🏛️ Select Your Sangh</h2>
+      <p class="submit-confirm-text">Your Pathshala/Sangh is no longer available. Please select a new one to continue.</p>
+      <div class="input-group sangh-group sangh-reselect-group">
+        <input type="text" id="sangh-reselect-input" autocomplete="off" placeholder="Type sangh code or name...">
+        <input type="hidden" id="sangh-reselect-code">
+        <div id="sangh-reselect-dropdown" class="sangh-dropdown hidden"></div>
+        <div id="sangh-reselect-selected" class="sangh-selected hidden"></div>
+      </div>
+      <div class="register-error hidden" id="sangh-reselect-error"></div>
+      <button type="button" class="btn-continue" id="btn-sangh-reselect-confirm">Continue</button>
+    </div>
+  </div>
+
+  <!-- One-time: add a profile photo -->
+  <div id="photo-prompt-overlay" class="overlay hidden">
+    <div class="overlay-content">
+      <h2 class="summary-title">📷 Add a Profile Photo</h2>
+      <p class="submit-confirm-text">Please add a profile photo so your sangh can recognize you.</p>
+      <div class="overlay-actions">
+        <button class="btn-cancel" id="btn-close-photo-prompt">Later</button>
+        <button class="btn-continue" id="btn-goto-profile-photo">Add Photo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Multi-Profile Switcher -->
+  <div id="profile-switcher-overlay" class="overlay hidden">
+    <div class="overlay-content profile-switcher-content">
+      <button class="btn-close-overlay" id="btn-close-profile-switcher">✕</button>
+      <h2 class="summary-title">👥 Switch Profile</h2>
+      <div class="profile-switcher-list" id="profile-switcher-list"><!-- Populated by JS --></div>
+      <button type="button" class="btn-export profile-switcher-add" id="btn-add-profile">➕ Add Profile</button>
+    </div>
+  </div>
+
+  <!-- Export Leaderboard to Excel -->
+  <div id="export-overlay" class="overlay hidden">
+    <div class="overlay-content">
+      <h2 class="summary-title">📊 Export to Excel</h2>
+      <p class="submit-confirm-text">Pick a date range to export each user's niyam points.</p>
+      <div class="input-group">
+        <label for="export-from">From</label>
+        <input type="date" id="export-from">
+      </div>
+      <div class="input-group">
+        <label for="export-to">To</label>
+        <input type="date" id="export-to">
+      </div>
+      <div class="register-error hidden" id="export-error"></div>
+      <div class="overlay-actions">
+        <button class="btn-cancel" id="btn-cancel-export">Cancel</button>
+        <button class="btn-continue" id="btn-run-export">
+          <span>Export</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Attendance to Excel -->
+  <div id="attendance-export-overlay" class="overlay hidden">
+    <div class="overlay-content">
+      <h2 class="summary-title">📊 Export Attendance</h2>
+      <p class="submit-confirm-text">Pick a date range to export attendance and gatha counts.</p>
+      <div class="input-group">
+        <label for="attendance-export-from">From</label>
+        <input type="date" id="attendance-export-from">
+      </div>
+      <div class="input-group">
+        <label for="attendance-export-to">To</label>
+        <input type="date" id="attendance-export-to">
+      </div>
+      <div class="register-error hidden" id="attendance-export-error"></div>
+      <div class="overlay-actions">
+        <button class="btn-cancel" id="btn-cancel-attendance-export">Cancel</button>
+        <button class="btn-continue" id="btn-run-attendance-export">
+          <span>Export</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaderboard Poster -->
+  <div id="poster-overlay" class="overlay hidden">
+    <div class="overlay-content poster-overlay-content">
+      <button class="btn-close-overlay" id="btn-close-poster">✕</button>
+      <h2 class="summary-title">📸 Generate Poster</h2>
+      <div class="history-nav">
+        <button id="btn-poster-prev" class="btn-history-nav">← Prev</button>
+        <span id="poster-month-label" class="history-month-label">July 2026</span>
+        <button id="btn-poster-next" class="btn-history-nav">Next →</button>
+      </div>
+      <div class="poster-canvas-wrap">
+        <canvas id="poster-canvas" width="1080" height="1350"></canvas>
+      </div>
+      <p class="register-error hidden" id="poster-error"></p>
+      <div class="overlay-actions hidden" id="poster-actions">
+        <button class="btn-cancel" id="btn-download-poster">⬇️ Download</button>
+        <button class="btn-continue" id="btn-share-poster">
+          <span>📤 Share</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monthly Niyam Stats (admin + user, shared) -->
+  <div id="niyam-stats-overlay" class="overlay hidden">
+    <div class="overlay-content niyam-stats-content">
+      <h2 class="summary-title">📊 Monthly Niyam Stats</h2>
+      <div class="history-nav">
+        <button id="btn-niyam-stats-prev" class="btn-history-nav">← Prev</button>
+        <span id="niyam-stats-month-label" class="history-month-label">July 2026</span>
+        <button id="btn-niyam-stats-next" class="btn-history-nav">Next →</button>
+      </div>
+      <p class="niyam-stats-total" id="niyam-stats-total"></p>
+      <p class="niyam-stats-summary" id="niyam-stats-summary"></p>
+      <div class="niyam-stats-list" id="niyam-stats-list"></div>
+      <button class="btn-continue" id="btn-close-niyam-stats">Close</button>
+    </div>
+  </div>
+
+  <!-- Evening Summary -->
+  <div id="evening-summary-overlay" class="overlay hidden">
+    <div class="overlay-content evening-summary-content">
+      <h2 class="summary-title">🌙 Today's Report</h2>
+      <div class="summary-stats" id="summary-stats"></div>
+      <div class="summary-kp" id="summary-kp">+0 AP earned</div>
+      <div class="summary-streak" id="summary-streak"></div>
+      <div class="summary-message" id="summary-message"></div>
+      <p class="summary-note" id="summary-note"></p>
+      <button class="btn-continue" id="btn-close-summary">Jai Jinendra 🙏</button>
+    </div>
+  </div>
+
+  <!-- KP Popup -->
+  <div id="kp-popup" class="kp-popup hidden">+0 AP</div>
+
+  <!-- Burst Particles -->
+  <div id="burst-container"></div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <!-- Excel export (admin leaderboard) — async: it's a ~900KB library used
+       only by the admin Export button, so it must never hold up the app's
+       own scripts. runExport() (app.js) already guards on
+       `typeof XLSX === 'undefined'`, so a click that beats the download
+       degrades to a clear error rather than a broken export. -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" async></script>
+
+  <!-- Scripts -->
+  <script src="data.js?v=53"></script>
+  <script src="auth.js?v=55"></script>
+  <script src="app.js?v=67"></script>
+</body>
+</html>

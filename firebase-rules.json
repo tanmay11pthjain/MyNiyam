@@ -1,0 +1,65 @@
+{
+  "rules": {
+    "meta": {
+      ".read": true,
+      ".write": false
+    },
+    "sanghs": {
+      ".read": "auth != null",
+      ".write": false
+    },
+    "sangh_config": {
+      ".read": "auth != null",
+      "$code": {
+        "admins": {
+          ".write": false
+        },
+        "settings": {
+          ".write": "auth != null && root.child('sangh_config').child($code).child('admins').child(auth.uid).val() === true"
+        },
+        "points": {
+          ".write": "auth != null && root.child('sangh_config').child($code).child('admins').child(auth.uid).val() === true"
+        },
+        "pointsVersion": {
+          ".write": "auth != null && root.child('sangh_config').child($code).child('admins').child(auth.uid).val() === true"
+        }
+      }
+    },
+    "sangh_members": {
+      ".read": "auth != null",
+      "$code": {
+        "$uid": {
+          ".write": "auth != null && (auth.uid === $uid || $uid.beginsWith(auth.uid + '__p') || root.child('sangh_config').child($code).child('admins').child(auth.uid).val() === true)"
+        }
+      }
+    },
+    "sangh_attendance": {
+      ".read": "auth != null",
+      "$code": {
+        ".write": "auth != null && root.child('sangh_config').child($code).child('admins').child(auth.uid).val() === true"
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || $uid.beginsWith(auth.uid + '__p') || root.child('sangh_config').child(root.child('users').child($uid).child('registration').child('sanghCode').val()).child('admins').child(auth.uid).val() === true)",
+        ".write": "auth != null && (auth.uid === $uid || $uid.beginsWith(auth.uid + '__p') || root.child('sangh_config').child(root.child('users').child($uid).child('registration').child('sanghCode').val()).child('admins').child(auth.uid).val() === true)",
+        "role": {
+          ".validate": "newData.val() === 'user'"
+        },
+        "sanghCodes": {
+          ".validate": false
+        }
+      }
+    },
+    "account_profiles": {
+      "$baseUid": {
+        ".read": "auth != null && auth.uid === $baseUid",
+        ".write": "auth != null && auth.uid === $baseUid"
+      }
+    },
+    "stats": {
+      ".read": true,
+      ".write": "auth != null && root.child('sangh_config').child(root.child('users').child(auth.uid).child('sanghCodes').child('0').val()).child('admins').child(auth.uid).val() === true"
+    }
+  }
+}
