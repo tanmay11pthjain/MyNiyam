@@ -48,11 +48,23 @@ function Gate({ path, children }: { path: string; children: ReactNode }) {
     const placeholder: AdminSanghRef = sangh ?? { id: "", name: "No pathshala open", city: "", status: "active" };
     return (
       <Ctx.Provider value={{ me: data, sangh: placeholder, refresh: me.reload }}>
-        <Chrome path={path} me={data} sangh={sangh} onChanged={me.set}>{children}</Chrome>
+        <Chrome path={path} me={data} sangh={sangh} onChanged={me.set} noTabs={!sangh}>{children}</Chrome>
       </Ctx.Provider>
     );
   }
 
+  if (!sangh && data.isSuper) {
+    // The super admin who runs no pathshala of their own: one clear way in.
+    return (
+      <Chrome path={path} me={data} sangh={null} onChanged={me.set} noTabs>
+        <div className="page">
+          <div className="page-title"><h1>Welcome</h1><p>You are the MyNiyam super admin.</p></div>
+          <Link className="btn btn-primary" href="/admin/super">Approve and add pathshalas</Link>
+          <p className="hint">To run a pathshala yourself, add your own number as its admin there.</p>
+        </div>
+      </Chrome>
+    );
+  }
   if (!sangh) return <div className="admin bare"><NoSangh me={data} onChanged={me.set} /></div>;
   if (sangh.status === "pending") {
     return (
