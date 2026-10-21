@@ -43,41 +43,35 @@ Do **not** run `db:seed:dev` or `db:reset` on Supabase.
 
 ---
 
-## Part 2: GitHub
+## Part 2: GitHub (your existing repo)
 
-1. Go to https://github.com/new.
-   - **Repository name:** `myniyam`
-   - **Private**
-   - Do **not** tick "Add a README" (the folder already has one).
-   - Click **Create repository**.
-2. In the terminal, go to the project folder (one level up from `app`):
+The code goes into your existing repo, https://github.com/tanmay11pthjain/MyNiyam. That repo already has the older v5 app at its root. Its history has been merged in, so **nothing is lost or overwritten**: the v5 files stay at the root, and the new app sits in the `app` folder beside them.
+
+1. In the terminal, go to the project folder:
    ```
-   cd C:\Users\tanma\Desktop\MyNiyam
+   cd C:Users	anmaDesktopMyNiyam
    ```
-3. Three folders/files are not committed yet and are not part of the app: `AGENTS.md`, `claude.md` and `landing/`. Leave them out, or add them if you want them on GitHub too:
+2. Push:
    ```
-   git add AGENTS.md claude.md landing
-   git commit -m "Notes and landing page"
-   ```
-4. Connect the folder to GitHub and push:
-   ```
-   git remote add origin https://github.com/tanmay11pthjain/myniyam.git
    git push -u origin main
    ```
-   If Git asks you to sign in, use the browser window it opens.
-5. Refresh the GitHub page. You should see the `app` folder.
+   If Git asks you to sign in, use the browser window it opens. Never use `--force`.
+3. Refresh the GitHub page. You should see the `app` folder next to the old files.
 
 `app/.env.local` is git-ignored, so your passwords and keys are not uploaded.
+
+If your v5 app is already on Vercel from this repo, that site keeps working: its files did not change. The new app gets its own, second Vercel project in Part 3.
 
 ---
 
 ## Part 3: Vercel
 
 1. Go to https://vercel.com and **sign in with GitHub**.
-2. Click **Add New… → Project**, find `myniyam` and click **Import**.
+2. Click **Add New… → Project**, find `MyNiyam` and click **Import**. This makes a **new, second** project; your existing v5 project is not touched.
    If it isn't listed, click **Adjust GitHub App Permissions** and allow the repository.
 3. On the setup screen:
-   - **Root Directory:** click **Edit** and pick `app`. This matters: the app lives in that folder.
+   - **Project Name:** something like `myniyam-app`, so it is easy to tell apart from the v5 project.
+   - **Root Directory:** click **Edit** and pick `app`. This matters: the new app lives in that folder (the root still holds v5).
    - **Framework Preset:** Next.js (it should pick this by itself).
    - Leave the build and output settings as they are.
 4. Open **Environment Variables** and add these one by one (name on the left, value on the right):
@@ -106,7 +100,7 @@ Do **not** run `db:seed:dev` or `db:reset` on Supabase.
    - open `https://<your address>/admin/login`, log in with **99999 00001**, code **1234**.
 8. The footer shows the version and the commit Vercel built, so you can tell which version the team is seeing.
 
-From now on, every `git push` to `main` makes Vercel build and publish the new version by itself.
+From now on, every `git push` to `main` makes Vercel build and publish the new version by itself (the v5 project rebuilds too, with no change).
 
 ### Your own super admin login (optional)
 
