@@ -65,12 +65,10 @@ export async function getToday(accountId: string, profileId: string): Promise<To
   return asAccount(accountId, async (tx) => {
     const prof = await loadProfile(tx, profileId);
     if (!prof) return null;
-    const [{ today, yesterday }] = await tx<{ today: string; yesterday: string }[]>`
-      select private.local_today()::text as today, (private.local_today() - 1)::text as yesterday`;
+    const [{ today }] = await tx<{ today: string }[]>`select private.local_today()::text as today`;
     const t = await dayView(tx, profileId, prof, today);
-    const y = await dayView(tx, profileId, prof, yesterday);
     const s = await streak(tx, profileId);
-    return { today: t, yesterday: y.editable ? y : null, streak: s.streak, streakAlive: s.alive };
+    return { today: t, streak: s.streak, streakAlive: s.alive };
   });
 }
 
@@ -98,7 +96,7 @@ export async function setLog(accountId: string, profileId: string, input: LogInp
         }
       } else {
         if (typeof input.value !== "number") return { ok: false as const, reason: "bad_request" as const };
-        if (input.value > 0) keep = { done: input.value >= (n.target ?? 1), value: input.value, choice: null };
+        if (input.value > 0) keep = { done: true, value: input.value, choice: null }; // a counter: the first one counts, no upper limit
       }
 
       if (keep) {

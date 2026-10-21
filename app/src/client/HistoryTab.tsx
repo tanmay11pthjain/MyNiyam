@@ -51,27 +51,29 @@ export function HistoryTab() {
           {data.days.map((d) => {
             const full = d.coreTotal > 0 ? d.coreDone >= d.coreTotal : d.anyDone > 0;
             const some = !full && d.anyDone > 0;
-            const isOpen = openDate === d.date;
             return (
               <li key={d.date}>
-                <button type="button" className="dayrow" aria-expanded={isOpen} onClick={() => setOpenDate(isOpen ? null : d.date)}>
+                <button type="button" className="dayrow" aria-haspopup="dialog" onClick={() => setOpenDate(d.date)}>
                   <span className={`dot${full ? " full" : some ? " some" : ""}`} aria-hidden="true" />
                   <span className="grow">
                     <span className="t">{dayLabel(d.date)}{d.date === data.today && " · Today"}</span>
                   </span>
                   <span className="s">{d.coreTotal > 0 ? `${d.coreDone} of ${d.coreTotal}` : d.anyDone > 0 ? `${d.anyDone} done` : "No niyams"}</span>
                 </button>
-                {isOpen && <DayDetail date={d.date} onChanged={() => setTick((x) => x + 1)} />}
               </li>
             );
           })}
         </ul>
       )}
+      {openDate && <DayDialog date={openDate} onClose={() => setOpenDate(null)} onChanged={() => setTick((x) => x + 1)} />}
     </div>
   );
 }
 
-function DayDetail({ date, onChanged }: { date: string; onChanged: () => void }) {
+/** One day in a pop-up. Only yesterday can be changed here; today is logged on the Today tab. */
+function DayDialog({ date, onClose, onChanged }: { date: string; onClose: () => void; onChanged: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => { ref.current?.showModal(); }, []);
   const [res, setRes] = useState<HistoryDayResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const chain = useRef<Promise<unknown>>(Promise.resolve());
@@ -80,10 +82,7 @@ function DayDetail({ date, onChanged }: { date: string; onChanged: () => void })
     void api<HistoryDayResponse>(`/api/history?date=${date}`).then((r) => { if (r.ok) setRes(r.data); else setErr(say(r.err).en); });
   }, [date]);
 
-  if (err) return <p className="msg err">{err}</p>;
-  if (!res) return <div className="skel" aria-busy="true" />;
-
-  const canEdit = res.isYesterday && res.day.editable;
+  const canEdit = !!res && res.isYesterday && res.day.editable;
 
   function log(n: DayNiyam, patch: LogPatch) {
     setRes((r) => r && { ...r, day: { ...r.day, niyams: r.day.niyams.map((x) => (x.id === n.id ? applyPatch(x, patch) : x)) } });
@@ -95,10 +94,21 @@ function DayDetail({ date, onChanged }: { date: string; onChanged: () => void })
   }
 
   return (
-    <div className="daydetail stack">
-      {res.day.niyams.length === 0 && <p className="hint">No niyams were planned this day.</p>}
-      {res.day.niyams.map((n) => <NiyamCard key={n.id} n={n} locked={!canEdit} onLog={(p) => log(n, p)} />)}
-      {!canEdit && <p className="hint">{res.isYesterday ? "This day has closed." : "Days older than yesterday can’t be changed. To log today, use the Today tab."}</p>}
-    </div>
+    <dialog ref={ref} className="sheet" aria-labelledby="day-title" onClose={onClose} onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }}>
+      <div className="sheet-head">
+        <div>
+          <h2 id="day-title">{dayLabel(date)}</h2>
+          {res && <p className="hint">{canEdit ? "You can still change yesterday." : res.isYesterday ? "This day has closed." : "Only yesterday can be changed. Log today on the Today tab."}</p>}
+        </div>
+        <button type="button" className="sheet-x" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
+      </div>
+      <div className="stack">
+        {err && <p className="msg err" role="alert">{err}</p>}
+        {!res && !err && <><div className="skel" aria-busy="true" /><div className="skel" /></>}
+        {res && res.day.niyams.length === 0 && <p className="hint">No niyams were planned this day.</p>}
+        {res?.day.niyams.map((n) => <NiyamCard key={n.id} n={n} locked={!canEdit} onLog={(p) => log(n, p)} />)}
+      </div>
+      <div className="mt-5"><Button kind="secondary" onClick={() => ref.current?.close()}>Close</Button></div>
+    </dialog>
   );
 }

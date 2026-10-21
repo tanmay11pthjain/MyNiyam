@@ -55,7 +55,10 @@ export function Home() {
       </Link>
     }>
       <main className="screen app-main">
-        <p className="sangh-line">{me.sangh.name}{cls ? ` · ${cls.name}` : ""}</p>
+        <div className="sangh-line">
+          <p className="sangh-name">{me.sangh.name}</p>
+          {cls && <p className="class-name">{cls.name}</p>}
+        </div>
         {tab === "today" && <TodayTab />}
         {tab === "history" && <HistoryTab />}
         {tab === "profile" && <ProfileTab p={p} me={me} cls={cls?.name} />}

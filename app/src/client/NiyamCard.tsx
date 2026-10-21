@@ -10,14 +10,7 @@ export function applyPatch(n: DayNiyam, p: LogPatch): DayNiyam {
   if (n.type === "yesno") return { ...n, done: p.done !== false };
   if (n.type === "choice") return { ...n, choice: p.choice ?? null, done: !!p.choice };
   const value = p.value ?? 0;
-  return { ...n, value, done: value > 0 && value >= (n.target ?? 1) };
-}
-
-/** 0 to 1: how far along this niyam is today. A count of 54 out of 108 is half. */
-export function progressOf(n: DayNiyam): number {
-  if (n.done) return 1;
-  if ((n.type === "count" || n.type === "duration") && n.target) return Math.min(1, n.value / n.target);
-  return 0;
+  return { ...n, value, done: value > 0 };
 }
 
 const Tick = () => (
@@ -25,12 +18,11 @@ const Tick = () => (
 );
 
 /**
- * One niyam. Yes/no: the whole card is the button. Count and minutes: a big +1 (or +5) with Done as a shortcut.
- * Choice: tap to open the options. `locked` shows the day as read-only.
+ * One niyam. Yes/no: the whole card is the button. Count: a counter with no upper limit, done from the first +1.
+ * Minutes: +5 at a time, done from the first minutes. Choice: tap to open the options. `locked` shows the day as read-only.
  */
 export function NiyamCard({ n, locked, onLog }: { n: DayNiyam; locked: boolean; onLog: (p: LogPatch) => void }) {
   const [open, setOpen] = useState(false);
-  const [note, setNote] = useState(false);
   const unit = n.type === "duration" ? " min" : "";
   const step = n.type === "duration" ? 5 : 1;
   const names = (
@@ -39,10 +31,6 @@ export function NiyamCard({ n, locked, onLog }: { n: DayNiyam; locked: boolean; 
       {n.nameHi && <span className="nc-hi hi" lang="hi">{n.nameHi}</span>}
     </>
   );
-  const infoBtn = n.note ? (
-    <button type="button" className="nc-info" aria-expanded={note} aria-label={`About ${n.name}`} onClick={() => setNote(!note)}>i</button>
-  ) : null;
-
   return (
     <article className={`ncard${n.done ? " done" : ""}`}>
       {n.type === "yesno" ? (
@@ -63,9 +51,8 @@ export function NiyamCard({ n, locked, onLog }: { n: DayNiyam; locked: boolean; 
         <div className="nc-controls">
           <button type="button" className="nc-minus" aria-label={`One less ${n.name}`} disabled={locked || n.value <= 0}
             onClick={() => onLog({ value: Math.max(0, n.value - step) })}>−</button>
-          <span className="nc-count" aria-live="polite"><b>{n.value}</b> / {n.target}{unit}</span>
+          <span className="nc-count" aria-live="polite"><b>{n.value}</b>{n.type === "duration" ? " min" : n.value === 1 ? " time" : " times"}</span>
           <button type="button" className="nc-plus" disabled={locked} onClick={() => onLog({ value: n.value + step })}>+{step}{unit}</button>
-          {!n.done && <button type="button" className="nc-fill" disabled={locked} onClick={() => onLog({ value: n.target ?? 1 })}>Done</button>}
         </div>
       )}
 
@@ -86,8 +73,6 @@ export function NiyamCard({ n, locked, onLog }: { n: DayNiyam; locked: boolean; 
           ))}
         </div>
       )}
-      {infoBtn}
-      {note && n.note && <p className="nc-note hint">{n.note}</p>}
     </article>
   );
 }

@@ -184,8 +184,8 @@ Members open **/home** after joining. Nothing new to set up in Supabase except o
 1. **Live database:** run `npm run db:migrate` once. You should see `applied 20261022000001_log_delete_window.sql`. It stops a member from clearing a day that has closed. Do **not** run `db:seed:dev` on Supabase.
 2. **Demo student (local only):** after `npm run db:seed:dev`, log in at http://localhost:3100 with **70000 00001**, code **1234**. Pick Meena, Aarav or Siya. Today starts empty, and the seed adds one niyam of every type (yes/no, count, minutes, choice).
 3. **How the rules work:**
-   - A day is an Indian day. Yesterday can be filled in or undone until the pathshala's catch-up window closes (24 hours by default, set on the admin's Niyams page).
-   - A count niyam goes up by 1 per tap. It is done when it reaches its target. A part-filled count moves the progress bar but is not "done".
+   - A day is an Indian day. Yesterday is changed only from History (tap the day; a pop-up opens), until the pathshala's catch-up window closes (24 hours by default, set on the admin's Niyams page).
+   - A count niyam is a plain counter with no upper limit: +1 per tap. The first count makes it done; more counts add nothing to progress or the streak. Minutes work the same way (+5 per tap).
    - The streak counts days in a row with at least one niyam done. Catching up yesterday keeps it.
    - The footer shows the version and the short commit it was built from (taken from the host's commit variable, or `git` locally).
 4. **Two dev servers:** a second `next dev` needs its own build folder: set `NEXT_DIST_DIR=.next-local` (the `app-local-db` launch config does this).

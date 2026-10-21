@@ -5,7 +5,7 @@ import type { NiyamOption, NiyamType } from "./admin-types";
 export type DayNiyam = {
   id: string; name: string; nameHi: string | null; type: NiyamType; target: number | null; options: NiyamOption[];
   icon: string | null; note: string | null; isCore: boolean;
-  /** Count, or minutes. 0 when nothing logged. */
+  /** Count (no upper limit), or minutes. 0 when nothing logged. Any value above 0 is done. */
   value: number;
   choice: string | null;
   done: boolean;
@@ -18,11 +18,9 @@ export type DayView = {
   niyams: DayNiyam[];
 };
 
-/** GET /api/today */
+/** GET /api/today. Yesterday is changed from History. */
 export type TodayResponse = {
   today: DayView;
-  /** Only while the catch-up window is open. */
-  yesterday: DayView | null;
   streak: number;
   /** Days in a row, ending today or yesterday, with at least one niyam done. */
   streakAlive: boolean;

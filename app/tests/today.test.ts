@@ -50,13 +50,13 @@ describe("logging", () => {
     expect(await sql()`select 1 from public.niyam_logs where profile_id = ${m.profileId}`).toHaveLength(0);
   });
 
-  it("count and minutes: below the target is saved but not done; reaching it is done", async () => {
+  it("count: a counter with no upper limit; the first one makes it done", async () => {
     const m = await member();
     const id = await niyamByType("count");
-    const part = await setLog(m.accountId, m.profileId, { niyamId: id, date: today, value: 5 });
-    expect(part.ok && part.niyam).toMatchObject({ value: 5, done: false });
-    const full = await setLog(m.accountId, m.profileId, { niyamId: id, date: today, value: 108 });
-    expect(full.ok && full.niyam.done).toBe(true);
+    const one = await setLog(m.accountId, m.profileId, { niyamId: id, date: today, value: 1 });
+    expect(one.ok && one.niyam).toMatchObject({ value: 1, done: true });
+    const many = await setLog(m.accountId, m.profileId, { niyamId: id, date: today, value: 5000 });
+    expect(many.ok && many.niyam).toMatchObject({ value: 5000, done: true });
     await setLog(m.accountId, m.profileId, { niyamId: id, date: today, value: 0 });
     expect(await sql()`select 1 from public.niyam_logs where profile_id = ${m.profileId}`).toHaveLength(0);
   });
@@ -94,12 +94,12 @@ describe("the logging window", () => {
     expect(await setLog(m.accountId, m.profileId, { niyamId: id, date: await day(-1) })).toEqual({ ok: false, reason: "log_window_closed" });
   });
 
-  it("yesterday disappears from Today when the pathshala allows no catch-up", async () => {
+  it("yesterday stays open by default and closes when the pathshala allows no catch-up", async () => {
     const m = await member();
-    expect((await getToday(m.accountId, m.profileId))!.yesterday).not.toBeNull();
+    const id = await niyamByType("yesno");
     await sql()`update public.sanghs set log_back_hours = 0 where id = ${heer}`;
     try {
-      expect((await getToday(m.accountId, m.profileId))!.yesterday).toBeNull();
+      expect(await setLog(m.accountId, m.profileId, { niyamId: id, date: await day(1) })).toEqual({ ok: false, reason: "log_window_closed" });
     } finally {
       await sql()`update public.sanghs set log_back_hours = 24 where id = ${heer}`;
     }
@@ -120,10 +120,10 @@ describe("streak", () => {
     expect((await getToday(m.accountId, m.profileId))!.streak).toBe(4);
   });
 
-  it("a part-filled count does not count as a day", async () => {
+  it("one count is enough for the day", async () => {
     const m = await member();
-    await setLog(m.accountId, m.profileId, { niyamId: await niyamByType("count"), date: today, value: 3 });
-    expect((await getToday(m.accountId, m.profileId))!.streak).toBe(0);
+    await setLog(m.accountId, m.profileId, { niyamId: await niyamByType("count"), date: today, value: 1 });
+    expect((await getToday(m.accountId, m.profileId))!.streak).toBe(1);
   });
 });
 
