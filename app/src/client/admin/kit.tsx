@@ -80,7 +80,7 @@ export function ToastHost({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={show}>
       {children}
-      <div role="status" aria-live="polite">{text && <div className="toast">{text}</div>}</div>
+      <div role="status" aria-live="polite">{text && <div className="toast admin-toast">{text}</div>}</div>
     </ToastCtx.Provider>
   );
 }

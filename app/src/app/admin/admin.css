@@ -63,6 +63,7 @@
 button.row, a.row { cursor: pointer; }
 button.row:hover, a.row:hover { background: var(--bg-3); }
 .row .grow { flex: 1; min-width: 0; }
+.admin .chev { width: 20px; height: 20px; flex: none; color: var(--ink-dim); }
 .row .t { font: 700 var(--fs-16)/1.25 var(--font-display); display: block; overflow-wrap: anywhere; }
 .row .s { font-size: var(--fs-14); color: var(--ink-dim); display: block; line-height: 1.35; }
 .row .avatar { width: 40px; height: 40px; font-size: var(--fs-18); overflow: hidden; }
@@ -184,3 +185,6 @@ textarea.input { min-height: 88px; padding: var(--s-3) var(--s-4); resize: verti
   .poster-fit, .poster-scale { transform: none !important; height: auto !important; width: auto !important; overflow: visible !important; }
   .poster { box-shadow: none; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
+
+/* Toasts sit above the tab bar */
+.admin-toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
