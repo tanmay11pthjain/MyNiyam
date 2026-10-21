@@ -170,8 +170,9 @@ function SetupPerson({ me, profile, onDone }: { me: Me; profile: Profile; onDone
   const [fieldErrs, setFieldErrs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Words | null>(null);
-  const fields = me.formFields;
   const catchUp = profile.setupDone && (profile.missing?.length ?? 0) > 0;
+  // A catch-up visit asks only the new questions; everything else is already answered and kept.
+  const fields = catchUp ? me.formFields.filter((f) => profile.missing!.includes(f.key)) : me.formFields;
 
   async function finish() {
     const missing: Record<string, string> = {};

@@ -164,14 +164,19 @@ export async function setupProfile(
     const errors: AnswerErrors = checked.ok ? {} : { ...checked.errors };
     if (fields.some((f) => f.type === "photo" && f.required) && !p.photo_url) errors.photo = "required";
     if (!checked.ok || Object.keys(errors).length) return { ok: false as const, reason: "invalid_answers" as const, fields: errors };
+    // Answers to questions the form no longer asks are kept, so turning a question off never loses data.
+    const [old] = await tx`select answers from public.profile_answers where profile_id = ${profileId}`;
+    const asked = new Set(fields.map((f) => f.key));
+    const kept = Object.fromEntries(Object.entries((old?.answers ?? {}) as Record<string, string | number>).filter(([k]) => !asked.has(k)));
+    const answers = { ...kept, ...checked.answers };
     await tx`
-      insert into public.profile_answers (profile_id, answers) values (${profileId}, ${tx.json(checked.answers)})
+      insert into public.profile_answers (profile_id, answers) values (${profileId}, ${tx.json(answers)})
       on conflict (profile_id) do update set answers = excluded.answers, updated_at = now()`;
     const [row] = await tx<ProfileRow[]>`
       update public.profiles set class_id = ${classId}, setup_done_at = coalesce(setup_done_at, now())
       where id = ${profileId}
       returning id, name, relation, role, class_id, setup_done_at, photo_url`;
-    return { ok: true as const, profile: toProfile({ ...row, answers: checked.answers }, fields) };
+    return { ok: true as const, profile: toProfile({ ...row, answers }, fields) };
   });
 }
 
