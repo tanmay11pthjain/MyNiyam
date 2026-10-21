@@ -1,0 +1,837 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MyNiyam · Your daily Jain companion</title>
+<meta name="description" content="Keep your daily niyams with one tap. Navkarsi and Chauvihar times for your town, with anumodana from your pathshala and family.">
+<meta name="theme-color" content="#FAF1E6">
+<link rel="icon" type="image/png" href="brand/favicon.png">
+<link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
+<meta property="og:title" content="MyNiyam · Your daily Jain companion">
+<meta property="og:description" content="A niyam kept is a lamp lit. Keep your daily niyams with one tap.">
+<meta property="og:image" content="brand/icon-512.png">
+<script>
+/* Runs before first paint: sets the sun-based theme and decides whether to play the intro. */
+(function () {
+  var d = document.documentElement, t = null;
+  d.className += " js";
+  try { t = localStorage.getItem("myniyam-theme"); } catch (e) {}
+  if (!t) { var n = new Date(), h = n.getHours() + n.getMinutes() / 60; t = (h >= 18.75 || h < 6) ? "night" : "day"; }
+  if (t === "night") d.setAttribute("data-theme", "night");
+  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) d.className += " intro-on";
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Mukta:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ---------- Tokens (from the MyNiyam plan: Chandan ground, Ink text, Kesar action) ---------- */
+:root {
+  --bg: #FAF1E6;          /* chandan, the ground */
+  --bg-2: #FFFDF9;        /* moti, cards */
+  --bg-3: #F2E4D0;        /* deeper chandan, bands */
+  --ink: #1C2F5E;         /* all text */
+  --ink-dim: #56607F;
+  --line: #E6D6BF;
+  --accent: #F09D27;      /* kesar, every main button */
+  --accent-ink: #1C2F5E;  /* text on kesar */
+  --accent-soft: #FCE7C6;
+  --accent-text: #B5620A; /* kesar dark enough for large text on chandan */
+  --secondary: #2A4D8C;   /* neel */
+  --danger: #C8402F;      /* sindoor, darkened for text contrast */
+  --sindoor: #E1503F;
+  --panna: #1FA08B;
+  --sona: #D9A944;
+
+  --font-display: "Baloo 2", system-ui, sans-serif;
+  --font-body: "Mukta", system-ui, sans-serif;
+
+  --fs-12: .75rem; --fs-14: .875rem; --fs-16: 1rem; --fs-18: 1.125rem;
+  --fs-22: 1.375rem; --fs-28: 1.75rem; --fs-36: 2.25rem; --fs-52: 3.25rem;
+
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px;
+  --s-6: 32px; --s-7: 48px; --s-8: 64px; --s-9: 96px;
+
+  --r-s: 10px; --r-m: 16px; --r-l: 24px; --r-xl: 40px; --r-pill: 999px;
+  --shadow-1: 0 1px 2px rgba(28,47,94,.06), 0 2px 8px rgba(28,47,94,.06);
+  --shadow-2: 0 12px 40px rgba(28,47,94,.14), 0 2px 6px rgba(28,47,94,.08);
+  --glow: 0 0 0 6px rgba(240,157,39,.22);
+
+  --t-fast: 150ms; --t-base: 300ms; --t-slow: 650ms;
+  --ease: cubic-bezier(.22,.8,.26,1);
+  --gutter: 16px;
+  color-scheme: light;
+}
+/* Raat: the Pratikraman theme after sunset */
+:root[data-theme="night"] {
+  --bg: #141A3A; --bg-2: #1C2450; --bg-3: #10152F;
+  --ink: #F6EEDF; --ink-dim: #B9C0DC; --line: #2C3666;
+  --accent-soft: #3A3550; --accent-text: #F4B05A; --secondary: #9DB4E8; --danger: #FF8A78;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.3); --shadow-2: 0 16px 48px rgba(0,0,0,.45);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: var(--fs-18); line-height: 1.55;
+  transition: background-color var(--t-slow) var(--ease), color var(--t-slow) var(--ease);
+}
+img { max-width: 100%; display: block; }
+a { color: inherit; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.1; margin: 0; letter-spacing: -.01em; }
+p { margin: 0; }
+.hi { font-family: var(--font-body); }
+.wrap { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 var(--gutter); }
+:focus-visible { outline: 3px solid var(--secondary); outline-offset: 3px; border-radius: 6px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: var(--s-4); top: -60px; background: var(--bg-2); padding: var(--s-2) var(--s-4); border-radius: var(--r-s); z-index: 10; }
+.skip:focus { top: var(--s-2); }
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2);
+  min-height: 52px; padding: 0 var(--s-5); border-radius: var(--r-pill); border: 0;
+  font: 700 var(--fs-18)/1 var(--font-display); text-decoration: none; cursor: pointer;
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease), background-color var(--t-fast);
+}
+.btn:active { transform: scale(.97); }
+.btn-primary { background: var(--accent); color: var(--accent-ink); box-shadow: 0 6px 18px rgba(240,157,39,.35); }
+.btn-primary:hover { box-shadow: 0 8px 24px rgba(240,157,39,.45), var(--glow); }
+.btn-secondary { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--line); }
+.btn-secondary:hover { box-shadow: inset 0 0 0 2px var(--ink-dim); }
+.btn[disabled] { opacity: .6; cursor: progress; }
+
+/* ---------- Header ---------- */
+.top { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.top .wrap { display: flex; align-items: center; justify-content: space-between; min-height: 64px; gap: var(--s-3); }
+.logo { display: inline-flex; align-items: center; padding: 6px 10px; margin-left: -10px; border-radius: var(--r-s); transition: background-color var(--t-slow); }
+.logo img { height: 26px; width: auto; }
+.night-only { display: none !important; }
+[data-theme="night"] .day-only { display: none !important; }
+[data-theme="night"] .night-only { display: block !important; }
+.top-actions { display: flex; align-items: center; gap: var(--s-1); }
+.link-quiet { font-size: var(--fs-16); font-weight: 500; color: var(--ink-dim); text-decoration: none; padding: 10px 10px; min-height: 44px; display: inline-flex; align-items: center; border-radius: var(--r-s); }
+.link-quiet:hover { color: var(--ink); }
+.theme-btn { width: 44px; height: 44px; border-radius: var(--r-pill); border: 0; background: transparent; color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+.theme-btn:hover { background: var(--bg-3); }
+.theme-btn svg { width: 22px; height: 22px; }
+.theme-btn .moon { display: none; }
+[data-theme="night"] .theme-btn .sun { display: none; }
+[data-theme="night"] .theme-btn .moon { display: block; }
+@media (max-width: 359px) { .link-quiet.hide-xs { display: none; } }
+
+/* ---------- Hero ---------- */
+.hero { padding: var(--s-6) 0 var(--s-8); position: relative; overflow: hidden; }
+.hero .wrap { display: grid; gap: var(--s-7); align-items: center; }
+.greet { display: inline-flex; gap: var(--s-2); align-items: baseline; font-family: var(--font-display); font-weight: 600; color: var(--secondary); font-size: var(--fs-16); margin-bottom: var(--s-4); }
+.greet .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sindoor); align-self: center; }
+.hero h1 { font-size: clamp(2.5rem, 10vw, 4.25rem); font-weight: 800; }
+.hero h1 em { font-style: normal; color: var(--accent-text); position: relative; white-space: nowrap; }
+.hero .hi-line { margin-top: var(--s-3); font-size: var(--fs-22); color: var(--ink-dim); font-weight: 500; }
+.hero .lead { margin-top: var(--s-5); max-width: 34ch; font-size: var(--fs-22); line-height: 1.35; }
+.hero .cta { margin-top: var(--s-6); display: flex; flex-direction: column; gap: var(--s-3); align-items: flex-start; }
+.cta-note { font-size: var(--fs-14); color: var(--ink-dim); }
+.sunset-note { margin-top: var(--s-6); display: inline-flex; gap: var(--s-2); align-items: center; font-size: var(--fs-14); color: var(--ink-dim); }
+.sunset-note svg { width: 18px; height: 18px; flex: none; }
+
+/* ---------- Phone mock-up (the app's own day colours, always) ---------- */
+.stage { position: relative; display: grid; place-items: center; padding: var(--s-4) 0; }
+.halo { position: absolute; width: min(420px, 92vw); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, rgba(240,157,39,.28), rgba(240,157,39,0) 65%); top: 50%; left: 50%; transform: translate(-50%, -54%); pointer-events: none; transition: opacity var(--t-slow); }
+.halo.lit { animation: halo 1.4s var(--ease); }
+@keyframes halo { 40% { transform: translate(-50%, -54%) scale(1.12); opacity: 1; } }
+.phone {
+  --p-bg: #FAF1E6; --p-card: #FFFDF9; --p-ink: #1C2F5E; --p-dim: #5E6787; --p-line: #EADCC7;
+  position: relative; width: 300px; max-width: 100%; border-radius: 44px; padding: 10px;
+  background: #1C2F5E; box-shadow: var(--shadow-2);
+}
+.screen { background: var(--p-bg); color: var(--p-ink); border-radius: 34px; overflow: hidden; padding: 18px 14px 16px; font-size: 13px; line-height: 1.35; height: 664px; position: relative; }
+.notch { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); width: 84px; height: 22px; border-radius: 14px; background: #1C2F5E; }
+.app-top { display: flex; align-items: center; justify-content: space-between; margin-top: 26px; }
+.app-top img { height: 16px; width: auto; }
+.chips { display: flex; gap: 6px; align-items: center; }
+.streak { display: inline-flex; align-items: center; gap: 4px; background: var(--p-card); border: 1px solid var(--p-line); border-radius: 99px; padding: 2px 9px 2px 6px; font: 700 13px var(--font-display); }
+.streak svg { width: 14px; height: 16px; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 700 13px var(--font-display); background: #FCE7C6; color: #1C2F5E; }
+.app-hello { margin-top: 14px; font: 800 21px/1.1 var(--font-display); }
+.app-date { margin-top: 4px; color: var(--p-dim); display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.tithi { background: #FCE7C6; color: #7A4A06; border-radius: 99px; padding: 1px 8px; font-weight: 600; font-size: 11px; }
+.day-card { margin-top: 12px; background: var(--p-card); border-radius: 18px; padding: 10px 12px 12px; box-shadow: 0 1px 3px rgba(28,47,94,.08); }
+.arc { display: block; width: 100%; height: auto; }
+.arc .ring-fill { transition: stroke-dashoffset var(--t-slow) var(--ease); }
+.arc .count { font: 800 22px var(--font-display); fill: #1C2F5E; }
+.arc .of { font: 500 9px var(--font-body); fill: #5E6787; }
+.times { display: flex; justify-content: space-between; margin-top: 2px; font-size: 11px; }
+.times b { display: block; font: 700 12px var(--font-display); }
+.times .r { text-align: right; }
+.times .kept { color: #11806E; font-weight: 600; }
+.sec { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 2px 8px; }
+.sec h4 { margin: 0; font: 700 15px var(--font-display); }
+.sec span { color: var(--p-dim); font-size: 12px; transition: color var(--t-base); }
+.niyam { display: flex; align-items: center; gap: 10px; background: var(--p-card); border-radius: 16px; padding: 9px 9px 9px 10px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(28,47,94,.06); position: relative; overflow: hidden; }
+.n-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none; }
+.n-ico svg { width: 20px; height: 20px; }
+.n-body { flex: 1; min-width: 0; }
+.n-body b { display: block; font: 700 14px/1.15 var(--font-display); }
+.n-body .hi { color: var(--p-dim); font-size: 11px; display: block; }
+.n-body .st { font-size: 11px; color: #11806E; font-weight: 600; }
+.n-body .st.todo { color: var(--p-dim); font-weight: 500; }
+.tap { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; background: #F09D27; color: #1C2F5E; position: relative; transition: transform var(--t-fast) var(--ease), background-color var(--t-base); }
+.tap svg { width: 18px; height: 18px; }
+.tap.plus { background: transparent; box-shadow: inset 0 0 0 2px #1C2F5E; }
+.tap.pressed { transform: scale(.86); }
+.ripple { position: absolute; right: 18px; top: 50%; width: 10px; height: 10px; margin: -5px; border-radius: 50%; background: rgba(240,157,39,.35); transform: scale(0); pointer-events: none; }
+.ripple.go { animation: ripple 900ms var(--ease) forwards; }
+@keyframes ripple { to { transform: scale(40); opacity: 0; } }
+.finger { position: absolute; width: 34px; height: 34px; border-radius: 50%; background: rgba(28,47,94,.18); border: 2px solid rgba(28,47,94,.35); right: 23px; bottom: 140px; opacity: 0; transform: translate(30px, 40px); pointer-events: none; transition: opacity var(--t-base), transform var(--t-slow) var(--ease); }
+.finger.in { opacity: 1; transform: none; }
+.tabbar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-around; padding: 8px 6px 12px; background: var(--p-card); border-top: 1px solid var(--p-line); font-size: 10px; color: var(--p-dim); }
+.tabbar span { display: grid; justify-items: center; gap: 2px; }
+.tabbar i { width: 18px; height: 18px; border-radius: 6px; background: currentColor; opacity: .25; }
+.tabbar .on { color: #1C2F5E; font-weight: 600; }
+.tabbar .on i { background: #F09D27; opacity: 1; }
+.lotus { position: absolute; right: 16px; top: 50%; width: 40px; height: 40px; margin-top: -20px; pointer-events: none; opacity: 0; transform: scale(.4); }
+.lotus.bloom { animation: bloom 1100ms var(--ease) forwards; }
+@keyframes bloom { 30% { opacity: 1; transform: scale(1.15) translateY(-6px); } 100% { opacity: 0; transform: scale(1.3) translateY(-26px); } }
+
+/* ---------- Why (three plain lines, not a feature grid) ---------- */
+.why { padding: var(--s-8) 0; background: var(--bg-3); transition: background-color var(--t-slow); }
+.why h2, .colours h2, .family h2, .pathshala h2, .join h2 { font-size: clamp(1.9rem, 6.5vw, 2.75rem); font-weight: 800; max-width: 18ch; }
+.why-list { list-style: none; margin: var(--s-6) 0 0; padding: 0; display: grid; gap: var(--s-6); }
+.why-item { display: grid; gap: var(--s-4); }
+.why-item h3 { font-size: var(--fs-28); font-weight: 700; }
+.why-item p { color: var(--ink-dim); max-width: 40ch; margin-top: var(--s-2); }
+.why-item .hi { color: var(--ink-dim); font-size: var(--fs-16); }
+.snip { background: var(--bg-2); border-radius: var(--r-m); padding: var(--s-4); box-shadow: var(--shadow-1); max-width: 360px; font-size: var(--fs-16); transition: background-color var(--t-slow); }
+.snip-row { display: flex; align-items: center; gap: var(--s-3); }
+.snip-row + .snip-row { margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--line); }
+.snip .grow { flex: 1; }
+.snip b { font-family: var(--font-display); font-weight: 700; display: block; line-height: 1.2; }
+.snip small { color: var(--ink-dim); font-size: var(--fs-14); }
+.snip .good { color: var(--panna); font-weight: 600; font-size: var(--fs-14); }
+[data-theme="night"] .snip .good { color: #4FD1B9; }
+.badge-round { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; font: 700 var(--fs-16) var(--font-display); }
+.time-big { font: 800 var(--fs-28)/1 var(--font-display); }
+.anu { display: flex; gap: var(--s-2); flex-wrap: wrap; margin-top: var(--s-3); }
+.anu span { font-size: var(--fs-14); padding: 4px 12px; border-radius: var(--r-pill); box-shadow: inset 0 0 0 1.5px var(--line); }
+.anu span:first-child { background: var(--accent-soft); box-shadow: none; font-weight: 600; }
+
+/* ---------- Panch Parmeshti colours ---------- */
+.colours { padding: var(--s-8) 0; }
+.colours .intro { margin-top: var(--s-4); color: var(--ink-dim); max-width: 46ch; }
+.flag { margin-top: var(--s-6); display: grid; gap: var(--s-2); }
+.band { display: grid; grid-template-columns: 14px 1fr; gap: var(--s-4); align-items: stretch; padding: var(--s-3) 0; }
+.band .sw { border-radius: 7px; }
+.band b { font: 700 var(--fs-22)/1.2 var(--font-display); display: block; }
+.band b small { font: 500 var(--fs-16) var(--font-body); color: var(--ink-dim); margin-left: var(--s-2); }
+.band p { color: var(--ink-dim); font-size: var(--fs-16); }
+.sw.moti { background: #FFFDF9; box-shadow: inset 0 0 0 1.5px var(--line); }
+.sw.sindoor { background: #E1503F; } .sw.kesar { background: #F09D27; }
+.sw.panna { background: #1FA08B; } .sw.neel { background: #2A4D8C; }
+[data-theme="night"] .sw.neel { background: #5D7FC4; }
+
+/* ---------- Family ---------- */
+.family { padding: var(--s-8) 0; background: var(--bg-3); transition: background-color var(--t-slow); }
+.family .wrap { display: grid; gap: var(--s-6); align-items: center; }
+.family .intro { margin-top: var(--s-4); color: var(--ink-dim); max-width: 40ch; }
+.who { background: var(--bg-2); border-radius: var(--r-l); padding: var(--s-5); box-shadow: var(--shadow-1); max-width: 420px; transition: background-color var(--t-slow); }
+.who h3 { font-size: var(--fs-22); font-weight: 700; }
+.who > small { color: var(--ink-dim); font-size: var(--fs-14); display: block; margin-top: var(--s-1); }
+.who ul { list-style: none; padding: 0; margin: var(--s-4) 0 0; display: grid; gap: var(--s-2); }
+.who li { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3); border-radius: var(--r-m); box-shadow: inset 0 0 0 1.5px var(--line); }
+.who li.sel { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.who li b { font-family: var(--font-display); display: block; line-height: 1.2; }
+.who li small { color: var(--ink-dim); font-size: var(--fs-14); }
+.who .add { color: var(--secondary); font-weight: 600; box-shadow: inset 0 0 0 1.5px var(--line); border-style: dashed; }
+.promise { margin-top: var(--s-5); display: flex; gap: var(--s-3); align-items: flex-start; max-width: 44ch; }
+.promise svg { width: 24px; height: 24px; flex: none; color: var(--secondary); margin-top: 2px; }
+.promise p { font-size: var(--fs-16); }
+
+/* ---------- Pathshala (secondary audience) ---------- */
+.pathshala { padding: var(--s-8) 0; }
+.pathshala .wrap { display: grid; gap: var(--s-6); }
+.pathshala .intro { margin-top: var(--s-4); color: var(--ink-dim); max-width: 42ch; }
+.ledger { list-style: none; padding: 0; margin: var(--s-5) 0 0; display: grid; gap: var(--s-3); max-width: 44ch; }
+.ledger li { display: grid; grid-template-columns: 26px 1fr; gap: var(--s-2); font-size: var(--fs-16); }
+.ledger li svg { width: 20px; height: 20px; color: var(--panna); margin-top: 3px; }
+.manage { background: var(--bg-2); border-radius: var(--r-l); padding: var(--s-5); box-shadow: var(--shadow-1); max-width: 440px; transition: background-color var(--t-slow); }
+.manage .big { font: 800 var(--fs-52)/1 var(--font-display); }
+.manage .big small { font-size: var(--fs-22); color: var(--ink-dim); font-weight: 600; }
+.manage .lbl { color: var(--ink-dim); font-size: var(--fs-16); margin-top: var(--s-1); }
+.bars { margin-top: var(--s-5); display: grid; gap: var(--s-3); }
+.bar { display: grid; grid-template-columns: 64px 1fr 56px; gap: var(--s-3); align-items: center; font-size: var(--fs-14); }
+.bar .track { height: 10px; border-radius: 99px; background: var(--bg-3); overflow: hidden; }
+.bar .fill { display: block; height: 100%; border-radius: 99px; background: var(--secondary); width: 0; transition: width 900ms var(--ease); }
+.manage.seen .fill { width: var(--w); }
+.bar span:last-child { text-align: right; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.nudge { margin-top: var(--s-5); padding-top: var(--s-4); border-top: 1px solid var(--line); display: flex; align-items: center; gap: var(--s-3); font-size: var(--fs-16); }
+.nudge .grow { flex: 1; }
+.nudge b { font-family: var(--font-display); display: block; line-height: 1.2; }
+.nudge small { color: var(--ink-dim); font-size: var(--fs-14); }
+.pill-btn { min-height: 40px; padding: 0 var(--s-4); border-radius: var(--r-pill); box-shadow: inset 0 0 0 2px var(--line); font: 700 var(--fs-14) var(--font-display); display: inline-flex; align-items: center; }
+
+/* ---------- Join ---------- */
+.join { padding: var(--s-8) 0 var(--s-9); background: var(--bg-3); transition: background-color var(--t-slow); }
+.join-card { background: var(--bg-2); border-radius: var(--r-xl); padding: var(--s-6) var(--s-5); box-shadow: var(--shadow-2); max-width: 560px; margin: 0 auto; text-align: center; transition: background-color var(--t-slow); }
+.join-card img.mark { width: 64px; height: auto; margin: 0 auto var(--s-4); }
+.join h2 { margin: 0 auto; }
+
+.join .hi-line { color: var(--ink-dim); margin-top: var(--s-2); font-size: var(--fs-18); }
+.join .intro { margin: var(--s-4) auto 0; color: var(--ink-dim); max-width: 36ch; font-size: var(--fs-16); }
+.code-form { margin-top: var(--s-6); display: grid; gap: var(--s-3); text-align: left; }
+.code-form label { font: 600 var(--fs-16) var(--font-display); }
+.code-input {
+  width: 100%; min-height: 60px; border-radius: var(--r-m); border: 2px solid var(--line); background: var(--bg);
+  color: var(--ink); font: 700 var(--fs-28)/1 var(--font-display); letter-spacing: .3em; text-transform: uppercase; text-align: center;
+  padding: 0 var(--s-4); transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.code-input::placeholder { color: var(--ink-dim); opacity: .45; letter-spacing: .3em; }
+.code-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--glow); }
+.code-input[aria-invalid="true"] { border-color: var(--danger); }
+.code-form .btn { width: 100%; }
+.msg { min-height: 1.5em; font-size: var(--fs-16); }
+.msg.err { color: var(--danger); }
+.msg.ok { color: var(--ink); }
+.join .or { margin-top: var(--s-5); font-size: var(--fs-16); color: var(--ink-dim); }
+.spinner { width: 18px; height: 18px; border-radius: 50%; border: 3px solid rgba(28,47,94,.25); border-top-color: #1C2F5E; animation: spin .8s linear infinite; display: none; }
+.btn.working .spinner { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Footer ---------- */
+footer { padding: var(--s-7) 0 var(--s-8); font-size: var(--fs-16); }
+footer .wrap { display: grid; gap: var(--s-4); }
+footer .logo { justify-self: start; }
+footer .logo img { height: 22px; }
+footer p { color: var(--ink-dim); }
+footer .credits { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-5); }
+footer .credits b { color: var(--ink); font-weight: 600; }
+footer .ver { font-variant-numeric: tabular-nums; font-size: var(--fs-14); }
+
+/* ---------- Intro: the logo writes itself, then the dot becomes the sun ---------- */
+.splash { display: none; }
+.intro-on .splash {
+  display: grid; place-items: center; position: fixed; inset: 0; z-index: 50;
+  background: var(--bg); cursor: pointer; overflow: hidden;
+}
+.intro-word { position: relative; width: min(84vw, 520px); }
+.intro-word img { width: 100%; height: auto; }
+.intro-ink {
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 45%, transparent 55%, transparent 100%);
+          mask-image: linear-gradient(90deg, #000 0%, #000 45%, transparent 55%, transparent 100%);
+  -webkit-mask-size: 260% 100%; mask-size: 260% 100%;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: 100% 0; mask-position: 100% 0;
+}
+.intro-dot {
+  position: absolute; left: 47.73%; top: 2.66%; width: 3.98%; aspect-ratio: 1; border-radius: 50%;
+  background: #E1503F; opacity: 0; will-change: transform;
+}
+.intro-dot::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; opacity: 0;
+  background: radial-gradient(circle, #FFF4D6 0%, #FFD58A 22%, #F09D27 52%, #E1503F 100%);
+  transition: opacity 500ms var(--ease);
+}
+.intro-dot.sun::after { opacity: 1; }
+.intro-tag {
+  position: absolute; left: 0; right: 0; bottom: calc(18vh + env(safe-area-inset-bottom));
+  text-align: center; font: 600 var(--fs-14)/1 var(--font-body); letter-spacing: .28em; text-transform: uppercase;
+  color: var(--ink-dim); opacity: 0;
+}
+.intro-skip { position: absolute; right: var(--s-4); top: calc(var(--s-4) + env(safe-area-inset-top)); font-size: var(--fs-14); color: var(--ink-dim); background: none; border: 0; min-height: 44px; padding: 0 var(--s-3); cursor: pointer; font-family: var(--font-body); }
+
+/* ---------- Sticky join bar (phones) ---------- */
+.dock {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; padding: var(--s-3) var(--gutter) calc(var(--s-3) + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 -1px 0 var(--line); transform: translateY(110%); transition: transform var(--t-base) var(--ease);
+}
+.dock.show { transform: none; }
+.dock .btn { width: 100%; min-height: 56px; font-size: var(--fs-22); }
+@media (min-width: 720px) { .dock { display: none; } }
+
+/* ---------- Phone-first trims ---------- */
+@media (max-width: 719px) {
+  .wide-only { display: none !important; }
+  .hero { padding-top: var(--s-5); }
+  .hero .cta .btn { width: 100%; min-height: 60px; font-size: var(--fs-22); }
+  .hero .cta { align-items: stretch; text-align: center; margin-top: var(--s-5); }
+  .hero .lead { font-size: var(--fs-22); line-height: 1.35; margin-top: var(--s-4); }
+  .why-item p { margin-top: var(--s-1); }
+  .why-list { gap: var(--s-7); }
+  .band { padding: var(--s-2) 0; align-items: center; grid-template-columns: 40px 1fr; }
+  .band .sw { width: 40px; height: 40px; border-radius: 50%; }
+  .family .wrap { gap: var(--s-5); }
+  footer { padding-bottom: calc(var(--s-9) + var(--s-6)); }
+}
+
+/* ---------- Reveal on scroll (content stays visible without JS) ---------- */
+.js .rise { opacity: 0; transform: translateY(18px); transition: opacity var(--t-slow) var(--ease), transform var(--t-slow) var(--ease); }
+.js .rise.seen { opacity: 1; transform: none; }
+
+/* ---------- Larger screens ---------- */
+@media (min-width: 720px) {
+  :root { --gutter: 32px; }
+  .why-item { grid-template-columns: 1fr 360px; align-items: center; gap: var(--s-7); }
+  .why-item:nth-child(2) { grid-template-columns: 360px 1fr; }
+  .why-item:nth-child(2) .snip { order: -1; }
+  .flag { grid-template-columns: repeat(5, 1fr); gap: var(--s-4); }
+  .band { grid-template-columns: 1fr; grid-template-rows: 120px auto; gap: var(--s-3); }
+  .band:nth-child(odd) { grid-template-rows: 160px auto; }
+  .band .sw { border-radius: var(--r-m); }
+  .band b small { display: block; margin: 2px 0 var(--s-1); }
+  .family .wrap, .pathshala .wrap { grid-template-columns: 1fr 1fr; gap: var(--s-8); }
+  .pathshala .manage { justify-self: end; }
+  .join-card { padding: var(--s-7); }
+}
+@media (min-width: 960px) {
+  .hero { padding: var(--s-8) 0 var(--s-9); }
+  .hero .wrap { grid-template-columns: 1.1fr .9fr; gap: var(--s-8); }
+  .hero .cta { flex-direction: row; align-items: center; gap: var(--s-5); }
+  .why-list { gap: var(--s-8); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+  .js .rise { opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+<div class="splash" id="splash" aria-hidden="true">
+  <button class="intro-skip" type="button" tabindex="-1">Skip</button>
+  <div class="intro-word">
+    <img class="intro-ink day-only" src="brand/wordmark-nodot.png" alt="" width="880" height="188">
+    <img class="intro-ink night-only" src="brand/wordmark-nodot-night.png" alt="" width="880" height="188">
+    <span class="intro-dot" id="introDot"></span>
+  </div>
+  <p class="intro-tag" id="introTag">Your daily Jain companion</p>
+</div>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="#top" aria-label="MyNiyam home"><img class="day-only" src="brand/wordmark.png" alt="MyNiyam" width="880" height="188"><img class="night-only" src="brand/wordmark-night.png" alt="MyNiyam" width="880" height="188"></a>
+    <div class="top-actions">
+      <a class="link-quiet hide-xs" href="#pathshala">For pathshalas</a>
+      <button class="theme-btn" type="button" id="themeBtn" aria-label="Switch to evening colours" title="Day and evening colours">
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <!-- Hero: the one big thing is the phone keeping a niyam -->
+  <section class="hero" id="top" aria-labelledby="heroTitle">
+    <div class="wrap">
+      <div>
+        <p class="greet"><span class="dot" aria-hidden="true"></span>Jai Jinendra <span class="hi" lang="hi">जय जिनेन्द्र</span></p>
+        <h1 id="heroTitle">A niyam kept is a <em>lamp lit.</em></h1>
+        <p class="hi-line hi" lang="hi">नियम निभाया, दीप जलाया</p>
+        <p class="lead">One tap for each niyam you keep.</p>
+        <div class="cta">
+          <a class="btn btn-primary" href="#join">Join your pathshala</a>
+          <span class="cta-note">Free for every Jain family. No ads.</span>
+        </div>
+        <p class="sunset-note wide-only" id="sunsetNote">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 18h18M6 18a6 6 0 0 1 12 0M12 4v3M4.9 9.9l1.4 1.4M19.1 9.9l-1.4 1.4"/></svg>
+          <span>After sunset, MyNiyam turns to its Pratikraman colours.</span>
+        </p>
+      </div>
+
+      <div class="stage">
+        <div class="halo" id="halo" aria-hidden="true"></div>
+        <figure class="phone" style="margin:0" aria-label="The MyNiyam home screen. Riya has kept 2 of 8 niyams today and taps to finish her third Navkar mala.">
+          <div class="screen" aria-hidden="true">
+            <div class="notch"></div>
+            <div class="app-top">
+              <img src="brand/wordmark.png" alt="" width="880" height="188">
+              <div class="chips">
+                <span class="streak"><svg viewBox="0 0 14 16"><path d="M7 1c1.6 2.2 3.8 3.6 3.8 6.6A3.8 3.8 0 0 1 3.2 7.6C3.2 5.3 5.6 3.4 7 1Z" fill="#F09D27"/><path d="M7 6.5c.8 1 1.6 1.6 1.6 2.8a1.6 1.6 0 0 1-3.2 0c0-1 .9-1.8 1.6-2.8Z" fill="#E1503F"/><path d="M1.5 12.5h11c-.6 1.6-2.8 2.5-5.5 2.5s-4.9-.9-5.5-2.5Z" fill="#1C2F5E"/></svg><span id="streakNum">23</span></span>
+                <span class="avatar">R</span>
+              </div>
+            </div>
+            <p class="app-hello">Jai Jinendra, Riya</p>
+            <p class="app-date">Monday, 19 October <span class="tithi">Aso Sud 8</span></p>
+
+            <div class="day-card">
+              <svg class="arc" viewBox="0 0 260 120">
+                <path d="M14 110 A116 116 0 0 1 246 110" fill="none" stroke="#EADCC7" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round"/>
+                <path d="M14 110 A116 116 0 0 1 96 22" fill="none" stroke="#F09D27" stroke-width="3" stroke-linecap="round"/>
+                <circle cx="14" cy="110" r="4" fill="#1FA08B"/>
+                <circle cx="246" cy="110" r="4" fill="none" stroke="#1C2F5E" stroke-width="2"/>
+                <circle cx="96" cy="22" r="9" fill="#F09D27" opacity=".3"/>
+                <circle cx="96" cy="22" r="5.5" fill="#F09D27"/>
+                <circle cx="130" cy="76" r="30" fill="none" stroke="#F4E8D6" stroke-width="7"/>
+                <circle class="ring-fill" id="ring" cx="130" cy="76" r="30" fill="none" stroke="#F09D27" stroke-width="7" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="141.4" transform="rotate(-90 130 76)"/>
+                <text class="count" id="ringCount" x="130" y="80" text-anchor="middle">2</text>
+                <text class="of" x="130" y="93" text-anchor="middle">of 8</text>
+              </svg>
+              <div class="times">
+                <div><b>Navkarsi</b>after 7:22 AM<br><span class="kept">Kept</span></div>
+                <div class="r"><b>Chauvihar</b>before 6:13 PM<br>in 7 h 58 min</div>
+              </div>
+            </div>
+
+            <div class="sec"><h4>Morning</h4><span id="mornCount">2 of 3</span></div>
+
+            <div class="niyam">
+              <span class="n-ico" style="background:#FDE3DF"><svg viewBox="0 0 24 24" fill="none" stroke="#E1503F" stroke-width="2" stroke-linecap="round"><path d="M4 17h16M7 17a5 5 0 0 1 10 0M12 6v2M6 10.5l1.2 1M18 10.5l-1.2 1"/></svg></span>
+              <span class="n-body"><b>Navkarsi</b><span class="hi">नवकारसी</span><span class="st">Kept at 7:31 AM</span></span>
+              <span class="tap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>
+            </div>
+            <div class="niyam">
+              <span class="n-ico" style="background:#F1F1EC"><svg viewBox="0 0 24 24" fill="none" stroke="#1C2F5E" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3v3M8 9l4-3 4 3M6 20V11h12v9M4 20h16M10.5 20v-4h3v4"/></svg></span>
+              <span class="n-body"><b>Jinpuja</b><span class="hi">जिनपूजा</span><span class="st">Kept at 8:05 AM</span></span>
+              <span class="tap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>
+            </div>
+            <div class="niyam" id="malaRow">
+              <span class="n-ico" style="background:#FCE7C6"><svg viewBox="0 0 24 24" fill="#F09D27"><circle cx="12" cy="4" r="1.6"/><circle cx="16.6" cy="5.6" r="1.6"/><circle cx="19" cy="9.8" r="1.6"/><circle cx="17.6" cy="14.4" r="1.6"/><circle cx="7.4" cy="5.6" r="1.6"/><circle cx="5" cy="9.8" r="1.6"/><circle cx="6.4" cy="14.4" r="1.6"/><circle cx="12" cy="17" r="2" fill="#1C2F5E"/><path d="M11.2 19h1.6l-.3 3h-1z" fill="#E1503F"/></svg></span>
+              <span class="n-body"><b>Navkar mala</b><span class="hi">नवकार माला</span><span class="st todo" id="malaStatus">2 of 3 malas</span></span>
+              <span class="tap plus" id="malaTap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="ripple" id="ripple"></span>
+              <svg class="lotus" id="lotus" viewBox="0 0 40 40"><path d="M20 8c3 4 4 9 0 16-4-7-3-12 0-16Z" fill="#F09D27"/><path d="M20 24c-6-1-10-5-11-10 5 0 9 3 11 10Z" fill="#F4B862"/><path d="M20 24c6-1 10-5 11-10-5 0-9 3-11 10Z" fill="#F4B862"/><path d="M9 26h22c-2 3-6 5-11 5s-9-2-11-5Z" fill="#E1503F"/></svg>
+            </div>
+            <span class="finger" id="finger"></span>
+
+            <div class="tabbar"><span class="on"><i></i>Home</span><span><i></i>History</span><span><i></i>Sangh</span><span><i></i>Badges</span><span><i></i>Profile</span></div>
+          </div>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- Why: three lines, each with a piece of the real app -->
+  <section class="why" aria-labelledby="whyTitle">
+    <div class="wrap">
+      <h2 id="whyTitle" class="rise">Thirty seconds in the morning. Thirty at night.</h2>
+      <ol class="why-list">
+        <li class="why-item rise">
+          <div>
+            <h3>One tap per niyam.</h3>
+            <p>Done in ten seconds. Works without internet too.</p>
+          </div>
+          <div class="snip" aria-hidden="true">
+            <div class="snip-row">
+              <span class="badge-round" style="background:#FDE3DF;color:#B53B2C">N</span>
+              <span class="grow"><b>Navkarsi</b><span class="good">Kept at 7:31 AM</span></span>
+            </div>
+            <div class="snip-row">
+              <span class="badge-round" style="background:#DCE4F3;color:#2A4D8C">S</span>
+              <span class="grow"><b>Samayik</b><small>One left. Pratikraman time</small></span>
+            </div>
+          </div>
+        </li>
+        <li class="why-item rise">
+          <div>
+            <h3>Times for your town.</h3>
+            <p>Navkarsi and Chauvihar, worked out from your own sunrise and sunset.</p>
+          </div>
+          <div class="snip" aria-hidden="true">
+            <div class="snip-row">
+              <span class="grow"><small>Mumbai · Aso Sud 8</small><b class="time-big">7:22 AM</b><small>Navkarsi after</small></span>
+              <span class="grow" style="text-align:right"><small>&nbsp;</small><b class="time-big">6:13 PM</b><small>Chauvihar before</small></span>
+            </div>
+          </div>
+        </li>
+        <li class="why-item rise">
+          <div>
+            <h3>Cheers, not rankings.</h3>
+            <p>Your pathshala and family send anumodana. Nobody is ranked.</p>
+          </div>
+          <div class="snip" aria-hidden="true">
+            <div class="snip-row">
+              <span class="badge-round" style="background:#FCE7C6;color:#7A4A06">A</span>
+              <span class="grow"><b>Aarav Shah kept Navkarsi for 21 days in a row.</b><small>Class 1 · 17 anumodana</small></span>
+            </div>
+            <div class="anu"><span>Anumodana</span><span>Sukh shata</span><span>Bahut anumodana</span></div>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- Colours of the Jain flag: the palette teaches -->
+  <section class="colours" aria-labelledby="colTitle">
+    <div class="wrap">
+      <h2 id="colTitle" class="rise">Five colours from the Jain flag.</h2>
+      <p class="intro rise">Each kind of niyam has its own colour, so children learn the flag as they go.</p>
+      <div class="flag">
+        <div class="band rise"><span class="sw moti" aria-hidden="true"></span><div><b>Bhakti <small>Moti, for Arihant</small></b><p>Jinpuja, Navkar mala</p></div></div>
+        <div class="band rise"><span class="sw sindoor" aria-hidden="true"></span><div><b>Tap <small>Sindoor, for Siddha</small></b><p>Navkarsi, Ayambil, Upvas</p></div></div>
+        <div class="band rise"><span class="sw kesar" aria-hidden="true"></span><div><b>Aachar <small>Kesar, for Acharya</small></b><p>Chauvihar, tithi tyag</p></div></div>
+        <div class="band rise"><span class="sw panna" aria-hidden="true"></span><div><b>Gyan <small>Panna, for Upadhyay</small></b><p>Swadhyay, gathas</p></div></div>
+        <div class="band rise"><span class="sw neel" aria-hidden="true"></span><div><b>Sadhana <small>Neel, for Sadhu</small></b><p>Samayik, Pratikraman</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Family -->
+  <section class="family" aria-labelledby="famTitle">
+    <div class="wrap">
+      <div>
+        <h2 id="famTitle" class="rise">One phone for the whole family.</h2>
+        <p class="intro rise">Log for your children from your own phone.</p>
+        <div class="promise rise">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.2 7.5 9.5 4.3-1.3 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m8.8 12 2.2 2.2 4.2-4.4" stroke-linecap="round"/></svg>
+          <p>Only their pathshala and family can see children’s profiles.</p>
+        </div>
+      </div>
+      <div class="who rise" aria-hidden="true">
+        <h3>Who is logging?</h3>
+        <small>Signed in with +91 98200 •••10</small>
+        <ul>
+          <li><span class="badge-round" style="background:#DCE4F3;color:#2A4D8C">H</span><span><b>Hetal Shah</b><small>Me, parent</small></span></li>
+          <li class="sel"><span class="badge-round" style="background:#FCE7C6;color:#7A4A06">R</span><span><b>Riya Shah</b><small>Shantinath Pathshala, Class 3</small></span></li>
+          <li><span class="badge-round" style="background:#D6EFEA;color:#11695A">A</span><span><b>Aarav Shah</b><small>Shantinath Pathshala, Class 1</small></span></li>
+          <li class="add">+ Add a child</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pathshala admins: visibly secondary -->
+  <section class="pathshala" id="pathshala" aria-labelledby="pathTitle">
+    <div class="wrap">
+      <div>
+        <h2 id="pathTitle" class="rise">Running a pathshala?</h2>
+        <p class="intro rise">See who kept their niyams today, class by class. No more registers.</p>
+        <ul class="ledger rise wide-only">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Set up in ten minutes from a ready template for your sampraday.</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Send a gentle WhatsApp nudge to families who haven't logged.</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>The monthly prize list is made for you.</li>
+        </ul>
+        <p class="rise" style="margin-top:var(--s-5)"><button class="btn btn-secondary" type="button" id="setupBtn">Set up your pathshala</button></p>
+        <p class="msg" id="setupMsg" role="status" aria-live="polite" style="margin-top:var(--s-3)"></p>
+      </div>
+      <div class="manage rise wide-only" id="manage" aria-hidden="true">
+        <p class="big">52 <small>of 84</small></p>
+        <p class="lbl">students have logged today</p>
+        <div class="bars">
+          <div class="bar"><span>Class 1</span><span class="track"><span class="fill" style="--w:72%"></span></span><span>13 of 18</span></div>
+          <div class="bar"><span>Class 2</span><span class="track"><span class="fill" style="--w:59%"></span></span><span>13 of 22</span></div>
+          <div class="bar"><span>Class 3</span><span class="track"><span class="fill" style="--w:67%"></span></span><span>16 of 24</span></div>
+          <div class="bar"><span>Class 4</span><span class="track"><span class="fill" style="--w:50%"></span></span><span>10 of 20</span></div>
+        </div>
+        <div class="nudge">
+          <span class="badge-round" style="background:#DCE4F3;color:#2A4D8C">J</span>
+          <span class="grow"><b>Jinay Mehta</b><small>Class 2, not logged for 5 days</small></span>
+          <span class="pill-btn">Nudge</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Join: the one action -->
+  <section class="join" id="join" aria-labelledby="joinTitle">
+    <div class="wrap">
+      <div class="join-card rise">
+        <img class="mark day-only" src="brand/mark.png" alt="" width="258" height="252"><img class="mark night-only" src="brand/mark-night.png" alt="" width="258" height="252">
+        <h2 id="joinTitle">Join your pathshala</h2>
+        <p class="hi-line hi" lang="hi">अपनी पाठशाला से जुड़ें</p>
+        <p class="intro" id="joinIntro">Type the code your pathshala gave you.</p>
+        <form class="code-form" id="codeForm" novalidate>
+          <label for="code">Pathshala code</label>
+          <input class="code-input" id="code" name="code" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="6" placeholder="HEER01" aria-describedby="codeMsg">
+          <p class="msg" id="codeMsg" role="status" aria-live="polite"></p>
+          <button class="btn btn-primary" type="submit" id="joinBtn"><span class="spinner" aria-hidden="true"></span><span id="joinLabel">Join</span></button>
+        </form>
+        <p class="or">Have a QR code? Point your phone camera at it.<br>No code? Ask your pathshala teacher.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="dock" id="dock"><a class="btn btn-primary" href="#join" tabindex="-1">Join your pathshala</a></div>
+
+<footer>
+  <div class="wrap">
+    <a class="logo" href="#top" aria-label="Back to top"><img class="day-only" src="brand/wordmark.png" alt="MyNiyam" width="880" height="188"><img class="night-only" src="brand/wordmark-night.png" alt="MyNiyam" width="880" height="188"></a>
+    <div class="credits">
+      <p>Presented by <b>Heer Sena</b></p>
+      <p>Developed by <b>Tanmay Dhelariya</b></p>
+    </div>
+    <p class="ver">Version <span id="ver">0.1.0</span> · No ads, ever.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  document.documentElement.classList.add("js");
+
+  /* Where the join button sends people. Set window.MYNIYAM_APP_URL (e.g. "https://app.myniyam.in")
+     before this script once the app is live. Until then the form says so plainly. */
+  var APP_URL = window.MYNIYAM_APP_URL ||
+    (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? "http://localhost:3100" : null); /* local join app */
+  var root = document.documentElement;
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- Intro: write the wordmark, drop the dot, fly through the sun ---------- */
+  var intro = document.getElementById("splash");
+  if (root.classList.contains("intro-on") && intro && intro.animate) {
+    var inks = intro.querySelectorAll(".intro-ink"), dot = document.getElementById("introDot"),
+        tag = document.getElementById("introTag"), word = intro.querySelector(".intro-word"),
+        anims = [], done = false;
+    var E = "cubic-bezier(.22,.8,.26,1)";
+    function finish() {
+      if (done) return; done = true;
+      anims.forEach(function (a) { try { a.cancel(); } catch (e) {} });
+      intro.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 380, easing: "ease-out", fill: "forwards" })
+        .finished.then(function () { intro.remove(); root.classList.remove("intro-on"); });
+    }
+    function run(a) { anims.push(a); return a.finished; }
+    intro.addEventListener("click", finish);
+    window.addEventListener("keydown", finish, { once: true });
+
+    /* 1. The wordmark writes itself left to right, like "hello" */
+    inks.forEach(function (img) {
+      run(img.animate([
+        { WebkitMaskPosition: "100% 0", maskPosition: "100% 0", filter: "blur(3px)", transform: "translateY(6px)" },
+        { WebkitMaskPosition: "0% 0", maskPosition: "0% 0", filter: "blur(0)", transform: "none" }
+      ], { duration: 1250, easing: "cubic-bezier(.55,.1,.35,1)", fill: "forwards" }));
+    });
+    run(tag.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }],
+      { duration: 500, delay: 700, easing: E, fill: "forwards" }));
+
+    /* 2. The red dot drops onto the i */
+    run(dot.animate([
+      { opacity: 0, transform: "translateY(-260%) scale(.6)" },
+      { opacity: 1, transform: "translateY(18%) scale(1.08)", offset: .65 },
+      { opacity: 1, transform: "none" }
+    ], { duration: 520, delay: 1150, easing: "ease-out", fill: "forwards" }))
+    .then(function () {
+      if (done) return;
+      /* 3. The dot grows into the sun and we pass through it */
+      var r = dot.getBoundingClientRect();
+      var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      var far = Math.max(Math.hypot(cx, cy), Math.hypot(innerWidth - cx, cy), Math.hypot(cx, innerHeight - cy), Math.hypot(innerWidth - cx, innerHeight - cy));
+      var scale = (far * 2.2) / r.width;
+      dot.classList.add("sun");
+      run(word.querySelectorAll("img")[0].animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, delay: 120, fill: "forwards" }));
+      run(word.querySelectorAll("img")[1].animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, delay: 120, fill: "forwards" }));
+      run(tag.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 250, fill: "forwards" }));
+      return run(dot.animate([
+        { transform: "scale(1)" },
+        { transform: "scale(" + (scale * .08) + ")", offset: .35 },
+        { transform: "scale(" + scale + ")" }
+      ], { duration: 950, delay: 260, easing: "cubic-bezier(.6,0,.75,.4)", fill: "forwards" }));
+    })
+    .then(function () { finish(); })
+    .catch(function () { finish(); });
+    setTimeout(finish, 6000); /* never trap anyone behind the intro */
+  } else if (intro) { intro.remove(); root.classList.remove("intro-on"); }
+
+  /* ---------- Theme follows the sun (rough local sunset), with a manual override ---------- */
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function sunTheme() { var h = new Date().getHours() + new Date().getMinutes() / 60; return (h >= 18.75 || h < 6) ? "night" : "day"; }
+  var themeBtn = document.getElementById("themeBtn");
+  var meta = document.querySelector('meta[name="theme-color"]');
+  function applyTheme(t) {
+    if (t === "night") root.setAttribute("data-theme", "night"); else root.removeAttribute("data-theme");
+    themeBtn.setAttribute("aria-label", t === "night" ? "Switch to day colours" : "Switch to evening colours");
+    meta.setAttribute("content", t === "night" ? "#141A3A" : "#FAF1E6");
+  }
+  applyTheme(store("myniyam-theme") || sunTheme());
+  themeBtn.addEventListener("click", function () {
+    var next = root.getAttribute("data-theme") === "night" ? "day" : "night";
+    store("myniyam-theme", next); applyTheme(next);
+  });
+
+  /* ---------- Reveal on scroll ---------- */
+  var rises = document.querySelectorAll(".rise, #manage");
+  if ("IntersectionObserver" in window && !reduce) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("seen"); io.unobserve(e.target); } });
+    }, { rootMargin: "0px 0px -10% 0px" });
+    rises.forEach(function (el) { io.observe(el); });
+  } else { rises.forEach(function (el) { el.classList.add("seen"); }); }
+
+  /* ---------- The demo loop: Riya finishes her third Navkar mala ---------- */
+  var $ = function (id) { return document.getElementById(id); };
+  var ring = $("ring"), ringCount = $("ringCount"), mornCount = $("mornCount"),
+      malaStatus = $("malaStatus"), malaTap = $("malaTap"), ripple = $("ripple"),
+      lotus = $("lotus"), finger = $("finger"), halo = $("halo"), streakNum = $("streakNum");
+  var CIRC = 188.5, timers = [], running = false;
+  var plusSvg = malaTap.innerHTML;
+  var tickSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+
+  function setState(done) {
+    ring.style.strokeDashoffset = String(CIRC * (1 - (done ? 3 : 2) / 8));
+    ringCount.textContent = done ? "3" : "2";
+    mornCount.textContent = done ? "3 of 3" : "2 of 3";
+    malaStatus.textContent = done ? "Kept at 8:40 AM" : "2 of 3 malas";
+    malaStatus.classList.toggle("todo", !done);
+    malaTap.classList.toggle("plus", !done);
+    malaTap.innerHTML = done ? tickSvg : plusSvg;
+    streakNum.textContent = done ? "24" : "23";
+  }
+  function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+  function cycle() {
+    if (!running) return;
+    setState(false);
+    later(function () { finger.classList.add("in"); }, 1200);
+    later(function () { malaTap.classList.add("pressed"); }, 2100);
+    later(function () {
+      malaTap.classList.remove("pressed"); finger.classList.remove("in");
+      ripple.classList.remove("go"); void ripple.offsetWidth; ripple.classList.add("go");
+      lotus.classList.remove("bloom"); void lotus.offsetWidth; lotus.classList.add("bloom");
+      halo.classList.remove("lit"); void halo.offsetWidth; halo.classList.add("lit");
+      setState(true);
+    }, 2300);
+    later(cycle, 7500);
+  }
+  function start() { if (running) return; running = true; cycle(); }
+  function stop() { running = false; timers.forEach(clearTimeout); timers = []; }
+
+  if (reduce) { setState(true); }
+  else if ("IntersectionObserver" in window) {
+    new IntersectionObserver(function (es) { es[0].isIntersecting ? start() : stop(); }, { threshold: .3 })
+      .observe(document.querySelector(".phone"));
+    document.addEventListener("visibilitychange", function () { document.hidden ? stop() : start(); });
+  } else { start(); }
+
+  /* ---------- Sticky join bar: shows once the hero button is gone, hides at the join box ---------- */
+  var dock = $("dock");
+  if (dock && "IntersectionObserver" in window) {
+    var heroGone = false, joinIn = false;
+    var upd = function () { dock.classList.toggle("show", heroGone && !joinIn); };
+    new IntersectionObserver(function (es) { heroGone = !es[0].isIntersecting; upd(); }).observe(document.querySelector(".hero .cta"));
+    new IntersectionObserver(function (es) { joinIn = es[0].isIntersecting; upd(); }).observe($("join"));
+  }
+
+  /* ---------- Join form ---------- */
+  var form = $("codeForm"), input = $("code"), msg = $("codeMsg"), btn = $("joinBtn"), label = $("joinLabel");
+  $("setupBtn").addEventListener("click", function () {
+    $("setupMsg").textContent = "Pathshala setup opens with the app. Ask Heer Sena to add yours among the first.";
+  });
+  function say(text, kind) { msg.textContent = text; msg.className = "msg " + (kind || ""); }
+  input.addEventListener("input", function () {
+    input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (input.getAttribute("aria-invalid")) { input.removeAttribute("aria-invalid"); say(""); }
+  });
+  /* Coming back with the browser's Back button: put the button back to normal */
+  window.addEventListener("pageshow", function () { btn.disabled = false; btn.classList.remove("working"); label.textContent = "Join"; });
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var code = input.value.trim();
+    if (!/^[A-Z0-9]{6}$/.test(code)) {
+      input.setAttribute("aria-invalid", "true");
+      say(code ? "Pathshala codes have 6 letters or numbers, like HEER01." : "Type your pathshala's code first.", "err");
+      input.focus();
+      return;
+    }
+    if (!APP_URL) {
+      say("The MyNiyam app opens soon. Keep your code " + code + " ready.", "ok");
+      return;
+    }
+    btn.disabled = true; btn.classList.add("working"); label.textContent = "Opening MyNiyam";
+    window.location.href = APP_URL.replace(/\/$/, "") + "/join" + "?code=" + encodeURIComponent(code);
+  });
+})();
+</script>
+</body>
+</html>
