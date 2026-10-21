@@ -51,8 +51,10 @@ try {
   else if (cmd === "seed:dev") {
     if (!isLocal) throw new Error("seed:dev only runs against a local database");
     await runFile("supabase/seed.dev.sql");
-  } else if (cmd === "reset") { await reset(); await migrate(); await runFile("supabase/seed.sql"); }
-  else { console.error("usage: node scripts/db.mjs migrate|seed|seed:dev|reset"); process.exitCode = 1; }
+  } else if (cmd === "seed:demo") await runFile("supabase/seed.demo.sql");
+  else if (cmd === "demo:remove") await runFile("supabase/demo-remove.sql");
+  else if (cmd === "reset") { await reset(); await migrate(); await runFile("supabase/seed.sql"); }
+  else { console.error("usage: node scripts/db.mjs migrate|seed|seed:dev|seed:demo|demo:remove|reset"); process.exitCode = 1; }
 } catch (e) {
   console.error(e.message);
   process.exitCode = 1;

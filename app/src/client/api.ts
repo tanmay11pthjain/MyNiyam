@@ -46,6 +46,7 @@ export function say(err: ApiError | { error: "offline" }): Words {
     case "invalid_class": return { en: "Please pick your class again.", hi: "अपनी कक्षा फिर से चुनें।" };
     case "unauthorized": return { en: "Please log in again.", hi: "फिर से लॉग इन करें।" };
     case "joins_closed": return { en: "This pathshala isn't taking new members right now. Ask your teacher.", hi: "यह पाठशाला अभी नए सदस्य नहीं ले रही। अपने शिक्षक से पूछें।" };
+    case "demo_only": return { en: "This is a demo. Only the demo numbers can log in.", hi: "यह डेमो है। केवल डेमो नंबर से लॉग इन हो सकता है।" };
     case "log_window_closed": return { en: "That day has closed and can no longer be changed.", hi: "वह दिन बंद हो चुका है, अब बदल नहीं सकते।" };
     default: return { en: "Something went wrong on our side. Please try again.", hi: "हमारी तरफ़ से गड़बड़ हुई। फिर कोशिश करें।" };
   }

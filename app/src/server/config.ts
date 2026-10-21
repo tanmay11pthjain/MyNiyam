@@ -20,6 +20,8 @@ const schema = z.object({
   OTP_WINDOW_SEC: int(600),          // ...per 10 minutes
   OTP_RESEND_AFTER_SEC: int0(30),     // "Send by SMS instead" appears after 30 s
   OTP_MAX_ATTEMPTS: int(5),          // wrong guesses before the code is burned
+  // A private demo on a public URL with simulated codes: only these +91 numbers (comma-separated) can log in.
+  DEMO_PHONES: z.string().default(""),
 
   // Per-IP limits (fixed windows)
   RL_OTP_SEND_PER_IP_HOUR: int(20),
@@ -54,6 +56,7 @@ const schema = z.object({
 
 export type Config = z.infer<typeof schema> & {
   sessionSecret: string; whatsappEnabled: boolean; smsEnabled: boolean; superAdmins: string[]; supabaseStorage: boolean;
+  demoPhones: string[]; demoOnly: boolean;
 };
 
 let cached: Config | null = null;
@@ -69,6 +72,10 @@ export function config(): Config {
   if (c.OTP_DELIVERY === "simulate" && c.NODE_ENV === "production" && process.env.ALLOW_OTP_SIMULATION_IN_PRODUCTION !== "true") {
     throw new Error("OTP_DELIVERY=simulate in production lets anyone log in with 1234. Set OTP_DELIVERY=msg91 (or ALLOW_OTP_SIMULATION_IN_PRODUCTION=true for a private demo).");
   }
+  const demoPhones = c.DEMO_PHONES.split(",").map((p) => p.trim()).filter(Boolean);
+  if (demoPhones.some((p) => !/^\+91[6-9]\d{9}$/.test(p))) throw new Error("DEMO_PHONES must be +91 numbers like +917000000001, separated by commas.");
+  const demoOnly = c.OTP_DELIVERY === "simulate" && c.NODE_ENV === "production";
+  if (demoOnly && !demoPhones.length) throw new Error("A demo with simulated codes needs DEMO_PHONES: the only numbers that may log in.");
   let sessionSecret = c.SESSION_SECRET;
   if (!sessionSecret) {
     if (c.NODE_ENV === "production") throw new Error("SESSION_SECRET is required (32+ random characters).");
@@ -80,6 +87,8 @@ export function config(): Config {
   cached = {
     ...c,
     superAdmins,
+    demoPhones,
+    demoOnly,
     supabaseStorage,
     sessionSecret,
     smsEnabled: Boolean(c.MSG91_AUTH_KEY && c.MSG91_SMS_TEMPLATE_ID),

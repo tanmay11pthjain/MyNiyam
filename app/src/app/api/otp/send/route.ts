@@ -16,6 +16,9 @@ export const POST = route("otp.send", async (req, ctx) => {
   const limited = await limitIp(ctx, "otp_send", config().RL_OTP_SEND_PER_IP_HOUR, 3600);
   if (limited) return limited;
 
+  // Simulated codes on a public demo: only the demo numbers, so nobody can log in as a real member with 1234.
+  if (config().demoOnly && !config().demoPhones.includes(phone)) return fail(ctx, { error: "demo_only" });
+
   const r = await sendOtp(phone, input.channel);
   if (!r.ok) {
     if (r.reason === "too_many_requests") return fail(ctx, { error: "too_many_requests", retryAfterSec: r.retryAfterSec });

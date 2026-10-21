@@ -44,7 +44,7 @@ export type ApiError = {
     | "invalid_answers" | "invalid_class" | "forbidden" | "too_large" | "server_error"
     // admin panel
     | "joins_closed" | "class_has_members" | "invalid_field" | "duplicate_key" | "no_sangh" | "unsupported_type"
-    | "log_window_closed";
+    | "log_window_closed" | "demo_only";
   retryAfterSec?: number;
   attemptsLeft?: number;
   sangh?: SanghCard;
