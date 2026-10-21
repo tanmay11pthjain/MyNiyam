@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formatPhone, maskPhone, normalizeIndianPhone } from "@/lib/phone";
 import { joinCodeFromScan, normalizeJoinCode } from "@/lib/join-code";
-import { parseFormFields, validateAnswers } from "@/lib/forms";
+import { ageFrom, checkFormFields, missingRequired, parseFormFields, validateAnswers } from "@/lib/forms";
 import { OTP_LENGTH, OTP_PATTERN } from "@/lib/otp-code";
 
 describe("phone", () => {
@@ -57,12 +57,13 @@ describe("form fields", () => {
     { key: "area", type: "text", required: true, max: 10, label: { en: "Area" } },
     { key: "std", type: "select", label: { en: "Std" }, options: [{ value: "1-4", en: "1 to 4" }] },
     { key: "age", type: "number", min: 3, max: 99, label: { en: "Age" } },
-    { key: "pic", type: "photo", label: { en: "Photo" } }, // not supported yet: dropped
+    { key: "pic", type: "photo", label: { en: "Photo" } }, // answered by upload, not in answers
+    { key: "pic2", type: "hologram", label: { en: "?" } }, // unknown type: dropped
     { nonsense: true },
   ]);
   const today = new Date("2026-10-20T00:00:00Z");
 
-  it("keeps only known, well-formed fields", () => expect(fields.map((f) => f.key)).toEqual(["dob", "area", "std", "age"]));
+  it("keeps only known, well-formed fields", () => expect(fields.map((f) => f.key)).toEqual(["dob", "area", "std", "age", "pic"]));
 
   it("accepts good answers and drops unknown keys", () => {
     const r = validateAnswers(fields, { dob: "2015-04-01", area: " Malad ", std: "1-4", age: "11", extra: "x" }, today);
@@ -76,5 +77,38 @@ describe("form fields", () => {
 
   it("treats optional blanks as skipped", () => {
     expect(validateAnswers(fields, { area: "Pune" }, today)).toEqual({ ok: true, answers: { area: "Pune" } });
+  });
+});
+
+describe("join form builder", () => {
+  it("keeps a standard field's type and options, but takes the admin's labels and required flag", () => {
+    const r = checkFormFields([{ key: "gender", type: "select", required: true, label: { en: "Boy or girl" }, options: [{ value: "x", en: "X" }] }]);
+    expect(r.ok && r.fields[0]).toMatchObject({ key: "gender", required: true, label: { en: "Boy or girl" }, options: [{ value: "male" }, { value: "female" }] });
+  });
+  it("refuses wrong types, duplicate keys and custom fields of standard-only types", () => {
+    expect(checkFormFields([{ key: "dob", type: "text", label: { en: "x" } }])).toEqual({ ok: false, reason: "invalid_field" });
+    expect(checkFormFields([{ key: "q_a", type: "yesno", label: { en: "A" } }, { key: "q_a", type: "yesno", label: { en: "B" } }])).toEqual({ ok: false, reason: "duplicate_key" });
+    expect(checkFormFields([{ key: "q_pic", type: "photo", label: { en: "x" } }])).toEqual({ ok: false, reason: "invalid_field" });
+  });
+  it("checks yes/no and location answers", () => {
+    const f = parseFormFields([{ key: "q", type: "yesno", label: { en: "Q" } }, { key: "gps", type: "gps", label: { en: "Where" } }]);
+    expect(validateAnswers(f, { q: "yes", gps: "19.18,72.84" })).toEqual({ ok: true, answers: { q: "yes", gps: "19.18,72.84" } });
+    expect(validateAnswers(f, { q: "maybe", gps: "999,1" })).toEqual({ ok: false, errors: { q: "bad_option", gps: "bad_location" } });
+  });
+  it("lists required questions not answered yet, including class and photo", () => {
+    const f = parseFormFields([
+      { key: "class", type: "class", required: true, label: { en: "Class" } },
+      { key: "photo", type: "photo", required: true, label: { en: "Photo" } },
+      { key: "q", type: "yesno", required: true, label: { en: "Q" } },
+      { key: "opt", type: "text", label: { en: "Optional" } },
+    ]);
+    expect(missingRequired(f, { answers: {}, classId: null, photoUrl: null })).toEqual(["class", "photo", "q"]);
+    expect(missingRequired(f, { answers: { q: "no" }, classId: "c", photoUrl: "/p.jpg" })).toEqual([]);
+  });
+  it("works out age from a birth date", () => {
+    const today = new Date("2026-10-21T00:00:00Z");
+    expect(ageFrom("2016-10-21", today)).toBe(10);
+    expect(ageFrom("2016-10-22", today)).toBe(9);
+    expect(ageFrom("nonsense", today)).toBeNull();
   });
 });
