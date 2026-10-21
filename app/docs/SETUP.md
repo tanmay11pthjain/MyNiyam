@@ -1,6 +1,6 @@
 # Setting up Supabase and MSG91 for MyNiyam
 
-**Current status:** login codes are simulated (`OTP_DELIVERY=simulate`, the code is always `1234`). Part A and B are needed now; Part C and D only when real SMS/WhatsApp is switched on.
+**Current status:** login codes are simulated (`OTP_DELIVERY=simulate`, the code is always `1234`). Parts A, B and E are needed now; Parts C and D only when real SMS/WhatsApp is switched on.
 
 Every value goes into `app/.env.local` (copy it from `app/.env.example`). That file is git-ignored. Never paste these values into code, chat or a commit.
 
@@ -40,9 +40,10 @@ About 10 minutes.
    ```sql
    select cron.schedule('myniyam-sweep', '*/15 * * * *', 'select private.sweep()');
    ```
-   This deletes expired codes every 15 minutes.
+   This deletes expired codes every 15 minutes, and deletes families and people an admin removed more than 30 days ago.
+   **Turn this on before real members join**: without it, removed families stay (hidden) in the database.
 
-You don't need Supabase's API keys (anon or service_role). The app talks to the database directly from the server.
+The database itself needs no Supabase API keys: the app talks to it directly from the server. The one key you need is for photo storage, in Part E.
 
 ---
 
@@ -127,3 +128,49 @@ If only SMS is ready, leave the WhatsApp lines empty. The app then sends by SMS 
 
 Your finished `app/.env.local` should have values for:
 `DATABASE_URL`, `SESSION_SECRET`, `MSG91_AUTH_KEY`, `MSG91_SMS_TEMPLATE_ID`, the four `MSG91_WHATSAPP_*` lines (optional), and `OTP_DELIVERY=msg91`.
+
+
+---
+
+## Part E: the admin panel and photo storage
+
+About 10 minutes. The admin panel is at **/admin** (for example http://localhost:3100/admin).
+
+### E1. You, the super admin
+
+In `app/.env.local`, set your own number:
+```
+SUPER_ADMIN_PHONE=+918431567935
+```
+Log in at **/admin/login** with that number. You land on **Approve and add pathshalas**, where you:
+- approve or turn down pathshalas that people ask for (anyone can ask from /admin; nothing is joinable until you approve it);
+- add a pathshala yourself, with its first admin's number;
+- add or remove each pathshala's admins. One number can run several pathshalas; it gets a switcher at the top.
+
+To run HEER01 yourself, open it there and add your own number as its admin.
+
+### E2. Database update
+
+The admin panel adds two migrations. On Supabase, run once, inside `app/`:
+```
+npm run db:migrate
+```
+You should see `applied 20261021000002_admin_counts.sql` (the first admin migration, `20261021000001_admin.sql`, is already applied on your Supabase project). Do **not** run `db:seed:dev` on Supabase.
+
+### E3. Photo storage (logos and profile photos)
+
+1. In Supabase, open **Storage → New bucket**. Name: `myniyam`. Leave **Public bucket off**: children's photos must stay private. The app serves them only to that pathshala's admins and members.
+2. Open **Project Settings → API**. Copy the **Project URL** and the **service_role** key (the secret one, not anon).
+3. In `app/.env.local` (and later in your host's settings), set:
+   ```
+   SUPABASE_URL=<Project URL>
+   SUPABASE_SERVICE_ROLE_KEY=<service_role key>
+   ```
+   The service_role key can read everything. Keep it only in server settings, never in code, chat or a commit.
+4. Restart the app and upload a logo on **Setup → Pathshala and join code**. In Supabase **Storage → myniyam**, a file appears under `logos/`.
+
+Without these two values, uploads go to `app/.data/storage` on your computer. That is fine for trying things out, but production refuses it, because the files would be lost on every deploy.
+
+### E4. Trying it locally
+
+`npm run db:seed:dev` adds a demo admin: log in at /admin/login with **99999 00001**, code **1234**. It runs two demo pathshalas (switch at the top) and HEER01 has demo families, niyams and 30 days of logs.

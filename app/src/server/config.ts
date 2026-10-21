@@ -77,7 +77,6 @@ export function config(): Config {
   const superAdmins = c.SUPER_ADMIN_PHONE.split(",").map((p) => p.trim()).filter(Boolean);
   if (superAdmins.some((p) => !/^\+91[6-9]\d{9}$/.test(p))) throw new Error("SUPER_ADMIN_PHONE must be +91 numbers like +919820012345, separated by commas.");
   const supabaseStorage = Boolean(c.SUPABASE_URL && c.SUPABASE_SERVICE_ROLE_KEY);
-  if (!supabaseStorage && c.NODE_ENV === "production") throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are needed in production for logo and photo uploads.");
   cached = {
     ...c,
     superAdmins,

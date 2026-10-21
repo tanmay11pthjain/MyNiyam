@@ -43,13 +43,15 @@ export async function putFile(key: string, bytes: Uint8Array, type: ImageType): 
   if (c.supabaseStorage) {
     const res = await fetch(supabaseUrl(key), {
       method: "POST",
-      headers: { authorization: `Bearer ${c.SUPABASE_SERVICE_ROLE_KEY}`, "content-type": type, "x-upsert": "false", "cache-control": "31536000" },
+      headers: { apikey: c.SUPABASE_SERVICE_ROLE_KEY!, authorization: `Bearer ${c.SUPABASE_SERVICE_ROLE_KEY}`, "content-type": type, "x-upsert": "false", "cache-control": "31536000" },
       body: Buffer.from(bytes),
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`storage upload failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
     return;
   }
+  // Local disk is for one dev machine only: on a real server it would vanish on redeploy.
+  if (c.NODE_ENV === "production") throw new Error("Uploads need SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in production.");
   const file = localPath(key);
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, bytes);
@@ -61,7 +63,7 @@ export async function getFile(key: string): Promise<{ bytes: Uint8Array; type: I
   const c = config();
   if (c.supabaseStorage) {
     const res = await fetch(supabaseUrl(key), {
-      headers: { authorization: `Bearer ${c.SUPABASE_SERVICE_ROLE_KEY}` },
+      headers: { apikey: c.SUPABASE_SERVICE_ROLE_KEY!, authorization: `Bearer ${c.SUPABASE_SERVICE_ROLE_KEY}` },
       signal: AbortSignal.timeout(15_000),
     });
     if (res.status === 404 || res.status === 400) return null;
