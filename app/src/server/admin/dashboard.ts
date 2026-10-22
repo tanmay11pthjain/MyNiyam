@@ -1,5 +1,6 @@
 import "server-only";
 import { asAdmin } from "../db";
+import { getAlerts } from "./reports";
 import type { Dashboard } from "@/lib/admin-types";
 
 /** Today's numbers and the setup checklist for one sangh. "Today" is the Indian day. */
@@ -7,7 +8,7 @@ export async function getDashboard(phone: string, sanghId: string): Promise<Dash
   return asAdmin(phone, async (tx) => {
     const [s] = await tx`
       select name, join_code, status, form_updated_at, code_shared_at from public.sanghs
-      where id = ${sanghId} and private.is_sangh_admin(id)`;
+      where id = ${sanghId} and private.has_access(id)`;
     if (!s) return null;
     const [n] = await tx`
       with fam as (select id from public.accounts where sangh_id = ${sanghId} and removed_at is null),
@@ -30,6 +31,7 @@ export async function getDashboard(phone: string, sanghId: string): Promise<Dash
       niyamsDoneToday: n.done_today,
       activeNiyams: n.active_niyams,
       checklist: { classes: n.classes > 0, form: s.form_updated_at !== null, niyams: n.niyams > 0, share: s.code_shared_at !== null },
+      alerts: await getAlerts(tx, sanghId),
     };
   });
 }

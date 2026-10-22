@@ -22,7 +22,7 @@
 
 /* Bottom tabs on phones, a left rail is not needed: the column stays narrow on desktop too. */
 .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; background: var(--bg-2); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
-.tabbar nav { max-width: 720px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
+.tabbar nav { max-width: 720px; margin: 0 auto; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
 .tabbar a { min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: var(--ink-dim); font: 600 var(--fs-12) var(--font-display); }
 .tabbar a svg { width: 24px; height: 24px; }
 .tabbar a[aria-current="page"] { color: var(--ink); }
@@ -190,3 +190,57 @@ textarea.input { min-height: 88px; padding: var(--s-3) var(--s-4); resize: verti
 
 /* Toasts sit above the tab bar */
 .admin-toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
+
+/* Attendance */
+.att-sum { font-size: var(--fs-16); }
+.att-row { min-height: 60px; }
+.att-pill { flex: none; min-width: 84px; text-align: center; padding: 6px 12px; border-radius: var(--r-pill); font-weight: 700; font-size: .9rem; }
+.att-pill.present { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.att-pill.absent { background: var(--danger-soft); color: var(--danger); }
+.att-pill.late { background: var(--accent-soft); color: var(--accent-text); }
+.att-pct { flex: none; font-weight: 700; font-size: 1.1rem; color: var(--ok); }
+.att-pct.low { color: var(--danger); }
+
+/* Reports: one-hue bars, rounded data ends on the baseline, today labelled */
+.bars { display: flex; align-items: stretch; gap: 2px; height: 180px; padding-top: var(--s-2); }
+.bars .bar { flex: 1; display: grid; grid-template-rows: auto 1fr auto; justify-items: center; min-width: 0; }
+.bars .bar > i { align-self: end; width: min(100%, 28px); background: var(--accent); border-radius: 4px 4px 0 0; }
+.bars .bar .v { font: 600 var(--fs-12) var(--font-body); color: var(--ink-dim); align-self: end; min-height: 1.2em; }
+.bars .bar .k { font: 600 var(--fs-12) var(--font-body); color: var(--ink-dim); white-space: nowrap; min-height: 1.4em; padding-top: 4px; border-top: 1px solid var(--line); width: 100%; text-align: center; }
+.bars.dense .bar .k { overflow: visible; }
+.bars.dense .bar .v { font-size: 10px; }
+.hbar { flex: none; width: 72px; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.hbar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.pct { flex: none; font-weight: 700; }
+.rank { list-style: none; padding: 0; margin: 0; }
+
+/* Report cards: print two to a page */
+.cards { display: grid; gap: var(--s-4); }
+.rcard { background: var(--bg-2); border-radius: var(--r-l); padding: var(--s-5); display: grid; gap: var(--s-2); break-inside: avoid; }
+.rcard header { display: flex; justify-content: space-between; color: var(--ink-dim); font-size: var(--fs-12); }
+.rcard .brand { font-weight: 800; color: var(--accent-text); }
+.rcard h3 { margin: 0; font: 800 1.5rem var(--font-display); }
+.rcard .sub { margin: 0; color: var(--ink-dim); }
+.rcard dl { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); margin: var(--s-2) 0; }
+.rcard dt { font-size: var(--fs-12); color: var(--ink-dim); }
+.rcard dd { margin: 0; font: 800 1.6rem var(--font-display); }
+.rcard dd small { font: 600 var(--fs-12) var(--font-body); color: var(--ink-dim); }
+.rcard footer { font-weight: 600; color: var(--ok); }
+@media print {
+  .no-print, .tabbar, .admin-bar, .toast { display: none !important; }
+  .admin { padding: 0; max-width: none; }
+  body { background: #fff; color: #000; }
+  .rcard { background: #fff; color: #000; border: 1.5px solid #999; page-break-inside: avoid; }
+  .rcard dt, .rcard .sub, .rcard header, .rcard dd small { color: #444; }
+  .cards { grid-template-columns: 1fr; }
+}
+.alert-link { text-decoration: none; color: inherit; display: grid; }
+.alert-link + .alert-link { margin-top: var(--s-3); }
+.quick.stacked { flex-direction: column; overflow: visible; }
+.quick.stacked > * { width: 100%; }
+.opt-tej { flex: none; width: 92px; }
+
+/* Hindi labels (Setup → Hindi labels) */
+.tab-hi { display: none; }
+html.admin-hi .tab-hi { display: block; font: 500 10px var(--font-body); }
+html.admin-hi .page-title h1[data-hi]::after { content: attr(data-hi); display: block; font: 600 var(--fs-16) var(--font-body); color: var(--ink-dim); margin-top: 2px; }

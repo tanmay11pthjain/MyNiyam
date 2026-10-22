@@ -72,7 +72,7 @@ function Builder({ page }: { page: FormPage }) {
 
   return (
     <main className="page">
-      <div className="page-title"><h1>Join form</h1><p>What new members are asked after their name and number.</p></div>
+      <div className="page-title"><h1 data-hi="जुड़ने का फ़ॉर्म">Join form</h1><p>What new members are asked after their name and number.</p></div>
       <div className="builder">
         <div className="stack-lg">
           <div className="stack">

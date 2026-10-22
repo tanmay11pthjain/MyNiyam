@@ -3,6 +3,7 @@ import { formatPhone, maskPhone, normalizeIndianPhone } from "@/lib/phone";
 import { joinCodeFromScan, normalizeJoinCode } from "@/lib/join-code";
 import { ageFrom, checkFormFields, missingRequired, parseFormFields, validateAnswers } from "@/lib/forms";
 import { OTP_LENGTH, OTP_PATTERN } from "@/lib/otp-code";
+import { clock, sunTimes } from "@/lib/sun";
 
 describe("phone", () => {
   it.each([
@@ -110,5 +111,26 @@ describe("join form builder", () => {
     expect(ageFrom("2016-10-21", today)).toBe(10);
     expect(ageFrom("2016-10-22", today)).toBe(9);
     expect(ageFrom("nonsense", today)).toBeNull();
+  });
+});
+
+
+describe("sunrise and sunset", () => {
+  it("matches published times for Mumbai and Delhi to within 2 minutes", () => {
+    const near = (min: number, hhmm: string) => {
+      const [h, m] = hhmm.split(":").map(Number);
+      expect(Math.abs(min - (h * 60 + m))).toBeLessThanOrEqual(2);
+    };
+    const mJun = sunTimes("2026-06-21", 19.076, 72.8777)!;
+    near(mJun.sunrise, "06:02"); near(mJun.sunset, "19:18");
+    const mDec = sunTimes("2026-12-21", 19.076, 72.8777)!;
+    near(mDec.sunrise, "07:06"); near(mDec.sunset, "18:05");
+    const dOct = sunTimes("2026-10-22", 28.6139, 77.209)!;
+    near(dOct.sunrise, "06:27"); near(dOct.sunset, "17:45");
+  });
+  it("formats a clock time", () => {
+    expect(clock(412)).toBe("6:52 am");
+    expect(clock(12 * 60)).toBe("12:00 pm");
+    expect(clock(18 * 60 + 5)).toBe("6:05 pm");
   });
 });

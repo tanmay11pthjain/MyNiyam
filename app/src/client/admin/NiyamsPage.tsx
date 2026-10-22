@@ -18,7 +18,7 @@ const TYPES: { type: NiyamType; t: string; s: string }[] = [
 
 const BLANK: NiyamInput = {
   name: "", nameHi: null, type: "yesno", target: null, options: [], icon: "lamp", note: null,
-  allClasses: true, classIds: [], schedule: "daily", weekdays: [], startDate: null, endDate: null, isCore: true,
+  allClasses: true, classIds: [], schedule: "daily", weekdays: [], startDate: null, endDate: null, isCore: true, timeHint: null, points: 10, dates: [],
 };
 
 type Editing = { niyam: Niyam | null; draft: NiyamInput };
@@ -31,6 +31,7 @@ export function NiyamsPage() {
   const [adding, setAdding] = useState(params.get("new") === "1");
   const [editing, setEditing] = useState<Editing | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [copying, setCopying] = useState(false);
 
   if (d.state === "loading") return <div className="page"><Loading rows={4} /></div>;
   if (d.state === "error") return <div className="page"><LoadError message={d.message} retry={d.retry} /></div>;
@@ -64,7 +65,7 @@ export function NiyamsPage() {
 
   return (
     <main className="page">
-      <div className="page-title"><h1>Niyams</h1><p>What members log each day, in this order.</p></div>
+      <div className="page-title"><h1 data-hi="नियम">Niyams</h1><p>What members log each day, in this order.</p></div>
 
       {running.length === 0 ? (
         <div className="notice"><b>No niyams yet</b><span>Add the niyams your pathshala keeps. Start from the ready list; it takes one tap.</span></div>
@@ -81,6 +82,10 @@ export function NiyamsPage() {
           {showArchived && <div className="list">{archived.map((n, i) => row(n, i, archived, false))}</div>}
         </section>
       )}
+
+      {page.classes.length > 1 && <Button kind="quiet" onClick={() => setCopying(true)}><Icon.copy /> Copy niyams from one class to another</Button>}
+      {copying && <CopySheet classes={page.classes} onClose={() => setCopying(false)}
+        onDone={(n, words) => { setNiyams(n); setCopying(false); toast(words); }} />}
 
       <LogWindow hours={page.logBackHours} onChange={(h) => d.set({ ...page, logBackHours: h })} />
 
@@ -153,6 +158,7 @@ function NiyamEditor({ editing, classes, onClose, onSaved }: {
     if (f.type === "choice" && (f.options.length < 2 || f.options.some((o) => !o.en.trim()))) return "Write at least two options.";
     if (!f.allClasses && f.classIds.length === 0) return "Pick at least one class.";
     if (f.schedule === "weekdays" && f.weekdays.length === 0) return "Pick at least one day.";
+    if (f.schedule === "dates" && f.dates.length === 0) return "Add at least one date.";
     if (f.schedule === "range" && (!f.startDate || !f.endDate || f.startDate > f.endDate)) return "Pick a start date and an end date after it.";
     return null;
   }
@@ -216,12 +222,18 @@ function NiyamEditor({ editing, classes, onClose, onSaved }: {
               <div key={o.value} style={{ display: "flex", gap: "var(--s-2)" }}>
                 <input aria-label={`Option ${i + 1}`} className="input input-sm" value={o.en} maxLength={40} placeholder={`Option ${i + 1}`}
                   onChange={(e) => set({ options: f.options.map((x, j) => (j === i ? { ...x, en: e.target.value } : x)) })} />
+                <input aria-label={`Tej for option ${i + 1}`} className="input input-sm opt-tej" inputMode="numeric" maxLength={3} placeholder={`${f.points} Tej`}
+                  value={o.points ?? ""} onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, "");
+                    set({ options: f.options.map((x, j) => (j === i ? { ...x, points: v ? Math.min(500, Number(v)) : undefined } : x)) });
+                  }} />
                 <button type="button" className="icon-btn" aria-label={`Remove option ${i + 1}`} disabled={f.options.length <= 2}
                   onClick={() => set({ options: f.options.filter((_, j) => j !== i) })}><Icon.trash /></button>
               </div>
             ))}
             {f.options.length < 12 && <button type="button" className="chip" style={{ justifySelf: "start" }}
               onClick={() => set({ options: [...f.options, { value: `o${Date.now().toString(36)}`, en: "" }] })}>+ Add an option</button>}
+            <p className="hint">Tapasya levels: put them from small to big and give bigger ones more Tej (for example Navkarsi 10, Ekasan 30, Upvas 100). Empty uses {f.points} Tej.</p>
           </fieldset>
         )}
 
@@ -248,6 +260,7 @@ function NiyamEditor({ editing, classes, onClose, onSaved }: {
             <button type="button" className="chip" aria-pressed={f.schedule === "daily"} onClick={() => set({ schedule: "daily" })}>Every day</button>
             <button type="button" className="chip" aria-pressed={f.schedule === "weekdays"} onClick={() => set({ schedule: "weekdays" })}>Some days of the week</button>
             <button type="button" className="chip" aria-pressed={f.schedule === "range"} onClick={() => set({ schedule: "range", startDate: f.startDate ?? today })}>Between two dates</button>
+            <button type="button" className="chip" aria-pressed={f.schedule === "dates"} onClick={() => set({ schedule: "dates" })}>Tithi days (pick dates)</button>
           </div>
           {f.schedule === "weekdays" && (
             <div className="chips">
@@ -258,6 +271,7 @@ function NiyamEditor({ editing, classes, onClose, onSaved }: {
               })}
             </div>
           )}
+          {f.schedule === "dates" && <TithiDates dates={f.dates} today={today} onChange={(dates) => set({ dates })} />}
           {f.schedule === "range" && (
             <div className="grid-2">
               <div className="field"><label className="label" htmlFor="ns">From</label><input id="ns" type="date" className="input" value={f.startDate ?? ""} onChange={(e) => set({ startDate: e.target.value || null })} /></div>
@@ -267,6 +281,24 @@ function NiyamEditor({ editing, classes, onClose, onSaved }: {
         </fieldset>
 
         <div className="list">
+          {f.type === "yesno" && (
+            <div className="field">
+              <span className="label">Show a time on the card</span>
+              <div className="chips">
+                <button type="button" className="chip" aria-pressed={f.timeHint === null} onClick={() => set({ timeHint: null })}>No time</button>
+                <button type="button" className="chip" aria-pressed={f.timeHint === "navkarsi"} onClick={() => set({ timeHint: "navkarsi" })}>Navkarsi time</button>
+                <button type="button" className="chip" aria-pressed={f.timeHint === "chauvihar"} onClick={() => set({ timeHint: "chauvihar" })}>Chauvihar time</button>
+              </div>
+              <p className="hint">{f.timeHint === "navkarsi" ? "Members see \"By 7:14 am\": 48 minutes after sunrise." : f.timeHint === "chauvihar" ? "Members see \"Before 6:02 pm\": sunset." : "Times come from your pathshala's place (Setup, Pathshala)."}</p>
+            </div>
+          )}
+          <div className="field">
+            <span className="label">Tej for keeping it</span>
+            <div className="chips">
+              {[0, 5, 10, 20, 50].map((v) => <button key={v} type="button" className="chip" aria-pressed={f.points === v} onClick={() => set({ points: v })}>{v === 0 ? "None" : `${v} Tej`}</button>)}
+            </div>
+            <p className="hint">{f.type === "count" || f.type === "duration" ? `${f.points} Tej for each ${f.type === "count" ? "count" : "minute"}, up to 10 a day.` : "Members earn Tej points each time they keep it."}</p>
+          </div>
           <Switch label="Counts in daily progress" sub={f.isCore ? "A core niyam." : "Optional: members can log it, but it doesn't count."} checked={f.isCore} onChange={(v) => set({ isCore: v })} />
         </div>
 
@@ -296,6 +328,57 @@ function NiyamEditor({ editing, classes, onClose, onSaved }: {
           <p className="hint center">Pausing or archiving keeps everything already logged.</p>
         </div>
       )}
+    </Sheet>
+  );
+}
+
+/** Dates for a tithi niyam: Ashtami, Chaudas, Paryushan days. Picked one by one from the calendar. */
+function TithiDates({ dates, today, onChange }: { dates: string[]; today: string; onChange: (d: string[]) => void }) {
+  const [pick, setPick] = useState("");
+  const label = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  const add = () => { if (pick && !dates.includes(pick) && dates.length < 120) onChange([...dates, pick].sort()); setPick(""); };
+  return (
+    <div className="stack">
+      <div style={{ display: "flex", gap: "var(--s-2)" }}>
+        <input type="date" className="input" aria-label="Date to add" min={today} value={pick} onChange={(e) => setPick(e.target.value)} />
+        <button type="button" className="chip" disabled={!pick} onClick={add}>Add date</button>
+      </div>
+      {dates.length === 0 ? <p className="hint">Add the tithi dates from your panchang, for example each Ashtami and Chaudas.</p> : (
+        <div className="chips">
+          {dates.map((d) => (
+            <button key={d} type="button" className="chip" aria-label={`Remove ${label(d)}`} onClick={() => onChange(dates.filter((x) => x !== d))}>{label(d)} ✕</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CopySheet({ classes, onClose, onDone }: { classes: { id: string; name: string }[]; onClose: () => void; onDone: (n: Niyam[], words: string) => void }) {
+  const [from, setFrom] = useState(classes[0].id);
+  const [to, setTo] = useState(classes[1].id);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const name = (id: string) => classes.find((c) => c.id === id)?.name ?? "";
+  return (
+    <Sheet title="Copy niyams" onClose={onClose}>
+      <form className="stack" noValidate onSubmit={async (e) => {
+        e.preventDefault();
+        if (from === to) { setErr("Pick two different classes."); return; }
+        setBusy(true);
+        const r = await api<{ added: number; niyams: Niyam[] }>("/api/admin/niyams/copy", { body: { from, to } });
+        setBusy(false);
+        if (r.ok) onDone(r.data.niyams, r.data.added ? `${r.data.added} ${r.data.added === 1 ? "niyam" : "niyams"} added to ${name(to)}` : `${name(to)} already had them all`);
+        else setErr(sayAdmin(r.err));
+      }}>
+        <p>Every niyam set for the first class is also set for the second. Niyams for all classes need nothing.</p>
+        <div className="field"><label className="label" htmlFor="cf">From</label>
+          <select id="cf" className="input" value={from} onChange={(e) => { setFrom(e.target.value); setErr(null); }}>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        <div className="field"><label className="label" htmlFor="ct">To</label>
+          <select id="ct" className="input" value={to} onChange={(e) => { setTo(e.target.value); setErr(null); }}>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        {err && <p className="msg err" role="alert">{err}</p>}
+        <Button type="submit" busy={busy}>{busy ? "Copying…" : "Copy niyams"}</Button>
+      </form>
     </Sheet>
   );
 }

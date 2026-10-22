@@ -1,7 +1,7 @@
 import "server-only";
 import { randomInt } from "node:crypto";
 import { asAdmin, pgCode, pgHint } from "../db";
-import type { AdminMe, AdminSanghRef, SanghProfile, SuperSangh } from "@/lib/admin-types";
+import type { AdminMe, AdminSangh, SanghProfile, SuperSangh } from "@/lib/admin-types";
 import { formatPhone, maskPhone } from "@/lib/phone";
 
 // The admin's sanghs, the sangh profile and join settings, and the super admin's sangh list.
@@ -26,46 +26,51 @@ async function withFreshCode<T>(fn: (code: string) => Promise<T>): Promise<T> {
 }
 
 export async function adminMe(phone: string, isSuper: boolean, activeSanghId: string | null): Promise<AdminMe> {
-  const sanghs = await asAdmin(phone, (tx) => tx<AdminSanghRef[]>`
-    select s.id, s.name, s.city, s.status from public.sanghs s
+  // Sanghs this phone runs, then those it volunteers in (an admin row wins if it is both).
+  const sanghs = await asAdmin(phone, (tx) => tx<AdminSangh[]>`
+    select s.id, s.name, s.city, s.status, 'admin' as role, '{}'::text[] as perms from public.sanghs s
     join public.sangh_admins sa on sa.sangh_id = s.id and sa.phone = ${phone}
-    order by s.name`);
+    union all
+    select s.id, s.name, s.city, s.status, 'volunteer', v.perms from public.sanghs s
+    join public.sangh_volunteers v on v.sangh_id = s.id and v.phone = ${phone}
+    where s.status = 'active' and not exists (select 1 from public.sangh_admins sa where sa.sangh_id = s.id and sa.phone = ${phone})
+    order by name`);
   const active = sanghs.some((s) => s.id === activeSanghId) ? activeSanghId : null;
   return { phone: formatPhone(phone), isSuper, sanghs: [...sanghs], activeSanghId: active };
 }
 
-/** True if this phone is an admin of the sangh (used before switching to it). */
+/** True if this phone is an admin or a volunteer of the sangh (used before switching to it, and for photos). */
 export async function isAdminOf(phone: string, sanghId: string): Promise<boolean> {
-  const [r] = await asAdmin(phone, (tx) => tx`select private.is_sangh_admin(${sanghId}) as ok`);
+  const [r] = await asAdmin(phone, (tx) => tx`select private.has_access(${sanghId}) as ok`);
   return r.ok;
 }
 
 type ProfileRow = {
   id: string; name: string; name_hi: string | null; city: string; area: string | null; sampraday: string | null;
   contact_phone: string | null; about: string | null; logo_url: string | null; join_code: string; status: SanghProfile["status"];
-  join_open: boolean; searchable: boolean; log_back_hours: number;
+  join_open: boolean; searchable: boolean; log_back_hours: number; lat: number | null; lon: number | null;
 };
 const toProfile = (r: ProfileRow): SanghProfile => ({
   id: r.id, name: r.name, nameHi: r.name_hi, city: r.city, area: r.area, sampraday: r.sampraday, contactPhone: r.contact_phone,
   about: r.about, logoUrl: r.logo_url, joinCode: r.join_code, status: r.status, joinOpen: r.join_open, searchable: r.searchable,
-  logBackHours: r.log_back_hours,
+  logBackHours: r.log_back_hours, location: r.lat !== null && r.lon !== null ? { lat: r.lat, lon: r.lon } : null,
 });
 
 export async function getSanghProfile(phone: string, sanghId: string): Promise<SanghProfile | null> {
   const [r] = await asAdmin(phone, (tx) => tx<ProfileRow[]>`
-    select id, name, name_hi, city, area, sampraday, contact_phone, about, logo_url, join_code, status, join_open, searchable, log_back_hours
+    select id, name, name_hi, city, area, sampraday, contact_phone, about, logo_url, join_code, status, join_open, searchable, log_back_hours, lat, lon
     from public.sanghs where id = ${sanghId} and private.is_sangh_admin(id)`);
   return r ? toProfile(r) : null;
 }
 
 export type SanghPatch = Partial<{
   name: string; nameHi: string | null; city: string; area: string | null; sampraday: string | null; contactPhone: string | null;
-  about: string | null; joinOpen: boolean; searchable: boolean; logBackHours: number;
+  about: string | null; joinOpen: boolean; searchable: boolean; logBackHours: number; lat: number | null; lon: number | null;
 }>;
 
 const COLUMNS: Record<keyof SanghPatch, string> = {
   name: "name", nameHi: "name_hi", city: "city", area: "area", sampraday: "sampraday", contactPhone: "contact_phone",
-  about: "about", joinOpen: "join_open", searchable: "searchable", logBackHours: "log_back_hours",
+  about: "about", joinOpen: "join_open", searchable: "searchable", logBackHours: "log_back_hours", lat: "lat", lon: "lon",
 };
 
 export async function updateSanghProfile(phone: string, sanghId: string, patch: SanghPatch): Promise<SanghProfile | null> {
@@ -74,7 +79,7 @@ export async function updateSanghProfile(phone: string, sanghId: string, patch: 
   return asAdmin(phone, async (tx) => {
     if (Object.keys(row).length) await tx`update public.sanghs set ${tx(row)} where id = ${sanghId}`;
     const [r] = await tx<ProfileRow[]>`
-      select id, name, name_hi, city, area, sampraday, contact_phone, about, logo_url, join_code, status, join_open, searchable, log_back_hours
+      select id, name, name_hi, city, area, sampraday, contact_phone, about, logo_url, join_code, status, join_open, searchable, log_back_hours, lat, lon
       from public.sanghs where id = ${sanghId} and private.is_sangh_admin(id)`;
     return r ? toProfile(r) : null;
   });

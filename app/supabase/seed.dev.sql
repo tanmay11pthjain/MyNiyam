@@ -83,7 +83,7 @@ end $$;
 -- One niyam of each type, and a clean "today" so the Today screen starts empty. Safe to run again.
 insert into public.niyams (sangh_id, name, name_hi, type, target, options, icon, note, is_core, sort_order)
 select s.id, 'Tapasya', 'तपस्या', 'choice', null,
-  '[{"value":"ekasna","en":"Ekasna","hi":"एकासना"},{"value":"biyasna","en":"Biyasna","hi":"बियासना"},{"value":"ayambil","en":"Ayambil","hi":"आयंबिल"},{"value":"upvas","en":"Upvas","hi":"उपवास"}]'::jsonb,
+  '[{"value":"biyasna","en":"Biyasna","hi":"बियासना","points":20},{"value":"ekasna","en":"Ekasna","hi":"एकासना","points":30},{"value":"ayambil","en":"Ayambil","hi":"आयंबिल","points":50},{"value":"upvas","en":"Upvas","hi":"उपवास","points":100}]'::jsonb,
   'star', 'Which tapasya did you do today?', false, 5
 from public.sanghs s
 where s.join_code = 'HEER01' and not exists (select 1 from public.niyams n where n.sangh_id = s.id and n.name = 'Tapasya');
@@ -91,3 +91,6 @@ where s.join_code = 'HEER01' and not exists (select 1 from public.niyams n where
 delete from public.niyam_logs
 where log_date = (now() at time zone 'Asia/Kolkata')::date
   and profile_id in (select p.id from public.profiles p join public.accounts a on a.id = p.account_id where a.phone = '+917000000001');
+
+-- Navkarsi cards show "By <sunrise + 48 min>".
+update public.niyams set time_hint = 'navkarsi' where name = 'Navkarsi' and time_hint is null;

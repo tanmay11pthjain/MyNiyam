@@ -26,8 +26,11 @@ async function syncSuper(phone: string): Promise<boolean> {
 export async function startAdminSession(res: NextResponse, phone: string): Promise<void> {
   await syncSuper(phone);
   const [first] = await sql()`
-    select sa.sangh_id from public.sangh_admins sa join public.sanghs s on s.id = sa.sangh_id
-    where sa.phone = ${phone} order by (s.status = 'active') desc, s.name limit 1`;
+    select x.sangh_id from (
+      select sangh_id, true as admin from public.sangh_admins where phone = ${phone}
+      union all select sangh_id, false from public.sangh_volunteers where phone = ${phone}
+    ) x join public.sanghs s on s.id = x.sangh_id
+    order by (s.status = 'active') desc, x.admin desc, s.name limit 1`;
   const [row] = await sql()`
     insert into private.admin_sessions (phone, active_sangh_id) values (${phone}, ${first?.sangh_id ?? null}) returning id`;
   const token = await new SignJWT({ k: "admin" })

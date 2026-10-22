@@ -4,7 +4,7 @@ import { api, say } from "./api";
 import { applyPatch, NiyamCard, type LogPatch } from "./NiyamCard";
 import { dayLabel } from "./TodayTab";
 import { Button } from "./ui";
-import type { DayNiyam, HistoryDayResponse, HistoryResponse } from "@/lib/today-types";
+import type { DayNiyam, HistoryDayResponse, HistoryResponse, NiyamStat } from "@/lib/today-types";
 
 const monthName = (m: string) => new Date(`${m}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 const shift = (m: string, by: number) => {
@@ -46,27 +46,83 @@ export function HistoryTab() {
       {!data && !err && <div className="stack" aria-busy="true"><div className="skel" /><div className="skel" /></div>}
       {data && data.days.length === 0 && <div className="card"><p><b>Nothing here yet.</b></p><p className="hint mt-4">Days appear after you start.</p></div>}
 
-      {data && data.days.length > 0 && (
-        <ul className="days">
-          {data.days.map((d) => {
-            const full = d.coreTotal > 0 ? d.coreDone >= d.coreTotal : d.anyDone > 0;
-            const some = !full && d.anyDone > 0;
-            return (
-              <li key={d.date}>
-                <button type="button" className="dayrow" aria-haspopup="dialog" onClick={() => setOpenDate(d.date)}>
-                  <span className={`dot${full ? " full" : some ? " some" : ""}`} aria-hidden="true" />
-                  <span className="grow">
-                    <span className="t">{dayLabel(d.date)}{d.date === data.today && " · Today"}</span>
-                  </span>
-                  <span className="s">{d.coreTotal > 0 ? `${d.coreDone} of ${d.coreTotal}` : d.anyDone > 0 ? `${d.anyDone} done` : "No niyams"}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {data?.attendance && <AttendanceCard a={data.attendance} />}
+
+      {data && data.days.length > 0 && <Calendar data={data} onOpen={setOpenDate} />}
+      <NiyamStats key={tick} />
       {openDate && <DayDialog date={openDate} onClose={() => setOpenDate(null)} onChanged={() => setTick((x) => x + 1)} />}
     </div>
+  );
+}
+
+const WEEK = ["S", "M", "T", "W", "T", "F", "S"];
+
+/** The month as a calendar. Gold: every core niyam kept. Half: some kept. A small dot: came to pathshala. */
+function Calendar({ data, onOpen }: { data: HistoryResponse; onOpen: (d: string) => void }) {
+  const byDate = new Map(data.days.map((d) => [d.date, d]));
+  const first = new Date(`${data.month}-01T00:00:00Z`);
+  const blanks = first.getUTCDay();
+  const dim = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  return (
+    <div className="cal-wrap">
+      <div className="cal" role="grid" aria-label={`${monthName(data.month)} calendar`}>
+        {WEEK.map((w, i) => <span key={i} className="cal-h" aria-hidden="true">{w}</span>)}
+        {Array.from({ length: blanks }, (_, i) => <span key={`b${i}`} />)}
+        {Array.from({ length: dim }, (_, i) => {
+          const date = `${data.month}-${String(i + 1).padStart(2, "0")}`;
+          const d = byDate.get(date);
+          if (!d) return <span key={date} className="cal-d off" aria-hidden="true">{i + 1}</span>;
+          const full = d.coreTotal > 0 ? d.coreDone >= d.coreTotal : d.anyDone > 0;
+          const some = !full && d.anyDone > 0;
+          const words = full ? "all kept" : some ? `${d.anyDone} kept` : "nothing kept";
+          return (
+            <button key={date} type="button" className={`cal-d${full ? " full" : some ? " some" : ""}${date === data.today ? " today" : ""}`}
+              aria-label={`${dayLabel(date)}: ${words}${d.attendance ? `, ${ATT_WORDS[d.attendance].toLowerCase()}` : ""}`} onClick={() => onOpen(date)}>
+              {i + 1}
+              {d.attendance && <i className={`cal-att ${d.attendance}`} aria-hidden="true" />}
+            </button>
+          );
+        })}
+      </div>
+      <p className="cal-key" aria-hidden="true"><span className="cal-d full">1</span> All kept <span className="cal-d some">1</span> Some <span className="cal-d">1</span> None</p>
+    </div>
+  );
+}
+
+const ATT_WORDS = { present: "At pathshala", late: "Came late", absent: "Absent" } as const;
+
+/** This month's pathshala attendance, counted from the days a teacher took it. */
+function AttendanceCard({ a }: { a: { present: number; late: number; absent: number } }) {
+  const came = a.present + a.late, total = came + a.absent;
+  return (
+    <div className="card att-card">
+      <p><b>Pathshala this month</b></p>
+      <p className="att-big">{came} of {total} {total === 1 ? "class" : "classes"} <span className="hint">({Math.round((came / total) * 100)}%)</span></p>
+      {a.late > 0 && <p className="hint">{a.late} late</p>}
+    </div>
+  );
+}
+
+/** Each niyam: days in a row now, best ever, and the total kept. */
+function NiyamStats() {
+  const [rows, setRows] = useState<NiyamStat[] | null>(null);
+  useEffect(() => { void api<{ niyams: NiyamStat[] }>("/api/history/niyams").then((r) => { if (r.ok) setRows(r.data.niyams); }); }, []);
+  if (!rows || rows.length === 0) return null;
+  return (
+    <section className="stack" aria-labelledby="ns-h">
+      <h2 id="ns-h" className="sec-h">My niyams</h2>
+      <ul className="days">
+        {rows.map((n) => (
+          <li key={n.id} className="dayrow ns-row">
+            <span className="grow">
+              <span className="t">{n.name}</span>
+              <span className="s">Best {n.best} {n.best === 1 ? "day" : "days"} in a row · {n.total.toLocaleString("en-IN")} {n.unit}</span>
+            </span>
+            <span className="ns-streak"><b>{n.streak}</b><span>{n.streak === 1 ? "day" : "days"}</span></span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

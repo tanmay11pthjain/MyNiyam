@@ -25,6 +25,8 @@ const patch = z.object({
   joinOpen: z.boolean().optional(),
   searchable: z.boolean().optional(),
   logBackHours: z.union([z.literal(0), z.literal(24)]).optional(),
+  // Where sunrise and sunset are worked out for (India only); null clears it.
+  location: z.object({ lat: z.number().min(6).max(38), lon: z.number().min(68).max(98) }).nullable().optional(),
 });
 
 export const PATCH = sanghRoute("admin.sangh.update", async (req, ctx) => {
@@ -36,6 +38,8 @@ export const PATCH = sanghRoute("admin.sangh.update", async (req, ctx) => {
     if (!p) return fail(ctx, { error: "invalid_phone" });
     contactPhone = p;
   } else if (contactPhone === "") contactPhone = null;
-  const p = await updateSanghProfile(ctx.admin.phone, ctx.sanghId, { ...input, contactPhone });
+  const { location, ...rest } = input;
+  const where = location === undefined ? {} : { lat: location?.lat ?? null, lon: location?.lon ?? null };
+  const p = await updateSanghProfile(ctx.admin.phone, ctx.sanghId, { ...rest, ...where, contactPhone });
   return p ? ok<SanghProfile>(ctx, p) : fail(ctx, { error: "no_sangh" });
 });

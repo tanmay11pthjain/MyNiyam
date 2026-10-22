@@ -2,7 +2,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sql } from "@/server/db";
 import { createProfile, findSanghByCode, joinSangh } from "@/server/onboarding";
-import { getHistory, getToday, setLog } from "@/server/today";
+import { getHistory, getNiyamStats, getToday, setLog } from "@/server/today";
 
 let n = 0;
 const phone = () => `+9196${String(Date.now() % 1e6).padStart(6, "0")}${String(n++ % 100).padStart(2, "0")}`;
@@ -125,6 +125,21 @@ describe("streak", () => {
     await setLog(m.accountId, m.profileId, { niyamId: await niyamByType("count"), date: today, value: 1 });
     expect((await getToday(m.accountId, m.profileId))!.streak).toBe(1);
   });
+
+  it("Tej: points per niyam, and each count up to 10 a day", async () => {
+    const m = await member();
+    const yes = await niyamByType("yesno"), cnt = await niyamByType("count");
+    const [{ py }] = await sql()`select points as py from public.niyams where id = ${yes}`;
+    const [{ pc }] = await sql()`select points as pc from public.niyams where id = ${cnt}`;
+    await setLog(m.accountId, m.profileId, { niyamId: yes, date: today });
+    await setLog(m.accountId, m.profileId, { niyamId: cnt, date: today, value: 108 });
+    const p = (await getToday(m.accountId, m.profileId))!.progress;
+    expect(p.tejToday).toBe(py + 10 * pc);
+    expect(p.tej).toBe(p.tejToday);
+    const stats = (await getNiyamStats(m.accountId, m.profileId))!;
+    expect(stats.find((x) => x.id === cnt)).toMatchObject({ streak: 1, best: 1, total: 108 });
+    expect(stats.find((x) => x.id === yes)).toMatchObject({ streak: 1, total: 1, unit: "time kept" });
+  });
 });
 
 describe("history", () => {
@@ -143,5 +158,23 @@ describe("history", () => {
     await oldLog(m.profileId, id, 5);
     await sql()`delete from public.profiles where id = ${m.profileId}`;
     expect(await sql()`select 1 from public.niyam_logs where profile_id = ${m.profileId}`).toHaveLength(0);
+  });
+});
+
+describe("sun times on cards", () => {
+  it("a Navkarsi niyam shows its time from the sangh's city", async () => {
+    const m = await member();
+    const [nk] = await sql()`select id from public.niyams where sangh_id = ${heer} and time_hint = 'navkarsi' and status = 'active' limit 1`;
+    const t = await getToday(m.accountId, m.profileId);
+    expect(t!.today.niyams.find((x) => x.id === nk.id)!.time).toMatch(/^By \d{1,2}:\d{2} am$/);
+  });
+});
+
+describe("offline taps name their person", () => {
+  it("a tap for someone on another number is refused", async () => {
+    const a = await member();
+    const b = await member();
+    const id = await niyamByType("yesno");
+    expect(await setLog(a.accountId, b.profileId, { niyamId: id, date: today })).toEqual({ ok: false, reason: "not_found" });
   });
 });

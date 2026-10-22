@@ -5,10 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { api } from "../api";
 import { Button, Chevron, SanghLogo } from "../ui";
 import { Icon } from "./icons";
+import { applyPrefs } from "../prefs";
 import { LoadError, Loading, Sheet, ToastHost, sayAdmin, useLoad, useToast } from "./kit";
-import type { AdminMe, AdminSanghRef } from "@/lib/admin-types";
+import type { AdminMe, AdminSangh, Perm } from "@/lib/admin-types";
 
-type AdminState = { me: AdminMe; sangh: AdminSanghRef; refresh: () => void };
+type Can = (p: Perm | "admin") => boolean;
+type AdminState = { me: AdminMe; sangh: AdminSangh; refresh: () => void; can: Can };
 const Ctx = createContext<AdminState | null>(null);
 
 /** The signed-in admin and their open sangh. Only inside pages that AdminApp has let through. */
@@ -18,11 +20,15 @@ export function useAdmin(): AdminState {
   return v;
 }
 
-const TABS = [
-  { href: "/admin", label: "Home", icon: Icon.home, match: (p: string) => p === "/admin" },
-  { href: "/admin/members", label: "Members", icon: Icon.people, match: (p: string) => p.startsWith("/admin/members") },
-  { href: "/admin/niyams", label: "Niyams", icon: Icon.niyam, match: (p: string) => p.startsWith("/admin/niyams") },
-  { href: "/admin/setup", label: "Setup", icon: Icon.setup, match: (p: string) => ["/admin/setup", "/admin/sangh", "/admin/classes", "/admin/form", "/admin/super"].some((x) => p.startsWith(x)) },
+/** What this phone may do in the open sangh. Admins may do everything; the server checks again. */
+export const canFor = (sangh: AdminSangh | null): Can => (p) => !!sangh && (sangh.role === "admin" || (p !== "admin" && sangh.perms.includes(p)));
+
+const TABS: { href: string; label: string; hi?: string; icon: () => ReactNode; match: (p: string) => boolean; show: (can: Can) => boolean }[] = [
+  { href: "/admin", label: "Home", hi: "मुख्य", icon: Icon.home, match: (p: string) => p === "/admin" || p.startsWith("/admin/announcements") || p.startsWith("/admin/reports"), show: () => true },
+  { href: "/admin/members", label: "Members", hi: "सदस्य", icon: Icon.people, match: (p: string) => p.startsWith("/admin/members"), show: (can) => can("view_members") },
+  { href: "/admin/attendance", label: "Attendance", hi: "हाज़िरी", icon: Icon.roll, match: (p: string) => p.startsWith("/admin/attendance"), show: (can) => can("attendance") },
+  { href: "/admin/niyams", label: "Niyams", hi: "नियम", icon: Icon.niyam, match: (p: string) => p.startsWith("/admin/niyams"), show: (can) => can("niyams") },
+  { href: "/admin/setup", label: "Setup", hi: "सेटअप", icon: Icon.setup, match: (p: string) => ["/admin/setup", "/admin/sangh", "/admin/classes", "/admin/form", "/admin/super", "/admin/volunteers"].some((x) => p.startsWith(x)), show: () => true },
 ];
 
 /** Wraps every /admin page: checks the session, opens a sangh, and draws the header and tabs. */
@@ -45,9 +51,9 @@ function Gate({ path, children }: { path: string; children: ReactNode }) {
   // The super admin's page works without a sangh of their own.
   if (path.startsWith("/admin/super")) {
     if (!data.isSuper) return <div className="admin bare"><div className="page"><div className="banner err">This page is for the MyNiyam super admin only.</div><Link href="/admin">Back to admin home</Link></div></div>;
-    const placeholder: AdminSanghRef = sangh ?? { id: "", name: "No pathshala open", city: "", status: "active" };
+    const placeholder: AdminSangh = sangh ?? { id: "", name: "No pathshala open", city: "", status: "active", role: "admin", perms: [] };
     return (
-      <Ctx.Provider value={{ me: data, sangh: placeholder, refresh: me.reload }}>
+      <Ctx.Provider value={{ me: data, sangh: placeholder, refresh: me.reload, can: canFor(sangh) }}>
         <Chrome path={path} me={data} sangh={sangh} onChanged={me.set} noTabs={!sangh}>{children}</Chrome>
       </Ctx.Provider>
     );
@@ -79,19 +85,20 @@ function Gate({ path, children }: { path: string; children: ReactNode }) {
   }
 
   return (
-    <Ctx.Provider value={{ me: data, sangh, refresh: me.reload }}>
+    <Ctx.Provider value={{ me: data, sangh, refresh: me.reload, can: canFor(sangh) }}>
       {bare ? <div className="admin bare">{children}</div> : <Chrome path={path} me={data} sangh={sangh} onChanged={me.set}>{children}</Chrome>}
     </Ctx.Provider>
   );
 }
 
 function Chrome({ path, me, sangh, onChanged, noTabs, children }: {
-  path: string; me: AdminMe; sangh: AdminSanghRef | null; onChanged: (m: AdminMe) => void; noTabs?: boolean; children: ReactNode;
+  path: string; me: AdminMe; sangh: AdminSangh | null; onChanged: (m: AdminMe) => void; noTabs?: boolean; children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const wide = path.startsWith("/admin/form");
   useEffect(() => {
+    applyPrefs();
     const on = () => setScrolled(window.scrollY > 4);
     window.addEventListener("scroll", on, { passive: true });
     return () => window.removeEventListener("scroll", on);
@@ -103,7 +110,7 @@ function Chrome({ path, me, sangh, onChanged, noTabs, children }: {
           <SanghLogo name={sangh?.name ?? "M"} url={null} />
           <span style={{ minWidth: 0 }}>
             <span className="nm">{sangh?.name ?? "MyNiyam admin"}</span>
-            <span className="sub">{me.sanghs.length > 1 ? "Switch pathshala" : "Admin"}{me.isSuper ? " · super admin" : ""}</span>
+            <span className="sub">{me.sanghs.length > 1 ? "Switch pathshala" : sangh?.role === "volunteer" ? "Volunteer" : "Admin"}{me.isSuper ? " · super admin" : ""}</span>
           </span>
           <Chevron />
         </button>
@@ -112,8 +119,8 @@ function Chrome({ path, me, sangh, onChanged, noTabs, children }: {
       {!noTabs && (
         <div className="tabbar">
           <nav aria-label="Admin sections">
-            {TABS.map((t) => (
-              <Link key={t.href} href={t.href} aria-current={t.match(path) ? "page" : undefined}><t.icon />{t.label}</Link>
+            {TABS.filter((t) => t.show(canFor(sangh))).map((t) => (
+              <Link key={t.href} href={t.href} aria-current={t.match(path) ? "page" : undefined}><t.icon />{t.label}<span className="tab-hi" lang="hi">{t.hi}</span></Link>
             ))}
           </nav>
         </div>
@@ -140,7 +147,7 @@ function SwitchSheet({ me, onClose, onChanged }: { me: AdminMe; onClose: () => v
               if (r.ok) { onChanged(r.data); router.push("/admin"); toast(`Opened ${s.name}`); } else toast(sayAdmin(r.err));
             }}>
             <SanghLogo name={s.name} url={null} />
-            <span className="grow"><span className="t">{s.name}</span><span className="s">{s.city}{s.status === "pending" ? " · waiting for approval" : ""}</span></span>
+            <span className="grow"><span className="t">{s.name}</span><span className="s">{s.city}{s.role === "volunteer" ? " · volunteer" : ""}{s.status === "pending" ? " · waiting for approval" : ""}</span></span>
             {busy === s.id ? <span className="spinner" aria-hidden="true" /> : s.id === me.activeSanghId ? <span className="pill ok">Open</span> : <Chevron />}
           </button>
         ))}

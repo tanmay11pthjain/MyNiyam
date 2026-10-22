@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { fail, readJson } from "@/server/http";
-import { sanghRoute } from "@/server/admin/http";
+import { sanghRouteFor } from "@/server/admin/http";
 import { classReply, deleteClass, updateClass } from "@/server/admin/classes";
 
-// PATCH  /api/admin/classes/:id { name?, nameHi?, ageMin?, ageMax?, hidden? } → { classes }
+// PATCH  /api/admin/classes/:id { name?, nameHi?, ageMin?, ageMax?, meetsOn?, hidden? } → { classes }
 // DELETE /api/admin/classes/:id → { classes } | 409 class_has_members
 
 const patch = z.object({
@@ -11,10 +11,11 @@ const patch = z.object({
   nameHi: z.string().trim().max(80).nullable().optional().transform((s) => (s === undefined ? undefined : s || null)),
   ageMin: z.number().int().min(0).max(120).nullable().optional(),
   ageMax: z.number().int().min(0).max(120).nullable().optional(),
+  meetsOn: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   hidden: z.boolean().optional(),
 });
 
-export const PATCH = sanghRoute<{ id: string }>("admin.classes.update", async (req, ctx, { id }) => {
+export const PATCH = sanghRouteFor("setup")<{ id: string }>("admin.classes.update", async (req, ctx, { id }) => {
   if (!z.uuid().safeParse(id).success) return fail(ctx, { error: "not_found" });
   const input = await readJson(req, patch);
   if (!input) return fail(ctx, { error: "bad_request" });
@@ -22,7 +23,7 @@ export const PATCH = sanghRoute<{ id: string }>("admin.classes.update", async (r
   return classReply(ctx, await updateClass(ctx.admin.phone, ctx.sanghId, id, input));
 });
 
-export const DELETE = sanghRoute<{ id: string }>("admin.classes.delete", async (_req, ctx, { id }) => {
+export const DELETE = sanghRouteFor("setup")<{ id: string }>("admin.classes.delete", async (_req, ctx, { id }) => {
   if (!z.uuid().safeParse(id).success) return fail(ctx, { error: "not_found" });
   return classReply(ctx, await deleteClass(ctx.admin.phone, ctx.sanghId, id));
 });

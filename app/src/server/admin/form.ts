@@ -8,7 +8,7 @@ import type { FormPage } from "@/lib/admin-types";
 
 export async function getForm(phone: string, sanghId: string): Promise<FormPage | null> {
   return asAdmin(phone, async (tx) => {
-    const [s] = await tx`select name, form_fields from public.sanghs where id = ${sanghId} and private.is_sangh_admin(id)`;
+    const [s] = await tx`select name, form_fields from public.sanghs where id = ${sanghId} and private.has_perm(id, 'setup')`;
     if (!s) return null;
     const classes = await tx<FormPage["classes"]>`
       select id, name, name_hi as "nameHi", hidden, age_min as "ageMin", age_max as "ageMax"
@@ -21,9 +21,7 @@ export async function saveForm(phone: string, sanghId: string, raw: unknown):
   Promise<{ ok: true; fields: FormField[] } | { ok: false; reason: "invalid_field" | "duplicate_key" | "no_sangh" }> {
   const checked = checkFormFields(raw);
   if (!checked.ok) return { ok: false, reason: checked.reason === "duplicate_key" ? "duplicate_key" : "invalid_field" };
-  const r = await asAdmin(phone, (tx) => tx`
-    update public.sanghs set form_fields = ${tx.json(checked.fields)}, form_updated_at = now()
-    where id = ${sanghId} returning id`);
-  if (!r.length) return { ok: false, reason: "no_sangh" };
+  const [r] = await asAdmin(phone, (tx) => tx`select public.save_join_form(${sanghId}, ${tx.json(checked.fields)}) as ok`);
+  if (!r.ok) return { ok: false, reason: "no_sangh" };
   return { ok: true, fields: checked.fields };
 }

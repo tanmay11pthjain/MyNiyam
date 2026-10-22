@@ -76,7 +76,7 @@ describe("each admin sees only their own sangh", () => {
     const [shanClass] = await sql()`select id from public.classes where sangh_id = ${shan}`;
     const [heerClass] = await sql()`select id from public.classes where sangh_id = ${heer}`;
     const base = { name: "Test", nameHi: null, type: "yesno" as const, target: null, options: [], icon: null, note: null,
-      schedule: "daily" as const, weekdays: [], startDate: null, endDate: null, isCore: true };
+      schedule: "daily" as const, weekdays: [], startDate: null, endDate: null, isCore: true, timeHint: null, points: 10, dates: [] };
     await expect(createNiyam(heerAdmin, heer, { ...base, allClasses: false, classIds: [shanClass.id] })).rejects.toBeTruthy();
     const ok = await createNiyam(heerAdmin, heer, { ...base, name: "Only Heer", allClasses: false, classIds: [heerClass.id] });
     expect(ok.find((x) => x.name === "Only Heer")?.classIds).toEqual([heerClass.id]);

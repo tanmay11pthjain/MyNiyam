@@ -4,9 +4,10 @@ import { config } from "../config";
 import { asAdmin } from "../db";
 import { fail, limitIp, route, type Ctx } from "../http";
 import { readAdminSession, type AdminSession } from "./session";
+import type { Perm } from "@/lib/admin-types";
 
 export type AdminCtx = Ctx & { admin: AdminSession };
-export type SanghCtx = AdminCtx & { sanghId: string };
+export type SanghCtx = AdminCtx & { sanghId: string; role: "admin" | "volunteer"; perms: Perm[] };
 
 /** An /api/admin route for any signed-in admin (or the super admin with `superOnly`). */
 export function adminRoute<P = unknown>(
@@ -25,15 +26,31 @@ export function adminRoute<P = unknown>(
 }
 
 /**
- * An /api/admin route that works on the admin's open sangh. Checks, on every request, that this phone
- * is still an admin of it: the super admin can take an admin off a sangh at any time.
+ * An /api/admin route that works on the open sangh. Checks, on every request, that this phone still
+ * has the access the route needs: `perm` "admin" (the default) is for the sangh's admins only, "any" for
+ * any admin or volunteer, and a permission name for admins and the volunteers given it. The database
+ * checks the same rules again (row-level security), so this is the first gate, not the only one.
  */
-export function sanghRoute<P = unknown>(name: string, fn: (req: NextRequest, ctx: SanghCtx, params: P) => Promise<NextResponse>) {
+export function sanghRoute<P = unknown>(
+  name: string,
+  fn: (req: NextRequest, ctx: SanghCtx, params: P) => Promise<NextResponse>,
+  opts: { perm?: Perm | "admin" | "any" } = {},
+) {
+  const need = opts.perm ?? "admin";
   return adminRoute<P>(name, async (req, ctx, params) => {
     const sanghId = ctx.admin.activeSanghId;
     if (!sanghId) return fail(ctx, { error: "no_sangh" });
-    const still = await asAdmin(ctx.admin.phone, (tx) => tx`select private.is_sangh_admin(${sanghId}) as ok`);
-    if (!still[0].ok) return fail(ctx, { error: "no_sangh" });
-    return fn(req, { ...ctx, sanghId }, params);
+    const [r] = await asAdmin(ctx.admin.phone, (tx) => tx<{ admin: boolean; perms: Perm[] | null }[]>`
+      select private.is_sangh_admin(${sanghId}) as admin,
+        (select perms from public.sangh_volunteers where sangh_id = ${sanghId} and phone = ${ctx.admin.phone}) as perms`);
+    if (!r.admin && !r.perms) return fail(ctx, { error: "no_sangh" });
+    const role = r.admin ? "admin" as const : "volunteer" as const;
+    const perms = r.perms ?? [];
+    if (role === "volunteer" && (need === "admin" || (need !== "any" && !perms.includes(need)))) return fail(ctx, { error: "forbidden" });
+    return fn(req, { ...ctx, sanghId, role, perms }, params);
   });
 }
+
+/** sanghRoute for one permission: `sanghRouteFor("niyams")("admin.niyams.list", handler)`. */
+export const sanghRouteFor = (perm: Perm | "admin" | "any") =>
+  <P = unknown>(name: string, fn: (req: NextRequest, ctx: SanghCtx, params: P) => Promise<NextResponse>) => sanghRoute<P>(name, fn, { perm });

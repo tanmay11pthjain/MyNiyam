@@ -2,15 +2,15 @@
 // change anything after adding. Icons are names from NIYAM_ICONS (src/client/admin/icons.tsx).
 import type { NiyamInput } from "./admin-types";
 
-type LibraryItem = Pick<NiyamInput, "name" | "nameHi" | "type" | "target" | "options" | "icon" | "note">;
+type LibraryItem = Pick<NiyamInput, "name" | "nameHi" | "type" | "target" | "options" | "icon" | "note"> & Partial<Pick<NiyamInput, "timeHint">>;
 
 const yesno = (name: string, nameHi: string, icon: string, note: string | null = null): LibraryItem =>
   ({ name, nameHi, type: "yesno", target: null, options: [], icon, note });
 
 export const NIYAM_LIBRARY: LibraryItem[] = [
-  yesno("Navkarsi", "नवकारसी", "sun", "No food or water until 48 minutes after sunrise."),
+  { ...yesno("Navkarsi", "नवकारसी", "sun", "No food or water until 48 minutes after sunrise."), timeHint: "navkarsi" },
   yesno("Porsi", "पोरसी", "sun", "No food or water until about 3 hours after sunrise."),
-  yesno("Chauvihar", "चौविहार", "moon", "Nothing to eat or drink after sunset."),
+  { ...yesno("Chauvihar", "चौविहार", "moon", "Nothing to eat or drink after sunset."), timeHint: "chauvihar" },
   yesno("Jinpuja", "जिनपूजा", "temple"),
   yesno("Darshan", "दर्शन", "temple", "Visit the temple for darshan."),
   { name: "Navkar jaap", nameHi: "नवकार जाप", type: "count", target: 108, options: [], icon: "mala", note: "Count on a mala." },
@@ -22,10 +22,11 @@ export const NIYAM_LIBRARY: LibraryItem[] = [
   {
     name: "Tapasya", nameHi: "तपस्या", type: "choice", target: null, icon: "star", note: "Which tapasya did you do today?",
     options: [
-      { value: "ekasna", en: "Ekasna", hi: "एकासना" },
-      { value: "biyasna", en: "Biyasna", hi: "बियासना" },
-      { value: "ayambil", en: "Ayambil", hi: "आयंबिल" },
-      { value: "upvas", en: "Upvas", hi: "उपवास" },
+      // Tapasya levels, small to big; a bigger one earns more Tej.
+      { value: "biyasna", en: "Biyasna", hi: "बियासना", points: 20 },
+      { value: "ekasna", en: "Ekasna", hi: "एकासना", points: 30 },
+      { value: "ayambil", en: "Ayambil", hi: "आयंबिल", points: 50 },
+      { value: "upvas", en: "Upvas", hi: "उपवास", points: 100 },
     ],
   },
 ];
@@ -33,10 +34,11 @@ export const NIYAM_LIBRARY: LibraryItem[] = [
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** One line that says when and for whom a niyam runs, e.g. "Every day · All classes · Counts in progress". */
-export function niyamSummary(n: Pick<NiyamInput, "type" | "target" | "schedule" | "weekdays" | "startDate" | "endDate" | "allClasses" | "classIds" | "isCore">, classNames?: Map<string, string>): string {
+export function niyamSummary(n: Pick<NiyamInput, "type" | "target" | "schedule" | "weekdays" | "startDate" | "endDate" | "allClasses" | "classIds" | "isCore"> & { dates?: string[] }, classNames?: Map<string, string>): string {
   const what = n.type === "count" ? `Target ${n.target}` : n.type === "duration" ? `${n.target} min` : null;
   const when = n.schedule === "daily" ? "Every day"
     : n.schedule === "weekdays" ? [...n.weekdays].sort().map((d) => WEEKDAYS[d]).join(", ")
+    : n.schedule === "dates" ? `${n.dates?.length ?? 0} tithi ${n.dates?.length === 1 ? "day" : "days"}`
     : `${fmt(n.startDate)} to ${fmt(n.endDate)}`;
   const who = n.allClasses ? "All classes"
     : n.classIds.length === 1 && classNames?.get(n.classIds[0]) ? classNames.get(n.classIds[0])!

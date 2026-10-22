@@ -25,6 +25,10 @@ export function sayAdmin(err: ApiError | { error: "offline" }): string {
     case "code_expired":
     case "no_code": return "This code has expired. Send a new one.";
     case "bad_request": return "Something in the form isn't right. Check it and try again.";
+    case "already_admin": return "This number is already an admin of this pathshala.";
+    case "already_member": return "This number has already joined. Find them in Members.";
+    case "same_number": return "That is your own number. Enter the new admin's number.";
+    case "invalid_class": return "One of the chosen classes isn't here any more. Pick again.";
     default: return "Something went wrong on our side. Please try again.";
   }
 }

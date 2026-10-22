@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { fail, ok } from "@/server/http";
-import { sanghRoute } from "@/server/admin/http";
+import { sanghRouteFor } from "@/server/admin/http";
 import { AGE_GROUPS, listMembers } from "@/server/admin/members";
 import type { MembersPage } from "@/lib/admin-types";
 
@@ -13,7 +13,7 @@ const query = z.object({
   inactive: z.enum(["1"]).optional(),
 });
 
-export const GET = sanghRoute("admin.members.list", async (req, ctx) => {
+export const GET = sanghRouteFor("view_members")("admin.members.list", async (req, ctx) => {
   const p = query.safeParse(Object.fromEntries(req.nextUrl.searchParams));
   if (!p.success) return fail(ctx, { error: "bad_request" });
   const f = p.data;

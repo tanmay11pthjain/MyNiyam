@@ -10,6 +10,9 @@ import type { AdminClass } from "@/lib/admin-types";
 
 type Classes = { classes: AdminClass[] };
 
+export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const daysText = (d: number[]) => (d.length === 7 ? "Every day" : d.length ? d.map((x) => WEEKDAYS[x]).join(", ") : null);
+
 const ageText = (c: { ageMin: number | null; ageMax: number | null }) =>
   c.ageMin !== null && c.ageMax !== null ? `Age ${c.ageMin} to ${c.ageMax}` : c.ageMin !== null ? `Age ${c.ageMin}+` : c.ageMax !== null ? `Up to age ${c.ageMax}` : null;
 
@@ -33,7 +36,7 @@ export function ClassesPage() {
 
   return (
     <main className="page">
-      <div className="page-title"><h1>Classes</h1><p>New members pick one when they join, in this order.</p></div>
+      <div className="page-title"><h1 data-hi="कक्षाएँ">Classes</h1><p>New members pick one when they join, in this order.</p></div>
       {classes.length === 0 ? (
         <div className="notice"><b>No classes yet</b><span>Add the classes of your pathshala, for example Bal Varg or Mahila Mandal.</span></div>
       ) : (
@@ -43,8 +46,8 @@ export function ClassesPage() {
               <button type="button" className="grow" style={{ border: 0, background: "none", textAlign: "left", padding: "var(--s-2) 0", cursor: "pointer" }} onClick={() => setEditing(c)}>
                 <span className="t">{c.name}</span>
                 <span className="s">
-                  {[c.nameHi, ageText(c)].filter(Boolean).join(" · ")}
-                  {(c.nameHi || ageText(c)) && <br />}
+                  {[c.nameHi, ageText(c), daysText(c.meetsOn)].filter(Boolean).join(" · ")}
+                  {(c.nameHi || ageText(c) || c.meetsOn.length > 0) && <br />}
                   {c.members} {c.members === 1 ? "member" : "members"}{c.hidden ? " · hidden from new joins" : ""}
                 </span>
               </button>
@@ -55,17 +58,18 @@ export function ClassesPage() {
       )}
       <Button onClick={() => setEditing("new")}><Icon.plus /> Add a class</Button>
       {editing && (
-        <ClassSheet cls={editing === "new" ? null : editing} onClose={() => setEditing(null)}
+        <ClassSheet cls={editing === "new" ? null : editing} all={classes} onClose={() => setEditing(null)}
           onSaved={(x, words) => { d.set({ classes: x }); setEditing(null); toast(words); }} />
       )}
     </main>
   );
 }
 
-function ClassSheet({ cls, onClose, onSaved }: { cls: AdminClass | null; onClose: () => void; onSaved: (c: AdminClass[], words: string) => void }) {
+function ClassSheet({ cls, all, onClose, onSaved }: { cls: AdminClass | null; all: AdminClass[]; onClose: () => void; onSaved: (c: AdminClass[], words: string) => void }) {
+  const [moveTo, setMoveTo] = useState<string | null>(null);
   const [f, setF] = useState({
     name: cls?.name ?? "", nameHi: cls?.nameHi ?? "",
-    ageMin: cls?.ageMin?.toString() ?? "", ageMax: cls?.ageMax?.toString() ?? "", hidden: cls?.hidden ?? false,
+    ageMin: cls?.ageMin?.toString() ?? "", ageMax: cls?.ageMax?.toString() ?? "", hidden: cls?.hidden ?? false, meetsOn: cls?.meetsOn ?? [],
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -78,11 +82,25 @@ function ClassSheet({ cls, onClose, onSaved }: { cls: AdminClass | null; onClose
     if ([ageMin, ageMax].some((a) => a !== null && (!Number.isInteger(a) || a < 0 || a > 120))) { setErr("Ages are whole numbers from 0 to 120."); return; }
     if (ageMin !== null && ageMax !== null && ageMin > ageMax) { setErr("The first age should be the smaller one."); return; }
     setBusy(true); setErr(null);
-    const body = { name: f.name.trim(), nameHi: f.nameHi.trim() || null, ageMin, ageMax, ...(cls ? { hidden: f.hidden } : {}) };
+    const body = { name: f.name.trim(), nameHi: f.nameHi.trim() || null, ageMin, ageMax, meetsOn: f.meetsOn, ...(cls ? { hidden: f.hidden } : {}) };
     const r = await api<Classes>(cls ? `/api/admin/classes/${cls.id}` : "/api/admin/classes", { method: cls ? "PATCH" : "POST", body });
     setBusy(false);
     if (r.ok) onSaved(r.data.classes, cls ? "Class saved" : `Added ${body.name}`);
     else setErr(r.err.error === "duplicate_key" ? "There is already a class with this name." : sayAdmin(r.err));
+  }
+
+  if (moveTo && cls) {
+    const to = all.find((c) => c.id === moveTo)!;
+    return (
+      <Confirm title={`Move everyone in ${cls.name}?`} action={`Move to ${to.name}`} onClose={() => setMoveTo(null)}
+        body={<p>All {cls.members} {cls.members === 1 ? "member" : "members"} of {cls.name} move to {to.name}, for example when the new year starts. Their logs stay.</p>}
+        onConfirm={async () => {
+          const r = await api<{ moved: number; classes: AdminClass[] }>(`/api/admin/classes/${cls.id}/move`, { body: { to: to.id } });
+          if (!r.ok) return sayAdmin(r.err);
+          onSaved(r.data.classes, `${r.data.moved} moved to ${to.name}`);
+          return null;
+        }} />
+    );
   }
 
   if (confirmDelete && cls) {
@@ -110,6 +128,16 @@ function ClassSheet({ cls, onClose, onSaved }: { cls: AdminClass | null; onClose
             <input aria-label="To age" className="input" inputMode="numeric" value={f.ageMax} placeholder="To" maxLength={3} onChange={(e) => setF({ ...f, ageMax: e.target.value.replace(/\D/g, "") })} />
           </div>
         </fieldset>
+        <div className="field">
+          <span className="label">Class days <span className="opt">(optional, for attendance)</span></span>
+          <div className="chips">
+            {WEEKDAYS.map((w, i) => {
+              const on = f.meetsOn.includes(i);
+              return <button key={w} type="button" className="chip" aria-pressed={on}
+                onClick={() => setF({ ...f, meetsOn: on ? f.meetsOn.filter((x) => x !== i) : [...f.meetsOn, i].sort() })}>{w}</button>;
+            })}
+          </div>
+        </div>
         {cls && (
           <div className="list">
             <Switch label="Hide from new joins" sub="Members already in it keep it." checked={f.hidden} onChange={(v) => setF({ ...f, hidden: v })} />
@@ -118,6 +146,15 @@ function ClassSheet({ cls, onClose, onSaved }: { cls: AdminClass | null; onClose
         {err && <p className="msg err" role="alert">{err}</p>}
         <Button type="submit" busy={busy}>{busy ? "Saving…" : cls ? "Save class" : "Add class"}</Button>
       </form>
+      {cls && cls.members > 0 && all.length > 1 && (
+        <div className="field">
+          <label className="label" htmlFor="mv">Move everyone to another class</label>
+          <select id="mv" className="input" value="" onChange={(e) => e.target.value && setMoveTo(e.target.value)}>
+            <option value="">Pick a class…</option>
+            {all.filter((c) => c.id !== cls.id).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      )}
       {cls && (cls.members > 0 ? (
         <div className="notice">
           <b>{cls.members} {cls.members === 1 ? "member is" : "members are"} in this class</b>

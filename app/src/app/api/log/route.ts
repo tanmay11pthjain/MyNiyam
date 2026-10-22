@@ -5,6 +5,8 @@ import { setLog } from "@/server/today";
 
 const body = z.object({
   niyamId: z.uuid(),
+  // A tap saved offline names the person it was made for; anyone on the same number (row-level security checks).
+  profileId: z.uuid().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   done: z.boolean().optional(),
   value: z.number().int().min(0).max(100000).optional(),
@@ -16,12 +18,13 @@ const body = z.object({
 export const POST = route("log", async (req, ctx) => {
   const s = await readSession(req);
   if (!s) return fail(ctx, { error: "unauthorized" });
-  if (!s.profileId) return fail(ctx, { error: "not_found" });
   const limited = await limitIp(ctx, "log", 300, 60);
   if (limited) return limited;
   const input = await readJson(req, body);
   if (!input || Number.isNaN(Date.parse(input.date))) return fail(ctx, { error: "bad_request" });
-  const r = await setLog(s.accountId, s.profileId, input);
+  const profileId = input.profileId ?? s.profileId;
+  if (!profileId) return fail(ctx, { error: "not_found" });
+  const r = await setLog(s.accountId, profileId, input);
   if (r.ok) return ok(ctx, { niyam: r.niyam });
   return fail(ctx, { error: r.reason === "invalid_choice" ? "bad_request" : r.reason });
 });

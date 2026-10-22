@@ -29,6 +29,7 @@ export function NiyamCard({ n, locked, onLog }: { n: DayNiyam; locked: boolean; 
     <>
       <span className="nc-name">{n.name}</span>
       {n.nameHi && <span className="nc-hi hi" lang="hi">{n.nameHi}</span>}
+      {n.time && <span className="nc-time">{n.time}</span>}
     </>
   );
   return (
@@ -69,6 +70,7 @@ export function NiyamCard({ n, locked, onLog }: { n: DayNiyam; locked: boolean; 
             <button key={o.value} type="button" className="chip" aria-pressed={n.choice === o.value}
               onClick={() => { onLog({ choice: n.choice === o.value ? null : o.value }); setOpen(false); }}>
               {o.en}{o.hi && <span className="hi" lang="hi"> {o.hi}</span>}
+              {o.points !== undefined && <span className="opt-pts"> · {o.points} Tej</span>}
             </button>
           ))}
         </div>

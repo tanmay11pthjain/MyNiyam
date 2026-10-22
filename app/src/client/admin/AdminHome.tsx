@@ -13,7 +13,7 @@ const STEPS: { key: keyof Checklist; label: string; href: string }[] = [
 ];
 
 export function AdminHome() {
-  const { sangh } = useAdmin();
+  const { sangh, can } = useAdmin();
   const d = useLoad<Dashboard>(`/api/admin/dashboard?s=${sangh.id}`);
 
   if (d.state === "loading") return <div className="page"><Loading rows={4} /></div>;
@@ -54,7 +54,25 @@ export function AdminHome() {
         </div>
       </section>
 
-      {todo.length > 0 && (
+      {(x.alerts.attendanceDue.length > 0 || (can("view_members") && x.alerts.quiet > 0)) && (
+        <section className="section" aria-labelledby="alerts-h">
+          <h2 id="alerts-h">Needs a look</h2>
+          {x.alerts.attendanceDue.length > 0 && (
+            <Link href="/admin/attendance" className="notice alert-link">
+              <b>Attendance not taken yet today</b>
+              <span>{x.alerts.attendanceDue.join(", ")}. Tap to take it.</span>
+            </Link>
+          )}
+          {can("view_members") && x.alerts.quiet > 0 && (
+            <Link href="/admin/members?inactive=1" className="notice alert-link">
+              <b>{x.alerts.quiet} {x.alerts.quiet === 1 ? "person hasn't" : "people haven't"} logged in 3 days</b>
+              <span>{x.alerts.quietNames.join(", ")}{x.alerts.quiet > x.alerts.quietNames.length ? ` and ${x.alerts.quiet - x.alerts.quietNames.length} more` : ""}. A kind call or message helps.</span>
+            </Link>
+          )}
+        </section>
+      )}
+
+      {todo.length > 0 && can("admin") && (
         <section className="section" aria-labelledby="setup-h">
           <h2 id="setup-h">Set up your pathshala <small>{STEPS.length - todo.length} of {STEPS.length} done</small></h2>
           <div className="checklist">
@@ -75,9 +93,12 @@ export function AdminHome() {
       <section className="section" aria-labelledby="quick-h">
         <h2 id="quick-h">Quick actions</h2>
         <div className="quick">
-          <Link href="/admin/sangh#code"><Icon.qr />Share join code</Link>
-          <Link href="/admin/niyams?new=1"><Icon.plus />Add a niyam</Link>
-          <Link href="/admin/members"><Icon.people />View members</Link>
+          {can("admin") && <Link href="/admin/sangh#code"><Icon.qr />Share join code</Link>}
+          {can("niyams") && <Link href="/admin/niyams?new=1"><Icon.plus />Add a niyam</Link>}
+          {can("announcements") && <Link href="/admin/announcements"><Icon.megaphone />Announcements</Link>}
+          {can("view_members") && <Link href="/admin/members"><Icon.people />View members</Link>}
+          {can("attendance") && <Link href="/admin/attendance"><Icon.roll />Take attendance</Link>}
+          {can("view_members") && <Link href="/admin/reports"><Icon.layers />Reports</Link>}
         </div>
       </section>
 

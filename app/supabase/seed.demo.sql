@@ -31,7 +31,7 @@ begin
       (heer, 'Navkar jaap', 'नवकार जाप', 'count', 108, '[]', 'mala', 'Count on a mala.', true, 3),
       (heer, 'Swadhyay', 'स्वाध्याय', 'duration', 30, '[]', 'book', null, false, 4),
       (heer, 'Tapasya', 'तपस्या', 'choice', null,
-        '[{"value":"ekasna","en":"Ekasna","hi":"एकासना"},{"value":"biyasna","en":"Biyasna","hi":"बियासना"},{"value":"ayambil","en":"Ayambil","hi":"आयंबिल"},{"value":"upvas","en":"Upvas","hi":"उपवास"}]',
+        '[{"value":"biyasna","en":"Biyasna","hi":"बियासना","points":20},{"value":"ekasna","en":"Ekasna","hi":"एकासना","points":30},{"value":"ayambil","en":"Ayambil","hi":"आयंबिल","points":50},{"value":"upvas","en":"Upvas","hi":"उपवास","points":100}]',
         'star', 'Which tapasya did you do today?', false, 5);
   end if;
 
@@ -73,3 +73,6 @@ begin
   end loop;
   alter table public.niyam_logs enable trigger niyam_logs_window;
 end $$;
+
+-- Navkarsi cards show "By <sunrise + 48 min>".
+update public.niyams set time_hint = 'navkarsi' where name = 'Navkarsi' and time_hint is null;

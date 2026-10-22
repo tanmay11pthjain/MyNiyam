@@ -189,3 +189,20 @@ Members open **/home** after joining. Nothing new to set up in Supabase except o
    - The streak counts days in a row with at least one niyam done. Catching up yesterday keeps it.
    - The footer shows the version and the short commit it was built from (taken from the host's commit variable, or `git` locally).
 4. **Two dev servers:** a second `next dev` needs its own build folder: set `NEXT_DIST_DIR=.next-local` (the `app-local-db` launch config does this).
+
+## Part G: P2 features (October 2026)
+
+Nothing new to sign up for. Eight small database updates and three optional settings.
+
+1. **Database updates:** run `npm run db:migrate` once (locally first, then on Supabase). It applies `20261022000002_data_rights.sql` to `20261022000009_member_tools.sql`: data download and delete, announcements, sun times, volunteers, attendance, Tej, tithi dates and tapasya levels, and member tools.
+2. **Privacy contact (optional, before launch):** in Vercel, add `GRIEVANCE_NAME`, `GRIEVANCE_EMAIL` and `GRIEVANCE_PHONE`. They show on the /privacy page. The privacy notice is a draft: have a lawyer read it before a real launch.
+3. **What is new:**
+   - Members: announcements on Today, Navkarsi/Chauvihar times, offline taps, Tej points, kshama days, a brighter diya at 7/21/48/108 days, a colour calendar in History, streak and totals per niyam, pathshala attendance, Hindi first and large text (Profile, Display), download or delete my data.
+   - Admins: announcements, volunteers and teachers with permissions by class, activity log, attendance with class days and holidays, dashboard alerts, Reports (trends, by class, most regular, niyams kept, report cards to print or save as PDF, member list for Excel), Tej per niyam, tithi-date niyams, tapasya levels, copy niyams to another class, move a whole class, add a member on their behalf, edit a member's details, call or WhatsApp, hand the pathshala over (codes on both numbers), Hindi labels (Setup).
+
+## Part H: photo bucket, daily cleanup and the QR test
+
+1. **Photo bucket and daily cleanup:** `npm run db:migrate` on Supabase (the same run as Part G) applies `20261022000010_supabase_extras.sql`. It creates the private bucket `myniyam` (images only, up to 2 MB) and turns on `pg_cron` with one job, `myniyam-sweep`, every day at 3:00 am India time. You no longer need steps E3.1 or A9 by hand. Check in Supabase: **Storage** shows `myniyam` (not public), and **Integrations → Cron** shows `myniyam-sweep`. On the local Docker database both are skipped.
+2. **Keys for the bucket:** the app still needs `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (Part E3, steps 2 and 3) in `.env.local` and in Vercel. Then upload a logo on Setup → Pathshala to check a file appears under `logos/`.
+3. **QR camera test:** with the app running locally, `npm run test:qr`. A fake camera shows the poster's QR code to Chromium and the join screen must read it and find HEER01. It prints PASS or FAIL. The first time, install Playwright: `npm i -D playwright` then `npx playwright install chromium`.
+4. **On a real phone:** open the live site, open **/join** and tap **Scan QR code**, allow the camera, and point it at the printed poster (Setup → Pathshala → Poster). It should jump to the pathshala's card.

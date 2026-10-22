@@ -77,6 +77,27 @@ export async function getFile(key: string): Promise<{ bytes: Uint8Array; type: I
   }
 }
 
+/** Deletes stored files. Best effort: a file that is already gone, or a storage hiccup, never blocks the caller. */
+export async function deleteFiles(keys: string[]): Promise<void> {
+  const ok = keys.filter(isStorageKey);
+  if (!ok.length) return;
+  const c = config();
+  try {
+    if (c.supabaseStorage) {
+      await fetch(`${c.SUPABASE_URL!.replace(/\/$/, "")}/storage/v1/object/${encodeURIComponent(c.STORAGE_BUCKET)}`, {
+        method: "DELETE",
+        headers: { apikey: c.SUPABASE_SERVICE_ROLE_KEY!, authorization: `Bearer ${c.SUPABASE_SERVICE_ROLE_KEY}`, "content-type": "application/json" },
+        body: JSON.stringify({ prefixes: ok }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      return;
+    }
+    await Promise.all(ok.map((k) => fs.rm(localPath(k), { force: true })));
+  } catch {
+    // The rows are gone, so nothing points at these files any more.
+  }
+}
+
 /** Public URL path the app uses for a stored file. */
 export const fileUrl = (key: string) => `/api/files/${key}`;
 /** The storage key back from a URL made by fileUrl, or null. */

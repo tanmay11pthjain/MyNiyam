@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api } from "../api";
 import { Button, SanghLogo } from "../ui";
 import { useAdmin } from "./AdminApp";
 import { Icon } from "./icons";
 import { Confirm, LoadError, Loading, Sheet, Switch, sayAdmin, shrinkImage, upload, useLoad, useToast } from "./kit";
+import { CITIES, NAVKARSI_AFTER_SUNRISE_MIN, clock, sunTimes } from "@/lib/sun";
 import type { SanghProfile } from "@/lib/admin-types";
 import { formatPhone } from "@/lib/phone";
 
@@ -31,10 +33,12 @@ export function SanghPage() {
   if (p.state === "error") return <div className="page"><LoadError message={p.message} retry={p.retry} /></div>;
   return (
     <main className="page">
-      <div className="page-title"><h1>Pathshala</h1><p>Your join code, your details and who can join.</p></div>
+      <div className="page-title"><h1 data-hi="पाठशाला">Pathshala</h1><p>Your join code, your details and who can join.</p></div>
       <CodeSection profile={p.data} onChange={p.set} />
       <JoinSettings profile={p.data} onChange={p.set} />
+      <SunPlace profile={p.data} onChange={p.set} />
       <Details profile={p.data} onSaved={(x) => { p.set(x); refresh(); }} />
+      <HandOver name={p.data.name} />
     </main>
   );
 }
@@ -147,6 +151,68 @@ function JoinSettings({ profile, onChange }: { profile: SanghProfile; onChange: 
   );
 }
 
+/** Where sunrise and sunset are worked out for, so Navkarsi and Chauvihar cards show the right time. */
+function SunPlace({ profile, onChange }: { profile: SanghProfile; onChange: (p: SanghProfile) => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const known = CITIES.find((c) => c.name.toLowerCase() === profile.city.trim().toLowerCase());
+  const place = profile.location ?? (known ? { lat: known.lat, lon: known.lon } : null);
+  const [today] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
+  const sun = place ? sunTimes(today, place.lat, place.lon) : null;
+  const named = profile.location ? CITIES.find((c) => Math.abs(c.lat - profile.location!.lat) < 1e-3 && Math.abs(c.lon - profile.location!.lon) < 1e-3)?.name : null;
+
+  async function save(location: { lat: number; lon: number } | null, msg: string) {
+    setBusy(true);
+    const r = await api<SanghProfile>("/api/admin/sangh", { method: "PATCH", body: { location } });
+    setBusy(false);
+    if (r.ok) { onChange(r.data); setOpen(false); toast(msg); } else toast(sayAdmin(r.err));
+  }
+  function here() {
+    if (!navigator.geolocation) { toast("This phone can't share its location. Pick a city instead."); return; }
+    setBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (g) => {
+        const lat = Math.round(g.coords.latitude * 1e4) / 1e4, lon = Math.round(g.coords.longitude * 1e4) / 1e4;
+        if (lat < 6 || lat > 38 || lon < 68 || lon > 98) { setBusy(false); toast("That place is outside India. Pick a city instead."); return; }
+        void save({ lat, lon }, "Place saved from this phone");
+      },
+      () => { setBusy(false); toast("Location wasn't shared. Pick a city instead."); },
+      { enableHighAccuracy: false, timeout: 15000 },
+    );
+  }
+
+  return (
+    <section className="section" aria-labelledby="sun-h">
+      <h2 id="sun-h">Sunrise and sunset</h2>
+      <div className="card stack">
+        {place && sun ? (
+          <>
+            <p>Today at {named ?? (profile.location ? "your pathshala's place" : profile.city)}: sunrise <b>{clock(sun.sunrise)}</b>, sunset <b>{clock(sun.sunset)}</b>.</p>
+            <p className="hint">Navkarsi cards show &ldquo;By {clock(sun.sunrise + NAVKARSI_AFTER_SUNRISE_MIN)}&rdquo; and Chauvihar cards &ldquo;Before {clock(sun.sunset)}&rdquo;, worked out fresh each day.</p>
+          </>
+        ) : (
+          <p className="hint">Choose where your pathshala is, so Navkarsi and Chauvihar cards show today&apos;s times.</p>
+        )}
+        <Button kind="secondary" onClick={() => setOpen(true)}>{place ? "Change place" : "Choose place"}</Button>
+      </div>
+      {open && (
+        <Sheet title="Where is your pathshala?" onClose={() => setOpen(false)}>
+          <Button busy={busy} onClick={here}>Use this phone&apos;s location</Button>
+          <p className="label">Or pick a city</p>
+          <div className="chips">
+            {CITIES.map((c) => (
+              <button key={c.name} type="button" className="chip" aria-pressed={named === c.name} disabled={busy}
+                onClick={() => void save({ lat: c.lat, lon: c.lon }, `Times now for ${c.name}`)}>{c.name}</button>
+            ))}
+          </div>
+          {profile.location && <Button kind="quiet" onClick={() => void save(null, "Place cleared")}>Clear the place</Button>}
+        </Sheet>
+      )}
+    </section>
+  );
+}
+
 function Details({ profile, onSaved }: { profile: SanghProfile; onSaved: (p: SanghProfile) => void }) {
   const toast = useToast();
   const [f, setF] = useState({
@@ -208,6 +274,62 @@ function Details({ profile, onSaved }: { profile: SanghProfile; onSaved: (p: San
         {err && <p className="msg err" role="alert">{err}</p>}
         <Button busy={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save details"}</Button>
       </div>
+    </section>
+  );
+}
+
+/** Hand the pathshala to another number. Codes go to both numbers, and both are needed. */
+function HandOver({ name }: { name: string }) {
+  const { refresh } = useAdmin();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ phone: "", myCode: "", theirCode: "" });
+  const [sent, setSent] = useState<{ simulated: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const up = (x: Partial<typeof f>) => { setF((y) => ({ ...y, ...x })); setErr(null); };
+
+  async function go() {
+    if (f.phone.replace(/\D/g, "").length < 10) { setErr("Enter the new admin's 10-digit number."); return; }
+    if (sent && (f.myCode.length < 4 || f.theirCode.length < 4)) { setErr("Type both codes."); return; }
+    setBusy(true);
+    const r = await api<{ simulated: boolean }>("/api/admin/sangh/transfer", { body: sent ? { step: "confirm", ...f } : { step: "send", phone: f.phone } });
+    setBusy(false);
+    if (!r.ok) { setErr(sayAdmin(r.err)); return; }
+    if (!sent) { setSent(r.data); return; }
+    // This number no longer runs the pathshala: reload the list of pathshalas it can open.
+    refresh();
+    router.push("/admin");
+  }
+
+  return (
+    <section className="section" aria-labelledby="ho-h">
+      <h2 id="ho-h">Hand over the pathshala</h2>
+      <p className="hint">Give {name} to a new admin, for example when you step down. You stop being its admin. Other admins stay.</p>
+      <Button kind="quiet" onClick={() => setOpen(true)}>Hand over to another number</Button>
+      {open && (
+        <Sheet title="Hand over the pathshala" danger onClose={() => { setOpen(false); setSent(null); }}>
+          <form className="stack" noValidate onSubmit={(e) => { e.preventDefault(); void go(); }}>
+            <div className="field"><label className="label" htmlFor="hp">New admin&apos;s mobile number</label>
+              <div className="phone-row"><span className="cc" aria-hidden="true">+91</span>
+                <input id="hp" type="tel" inputMode="numeric" maxLength={14} value={f.phone} disabled={!!sent} onChange={(e) => up({ phone: e.target.value })} /></div></div>
+            {sent && (
+              <>
+                <p>We sent a code to your number and one to theirs. Both are needed.</p>
+                {sent.simulated && <p className="hint">Test mode: both codes are 1234.</p>}
+                <div className="grid-2">
+                  <div className="field"><label className="label" htmlFor="c1">Your code</label>
+                    <input id="c1" className="input" inputMode="numeric" maxLength={6} value={f.myCode} onChange={(e) => up({ myCode: e.target.value.replace(/\D/g, "") })} /></div>
+                  <div className="field"><label className="label" htmlFor="c2">Their code</label>
+                    <input id="c2" className="input" inputMode="numeric" maxLength={6} value={f.theirCode} onChange={(e) => up({ theirCode: e.target.value.replace(/\D/g, "") })} /></div>
+                </div>
+              </>
+            )}
+            {err && <p className="msg err" role="alert">{err}</p>}
+            <Button type="submit" busy={busy}>{busy ? "Please wait…" : sent ? "Hand over now" : "Send codes"}</Button>
+          </form>
+        </Sheet>
+      )}
     </section>
   );
 }

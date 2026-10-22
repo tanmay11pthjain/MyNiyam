@@ -8,12 +8,12 @@ import type { AdminClass } from "@/lib/admin-types";
 // Classes of one sangh. A class with members can't be deleted (classes_no_delete_with_members);
 // it can be hidden from new joins instead, and its members keep it.
 
-type Row = { id: string; name: string; name_hi: string | null; hidden: boolean; age_min: number | null; age_max: number | null; members: number };
-const toClass = (r: Row): AdminClass => ({ id: r.id, name: r.name, nameHi: r.name_hi, hidden: r.hidden, ageMin: r.age_min, ageMax: r.age_max, members: r.members });
+type Row = { id: string; name: string; name_hi: string | null; hidden: boolean; age_min: number | null; age_max: number | null; meets_on: number[]; members: number };
+const toClass = (r: Row): AdminClass => ({ id: r.id, name: r.name, nameHi: r.name_hi, hidden: r.hidden, ageMin: r.age_min, ageMax: r.age_max, meetsOn: r.meets_on, members: r.members });
 
 export async function listClasses(phone: string, sanghId: string): Promise<AdminClass[]> {
   const rows = await asAdmin(phone, (tx) => tx<Row[]>`
-    select c.id, c.name, c.name_hi, c.hidden, c.age_min, c.age_max,
+    select c.id, c.name, c.name_hi, c.hidden, c.age_min, c.age_max, c.meets_on,
       (select count(*)::int from public.profiles p join public.accounts a on a.id = p.account_id
        where p.class_id = c.id and p.removed_at is null and a.removed_at is null) as members
     from public.classes c where c.sangh_id = ${sanghId}
@@ -21,14 +21,14 @@ export async function listClasses(phone: string, sanghId: string): Promise<Admin
   return rows.map(toClass);
 }
 
-export type ClassInput = { name: string; nameHi: string | null; ageMin: number | null; ageMax: number | null; hidden?: boolean };
+export type ClassInput = { name: string; nameHi: string | null; ageMin: number | null; ageMax: number | null; meetsOn?: number[]; hidden?: boolean };
 export type ClassResult = { ok: true; classes: AdminClass[] } | { ok: false; reason: "duplicate_key" | "class_has_members" | "not_found" };
 
 export async function createClass(phone: string, sanghId: string, input: ClassInput): Promise<ClassResult> {
   try {
     await asAdmin(phone, (tx) => tx`
-      insert into public.classes (sangh_id, name, name_hi, age_min, age_max, sort_order)
-      values (${sanghId}, ${input.name}, ${input.nameHi}, ${input.ageMin}, ${input.ageMax},
+      insert into public.classes (sangh_id, name, name_hi, age_min, age_max, meets_on, sort_order)
+      values (${sanghId}, ${input.name}, ${input.nameHi}, ${input.ageMin}, ${input.ageMax}, ${tx.array(input.meetsOn ?? [])}::smallint[],
               (select coalesce(max(sort_order), 0) + 1 from public.classes where sangh_id = ${sanghId}))`);
   } catch (e) {
     if (pgCode(e) === "23505") return { ok: false, reason: "duplicate_key" };
@@ -44,6 +44,7 @@ export async function updateClass(phone: string, sanghId: string, id: string, in
   if (input.ageMin !== undefined) row.age_min = input.ageMin;
   if (input.ageMax !== undefined) row.age_max = input.ageMax;
   if (input.hidden !== undefined) row.hidden = input.hidden;
+  if (input.meetsOn !== undefined) row.meets_on = [...new Set(input.meetsOn)].sort();
   try {
     const r = await asAdmin(phone, (tx) => (Object.keys(row).length
       ? tx`update public.classes set ${tx(row)} where id = ${id} and sangh_id = ${sanghId} returning id`
@@ -86,6 +87,8 @@ export const classBody = z.object({
   nameHi: z.string().trim().max(80).nullable().default(null).transform((s) => s || null),
   ageMin: z.number().int().min(0).max(120).nullable().default(null),
   ageMax: z.number().int().min(0).max(120).nullable().default(null),
+  /** Days the class meets, 0 = Sunday ... 6 = Saturday. */
+  meetsOn: z.array(z.number().int().min(0).max(6)).max(7).default([]),
 }).refine((c) => c.ageMin === null || c.ageMax === null || c.ageMin <= c.ageMax);
 
 export function classReply(ctx: SanghCtx, r: ClassResult) {

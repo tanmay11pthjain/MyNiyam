@@ -1,7 +1,9 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, say } from "./api";
+import { Announcements } from "./Announcements";
 import { applyPatch, NiyamCard, type LogPatch } from "./NiyamCard";
+import { enqueue, flushQueue, onQueueChange, queued, readCopy, saveCopy } from "./offline";
 import { Button } from "./ui";
 import type { DayNiyam, DayView, TodayResponse } from "@/lib/today-types";
 
@@ -11,25 +13,69 @@ export const dayLabel = (iso: string) =>
   new Date(`${iso}T00:00:00`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 
 const anyDone = (d: DayView) => d.niyams.some((n) => n.done);
+const indianToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+/** Today as the server last said, with this phone's not-yet-sent taps laid on top. */
+function withQueued(t: TodayResponse, profileId: string): TodayResponse {
+  const mine = queued().filter((q) => q.profileId === profileId && q.date === t.today.date);
+  if (!mine.length) return t;
+  return { ...t, today: { ...t.today, niyams: t.today.niyams.map((n) => {
+    const q = mine.find((x) => x.niyamId === n.id);
+    return q ? applyPatch(n, q.patch) : n;
+  }) } };
+}
+
+/** The server's Today, or offline the copy saved on this phone (only if it is still the same day). */
+async function fetchToday(profileId: string): Promise<{ data: TodayResponse; offline: boolean } | { err: Words }> {
+  const r = await api<TodayResponse>("/api/today");
+  if (r.ok) { saveCopy(`today.${profileId}`, r.data); return { data: withQueued(r.data, profileId), offline: false }; }
+  if (r.err.error === "offline") {
+    const copy = readCopy<TodayResponse>(`today.${profileId}`);
+    if (copy && copy.today.date === indianToday()) return { data: withQueued(copy, profileId), offline: true };
+  }
+  return { err: say(r.err) };
+}
+
+const yesterdayOf = (d: string) => new Date(Date.parse(`${d}T00:00:00Z`) - 864e5).toISOString().slice(0, 10);
 
 /** The home tab: today's niyams, a progress bar and the streak. Yesterday is changed from History. */
-export function TodayTab() {
+export function TodayTab({ profileId }: { profileId: string }) {
   const [data, setData] = useState<TodayResponse | null>(null);
   const [err, setErr] = useState<Words | null>(null);
   const [toast, setToast] = useState<Words | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [waiting, setWaiting] = useState(() => queued().length);
   const dataRef = useRef<TodayResponse | null>(null);
   useEffect(() => { dataRef.current = data; }, [data]);
   const pending = useRef(new Map<string, { n: number; chain: Promise<unknown> }>());
 
   const load = useCallback(async () => {
-    const r = await api<TodayResponse>("/api/today");
-    if (r.ok) { setData(r.data); setErr(null); } else setErr(say(r.err));
-  }, []);
+    const r = await fetchToday(profileId);
+    if ("err" in r) setErr(r.err); else { setData(r.data); setOffline(r.offline); setErr(null); }
+  }, [profileId]);
+
+  // Sends what was saved offline, then shows the server's numbers (the streak moves only on the server).
+  const sync = useCallback(async () => {
+    if (!queued().length) return;
+    const r = await flushQueue();
+    if (r.offline) return;
+    setOffline(false);
+    if (r.refused) setToast({ en: "Some niyams logged offline couldn't be saved: that day had closed.", hi: "ऑफ़लाइन लिखे कुछ नियम सेव नहीं हुए: वह दिन बंद हो चुका था।" });
+    void load();
+  }, [load]);
+
   useEffect(() => {
     let live = true;
-    void api<TodayResponse>("/api/today").then((r) => { if (!live) return; if (r.ok) setData(r.data); else setErr(say(r.err)); });
-    return () => { live = false; };
-  }, []);
+    void fetchToday(profileId).then((r) => {
+      if (!live) return;
+      if ("err" in r) setErr(r.err); else { setData(r.data); setOffline(r.offline); }
+    });
+    const first = window.setTimeout(() => void sync(), 0);
+    const off = onQueueChange(() => setWaiting(queued().length));
+    const back = () => { void sync(); };
+    window.addEventListener("online", back);
+    return () => { live = false; window.clearTimeout(first); off(); window.removeEventListener("online", back); };
+  }, [profileId, sync]);
 
   if (err && !data) {
     return <div className="banner err"><span>{err.en}</span><Button kind="secondary" onClick={() => { setErr(null); void load(); }}>Try again</Button></div>;
@@ -50,8 +96,21 @@ export function TodayTab() {
     slot.n += 1;
     pending.current.set(n.id, slot);
     slot.chain = slot.chain.then(async () => {
-      const r = await api<{ niyam: DayNiyam }>("/api/log", { body: { niyamId: n.id, date: day.date, ...patch } });
+      // Taps waiting from an offline spell go first, so they land in the order they were made.
+      if (queued().length) {
+        enqueue({ profileId, niyamId: n.id, date: day.date, patch });
+        slot.n -= 1;
+        void sync();
+        return;
+      }
+      const r = await api<{ niyam: DayNiyam }>("/api/log", { body: { profileId, niyamId: n.id, date: day.date, ...patch } });
       slot.n -= 1;
+      if (!r.ok && r.err.error === "offline") {
+        // Keep it on screen and on this phone; it is sent when the connection is back.
+        enqueue({ profileId, niyamId: n.id, date: day.date, patch });
+        setOffline(true);
+        return;
+      }
       if (!r.ok) { setToast(say(r.err)); if (slot.n === 0) void load(); return; }
       if (slot.n === 0) {
         setNiyam(r.data.niyam);
@@ -78,7 +137,7 @@ export function TodayTab() {
             <p className="pr-count"><b>{doneCount}</b> of {counted.length} done</p>
           </div>
           <div className="streak" title="Days in a row with at least one niyam done">
-            <svg viewBox="0 0 24 24" aria-hidden="true" className={data.streak > 0 ? "lit" : ""}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className={`${data.streak > 0 ? "lit" : ""} diya-${data.progress?.diya ?? 0}`}>
               <path className="flame" d="M12 3c2.2 2.6 3 4.4 3 6.2A3 3 0 0 1 12 12a3 3 0 0 1-3-2.8C9 7.4 9.8 5.6 12 3z" />
               <path className="base" d="M3 14h18c-.6 3.6-4.4 6-9 6s-8.4-2.4-9-6z" />
             </svg>
@@ -88,8 +147,21 @@ export function TodayTab() {
         <div className="pbar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Today's progress"><i style={{ width: `${pct}%` }} /></div>
         <p className="hint pr-line" role="status">
           {allDone ? "All done. Anumodana!" : data.streak > 0 ? "Keep the lamp lit." : "Log one niyam to start your streak."}
+          {data.progress && data.progress.tejToday > 0 && <> · +{data.progress.tejToday} Tej today</>}
         </p>
+        {data.progress?.kshamaUsedOn.includes(yesterdayOf(day.date)) && (
+          <p className="kshama-note">A kshama day kept your streak safe yesterday.</p>
+        )}
       </section>
+
+      {(offline || waiting > 0) && (
+        <div className="banner warn" role="status">
+          <b>{offline ? "You're offline" : "Sending…"}</b>
+          <span>{waiting > 0 ? `${waiting} ${waiting === 1 ? "niyam is" : "niyams are"} saved on this phone and will be sent when you're back online.` : "Your taps are saved on this phone and sent when you're back online."}</span>
+        </div>
+      )}
+
+      <Announcements items={data.announcements} />
 
       {day.niyams.length === 0 ? (
         <div className="card">

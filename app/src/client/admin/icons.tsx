@@ -13,6 +13,7 @@ export const Icon = {
   qr: () => <S><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3M21 14v.01M14 21h3M21 18v3h-1" /></S>,
   plus: () => <S><path d="M12 5v14M5 12h14" /></S>,
   check: () => <S><path d="M5 12.5l4.5 4.5L19 7.5" /></S>,
+  roll: () => <S><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V3h6v1" /><path d="M8.5 13l2.5 2.5 4.5-5" /></S>,
   copy: () => <S><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h8" /></S>,
   share: () => <S><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" /><path d="M12 3v12M7 8l5-5 5 5" /></S>,
   download: () => <S><path d="M12 3v12M7 10l5 5 5-5" /><path d="M4 19h16" /></S>,
@@ -23,6 +24,7 @@ export const Icon = {
   refresh: () => <S><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" /></S>,
   form: () => <S><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></S>,
   layers: () => <S><path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" /></S>,
+  megaphone: () => <S><path d="M3 10v4a1 1 0 0 0 1 1h3l6 4V5L7 9H4a1 1 0 0 0-1 1z" /><path d="M17 8.5a5 5 0 0 1 0 7" /></S>,
   shield: () => <S><path d="M12 3l8 3v6c0 4.6-3.4 8.2-8 9-4.6-.8-8-4.4-8-9V6l8-3z" /><path d="M9 12l2 2 4-4" /></S>,
 };
 
