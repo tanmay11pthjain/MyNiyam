@@ -24,7 +24,7 @@ export function useAdmin(): AdminState {
 export const canFor = (sangh: AdminSangh | null): Can => (p) => !!sangh && (sangh.role === "admin" || (p !== "admin" && sangh.perms.includes(p)));
 
 const TABS: { href: string; label: string; hi?: string; icon: () => ReactNode; match: (p: string) => boolean; show: (can: Can) => boolean }[] = [
-  { href: "/admin", label: "Home", hi: "मुख्य", icon: Icon.home, match: (p: string) => p === "/admin" || p.startsWith("/admin/announcements") || p.startsWith("/admin/reports"), show: () => true },
+  { href: "/admin", label: "Home", hi: "मुख्य", icon: Icon.home, match: (p: string) => p === "/admin" || p.startsWith("/admin/announcements") || p.startsWith("/admin/reports") || p.startsWith("/admin/goals"), show: () => true },
   { href: "/admin/members", label: "Members", hi: "सदस्य", icon: Icon.people, match: (p: string) => p.startsWith("/admin/members"), show: (can) => can("view_members") },
   { href: "/admin/attendance", label: "Attendance", hi: "हाज़िरी", icon: Icon.roll, match: (p: string) => p.startsWith("/admin/attendance"), show: (can) => can("attendance") },
   { href: "/admin/niyams", label: "Niyams", hi: "नियम", icon: Icon.niyam, match: (p: string) => p.startsWith("/admin/niyams"), show: (can) => can("niyams") },

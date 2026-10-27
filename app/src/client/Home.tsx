@@ -10,11 +10,14 @@ import { Switch } from "./admin/kit";
 import { applyPrefs, readPrefs, savePrefs } from "./prefs";
 import { clearOfflineData, readCopy, registerServiceWorker, saveCopy } from "./offline";
 import { TodayTab } from "./TodayTab";
+import { SanghTab } from "./SanghTab";
+import { Reminders } from "./Reminders";
+import { watchErrors } from "./errors";
 import { Button, Frame, goToLanding } from "./ui";
 import type { Me, Profile } from "@/lib/api-types";
-import type { Progress } from "@/lib/today-types";
+import type { BadgesResponse, Progress } from "@/lib/today-types";
 
-type Tab = "today" | "history" | "profile";
+type Tab = "today" | "sangh" | "history" | "profile";
 
 const Calendar = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -22,8 +25,15 @@ const Calendar = () => (
   </svg>
 );
 
+const Lotus = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 4c2 2.2 3 4.6 3 7s-1 4.6-3 6c-2-1.4-3-3.6-3-6s1-4.8 3-7z" /><path d="M9.2 9.5C7 8.6 5 8.6 3 9.3c.4 3.9 3.3 7.2 9 7.7" /><path d="M14.8 9.5c2.2-.9 4.2-.9 6.2-.2-.4 3.9-3.3 7.2-9 7.7" /><path d="M5 20h14" />
+  </svg>
+);
+
 const TABS: { id: Tab; label: string; hi: string; icon: () => React.ReactNode }[] = [
   { id: "today", label: "Today", hi: "आज", icon: Icon.niyam },
+  { id: "sangh", label: "Sangh", hi: "संघ", icon: Lotus },
   { id: "history", label: "History", hi: "इतिहास", icon: Calendar },
   { id: "profile", label: "Profile", hi: "प्रोफ़ाइल", icon: Icon.people },
 ];
@@ -38,6 +48,7 @@ export function Home() {
   useEffect(() => {
     registerServiceWorker();
     applyPrefs();
+    watchErrors();
     void api<Me>("/api/me").then((r) => {
       if (r.ok) {
         const p = r.data.profiles.find((x) => x.id === r.data.activeProfileId);
@@ -67,7 +78,8 @@ export function Home() {
           <p className="sangh-name">{me.sangh.name}</p>
           {cls && <p className="class-name">{cls.name}</p>}
         </div>
-        {tab === "today" && <TodayTab profileId={p.id} />}
+        {tab === "today" && <TodayTab profileId={p.id} sangh={{ name: me.sangh.name, code: me.sangh.joinCode }} />}
+        {tab === "sangh" && <SanghTab sangh={{ name: me.sangh.name, code: me.sangh.joinCode }} />}
         {tab === "history" && <HistoryTab />}
         {tab === "profile" && <ProfileTab p={p} me={me} cls={cls?.name} />}
         <footer className="app-foot">
@@ -124,6 +136,42 @@ function ProgressCard() {
   );
 }
 
+/** Badges earned, and who may see this person's milestones and name. */
+function BadgesCard() {
+  const [d, setD] = useState<BadgesResponse | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { void api<BadgesResponse>("/api/badges").then((r) => { if (r.ok) setD(r.data); }); }, []);
+  if (!d) return null;
+  async function set(patch: Partial<BadgesResponse["prefs"]>) {
+    const before = d!;
+    setD({ ...before, prefs: { ...before.prefs, ...patch } });
+    setBusy(true);
+    const r = await api("/api/me/prefs", { method: "PATCH", body: patch });
+    setBusy(false);
+    if (!r.ok) setD(before);
+  }
+  return (
+    <section className="card stack" aria-labelledby="badges-h">
+      <h2 id="badges-h" className="sec-h">Badges <span className="hi" lang="hi">बैज</span></h2>
+      {d.badges.length === 0 ? (
+        <p className="hint">Keep niyams 7 days in a row for your first badge.</p>
+      ) : (
+        <ul className="badges">
+          {d.badges.map((b) => (
+            <li key={b.id}><span className="badge-mark" aria-hidden="true">{b.mark}</span><span>{b.en}</span></li>
+          ))}
+        </ul>
+      )}
+      <div className="list">
+        <Switch label="Show my milestones to my pathshala" sub="Others in your pathshala see “Riya S. reached a 21-day streak” and can send Anumodana."
+          checked={d.prefs.shareMilestones} busy={busy} onChange={(v) => void set({ shareMilestones: v })} />
+        <Switch label="Only my initials on the class board" sub="If your class has a weekly board, it shows “R. S.” instead of your name."
+          checked={d.prefs.boardInitials} busy={busy} onChange={(v) => void set({ boardInitials: v })} />
+      </div>
+    </section>
+  );
+}
+
 function ProfileTab({ p, me, cls }: { p: Profile; me: Me; cls?: string }) {
   const router = useRouter();
   const [leaving, setLeaving] = useState(false);
@@ -136,6 +184,8 @@ function ProfileTab({ p, me, cls }: { p: Profile; me: Me; cls?: string }) {
         <p className="hint">{me.sangh.name}, {me.sangh.city} · {me.phone}</p>
       </section>
       <ProgressCard />
+      <BadgesCard />
+      <Reminders />
       <DisplaySettings />
       <div className="stack">
         <Link className="btn btn-secondary" href={`/who?edit=${p.id}`}>Edit my details</Link>

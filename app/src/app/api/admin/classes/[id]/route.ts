@@ -3,7 +3,7 @@ import { fail, readJson } from "@/server/http";
 import { sanghRouteFor } from "@/server/admin/http";
 import { classReply, deleteClass, updateClass } from "@/server/admin/classes";
 
-// PATCH  /api/admin/classes/:id { name?, nameHi?, ageMin?, ageMax?, meetsOn?, hidden? } → { classes }
+// PATCH  /api/admin/classes/:id { name?, nameHi?, ageMin?, ageMax?, meetsOn?, hidden?, leaderboard? } → { classes }
 // DELETE /api/admin/classes/:id → { classes } | 409 class_has_members
 
 const patch = z.object({
@@ -13,6 +13,7 @@ const patch = z.object({
   ageMax: z.number().int().min(0).max(120).nullable().optional(),
   meetsOn: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   hidden: z.boolean().optional(),
+  leaderboard: z.boolean().optional(),
 });
 
 export const PATCH = sanghRouteFor("setup")<{ id: string }>("admin.classes.update", async (req, ctx, { id }) => {

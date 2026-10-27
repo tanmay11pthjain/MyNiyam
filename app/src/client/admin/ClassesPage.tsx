@@ -69,7 +69,7 @@ function ClassSheet({ cls, all, onClose, onSaved }: { cls: AdminClass | null; al
   const [moveTo, setMoveTo] = useState<string | null>(null);
   const [f, setF] = useState({
     name: cls?.name ?? "", nameHi: cls?.nameHi ?? "",
-    ageMin: cls?.ageMin?.toString() ?? "", ageMax: cls?.ageMax?.toString() ?? "", hidden: cls?.hidden ?? false, meetsOn: cls?.meetsOn ?? [],
+    ageMin: cls?.ageMin?.toString() ?? "", ageMax: cls?.ageMax?.toString() ?? "", hidden: cls?.hidden ?? false, meetsOn: cls?.meetsOn ?? [], leaderboard: cls?.leaderboard ?? false,
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -82,7 +82,7 @@ function ClassSheet({ cls, all, onClose, onSaved }: { cls: AdminClass | null; al
     if ([ageMin, ageMax].some((a) => a !== null && (!Number.isInteger(a) || a < 0 || a > 120))) { setErr("Ages are whole numbers from 0 to 120."); return; }
     if (ageMin !== null && ageMax !== null && ageMin > ageMax) { setErr("The first age should be the smaller one."); return; }
     setBusy(true); setErr(null);
-    const body = { name: f.name.trim(), nameHi: f.nameHi.trim() || null, ageMin, ageMax, meetsOn: f.meetsOn, ...(cls ? { hidden: f.hidden } : {}) };
+    const body = { name: f.name.trim(), nameHi: f.nameHi.trim() || null, ageMin, ageMax, meetsOn: f.meetsOn, ...(cls ? { hidden: f.hidden, leaderboard: f.leaderboard } : {}) };
     const r = await api<Classes>(cls ? `/api/admin/classes/${cls.id}` : "/api/admin/classes", { method: cls ? "PATCH" : "POST", body });
     setBusy(false);
     if (r.ok) onSaved(r.data.classes, cls ? "Class saved" : `Added ${body.name}`);
@@ -141,6 +141,8 @@ function ClassSheet({ cls, all, onClose, onSaved }: { cls: AdminClass | null; al
         {cls && (
           <div className="list">
             <Switch label="Hide from new joins" sub="Members already in it keep it." checked={f.hidden} onChange={(v) => setF({ ...f, hidden: v })} />
+            <Switch label="Weekly class board" sub="Members of this class see who kept niyams on the most days this week (top 10). It counts days, never how much tapasya. Off by default."
+              checked={f.leaderboard} onChange={(v) => setF({ ...f, leaderboard: v })} />
           </div>
         )}
         {err && <p className="msg err" role="alert">{err}</p>}

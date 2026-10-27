@@ -206,3 +206,39 @@ Nothing new to sign up for. Eight small database updates and three optional sett
 2. **Keys for the bucket:** the app still needs `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (Part E3, steps 2 and 3) in `.env.local` and in Vercel. Then upload a logo on Setup → Pathshala to check a file appears under `logos/`.
 3. **QR camera test:** with the app running locally, `npm run test:qr`. A fake camera shows the poster's QR code to Chromium and the join screen must read it and find HEER01. It prints PASS or FAIL. The first time, install Playwright: `npm i -D playwright` then `npx playwright install chromium`.
 4. **On a real phone:** open the live site, open **/join** and tap **Scan QR code**, allow the camera, and point it at the printed poster (Setup → Pathshala → Poster). It should jump to the pathshala's card.
+
+## Part I: P3 go-live (October 2026)
+
+P3 adds the Sangh tab (Anumodana feed, goals, class board), badges, personal vows, streak repair,
+reminders, share cards and the install guide. One new migration: `20261026000001_p3.sql`.
+
+Do these one at a time. Each step says how to check it worked.
+
+1. **Database.** In PowerShell (in `app`): `npm install`, then run `npm run db:migrate` with
+   `DATABASE_URL` set to local Docker first, then to Supabase. Check: it prints `applied 20261026000001_p3.sql`.
+2. **Real SMS codes (MSG91).** When your DLT template is approved, follow Part C, then in Vercel set
+   `OTP_DELIVERY=msg91` and remove `ALLOW_OTP_SIMULATION_IN_PRODUCTION`. Keep `DEMO_PHONES`: those
+   numbers still use 1234; every other number gets a real SMS. Check: `/healthz` shows `"otp":"sms"`.
+   Until then leave the OTP settings as they are; the app works as today.
+3. **Reminder keys.** In PowerShell: `npx web-push generate-vapid-keys`. In Vercel add
+   `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (mailto: your email) and `CRON_SECRET`
+   (any 32 random letters and numbers). Redeploy. Check: `/healthz` shows `"reminders":"on"`.
+4. **Reminder job (every 15 minutes).** In Supabase, SQL Editor, run (put your CRON_SECRET in):
+   ```sql
+   create extension if not exists pg_net;
+   create extension if not exists pg_cron;
+   select cron.schedule('myniyam-remind', '*/15 * * * *', $$
+     select net.http_post(
+       url := 'https://myniyam.vercel.app/api/cron/remind',
+       headers := jsonb_build_object('Authorization', 'Bearer PUT-YOUR-CRON_SECRET-HERE'))
+   $$);
+   ```
+   Check after 15 minutes: `select status_code from net._http_response order by id desc limit 1;` shows 200.
+5. **Error alerts (optional).** Make a free project at sentry.io (platform: Next.js), copy its DSN
+   into Vercel as `SENTRY_DSN`, redeploy. Check: `/healthz` shows `"errorAlerts":"on"`.
+6. **Real-phone checks.** On an Android phone: open the site, install it from the card on Today,
+   turn on reminders in Profile, scan the pathshala QR from another phone. On an iPhone: add to
+   Home Screen first, then turn on reminders.
+
+Admins: goals and challenges are under Home > Quick actions > "Goals and challenges". The weekly
+class board is off for every class; turn it on per class in Setup > Classes.

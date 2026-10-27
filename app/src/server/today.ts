@@ -1,7 +1,8 @@
 import "server-only";
 import { asAccount, pgHint, type Tx } from "./db";
-import { diyaLevel, nextDiya, niyamRuns, walkStreak } from "@/lib/progress";
-import type { AnnouncementCard, AttendanceStatus, DayNiyam, DayView, HistoryDay, HistoryDayResponse, HistoryResponse, LogInput, NiyamStat, Progress, TodayResponse } from "@/lib/today-types";
+import { diyaLevel, nextDiya, niyamRuns, repairOffer, walkStreak } from "@/lib/progress";
+import { badgeInfo, earnedBadges } from "@/lib/badges";
+import type { AnnouncementCard, AttendanceStatus, DayNiyam, DayView, EarnedBadge, HistoryDay, HistoryDayResponse, HistoryResponse, LogInput, NiyamStat, Progress, TodayResponse, Vow } from "@/lib/today-types";
 import type { NiyamOption } from "@/lib/admin-types";
 import { CITIES, NAVKARSI_AFTER_SUNRISE_MIN, clock, sunTimes } from "@/lib/sun";
 
@@ -18,9 +19,9 @@ const onList = (tx: Tx, date: string, classId: string | null) => tx`
     or (n.schedule = 'range' and ${date}::date between n.start_date and n.end_date)
     or (n.schedule = 'dates' and ${date}::date = any(n.dates)))`;
 
-type Prof = { classId: string | null; back: number; place: { lat: number; lon: number } | null };
+export type Prof = { classId: string | null; back: number; place: { lat: number; lon: number } | null };
 
-async function loadProfile(tx: Tx, profileId: string): Promise<Prof | null> {
+export async function loadProfile(tx: Tx, profileId: string): Promise<Prof | null> {
   const [p] = await tx<{ class_id: string | null; back: number; lat: number | null; lon: number | null; city: string }[]>`
     select p.class_id, s.log_back_hours as back, s.lat, s.lon, s.city
     from public.profiles p join public.accounts a on a.id = p.account_id join public.sanghs s on s.id = a.sangh_id
@@ -68,10 +69,13 @@ async function dayView(tx: Tx, profileId: string, prof: Prof, date: string): Pro
  * shows the same numbers. Tej: a niyam's points each time it is kept; for count and minutes niyams,
  * points for each count, up to 10 counts a day.
  */
-export async function progress(tx: Tx, profileId: string): Promise<Progress> {
+export async function progress(tx: Tx, profileId: string): Promise<Progress & { daysKept: number }> {
   const days = await tx<{ d: string }[]>`
     select distinct log_date::text as d from public.niyam_logs
     where profile_id = ${profileId} and done and log_date <= private.local_today()`;
+  const repairs = await tx<{ d: string; recent: boolean }[]>`
+    select missed_date::text as d, repaired_at > now() - interval '30 days' as recent
+    from public.streak_repairs where profile_id = ${profileId}`;
   const [t] = await tx<{ today: string; tej: number; tej_today: number }[]>`
     with pts as (
       select l.log_date, case
@@ -82,12 +86,85 @@ export async function progress(tx: Tx, profileId: string): Promise<Progress> {
       where l.profile_id = ${profileId} and l.done)
     select private.local_today()::text as today, coalesce(sum(p), 0)::int as tej,
       coalesce(sum(p) filter (where log_date = private.local_today()), 0)::int as tej_today from pts`;
-  const w = walkStreak(days.map((r) => r.d), t.today);
+  const kept = days.map((r) => r.d);
+  const fixed = repairs.map((r) => r.d);
+  const w = walkStreak(kept, t.today, fixed);
   const monthAgo = new Date(Date.parse(`${t.today}T00:00:00Z`) - 30 * 864e5).toISOString().slice(0, 10);
   return {
-    streak: w.streak, best: w.best, kshama: w.kshama, kshamaUsedOn: w.usedOn.filter((d) => d >= monthAgo),
+    streak: w.streak, best: w.best, kshama: w.kshama, kshamaUsedOn: [...w.usedOn, ...w.repairedOn].filter((d) => d >= monthAgo),
     tej: t.tej, tejToday: t.tej_today, diya: diyaLevel(w.streak), nextDiya: nextDiya(w.streak),
+    // One repair in any 30 days.
+    repair: repairs.some((r) => r.recent) ? null : repairOffer(kept, t.today, fixed),
+    daysKept: kept.length,
   };
+}
+
+/** Makes up for a missed day, if the rules allow it right now (see repairOffer). */
+export async function repairStreak(accountId: string, profileId: string, missed: string): Promise<"ok" | "not_allowed"> {
+  return asAccount(accountId, async (tx) => {
+    if (!(await loadProfile(tx, profileId))) return "not_allowed";
+    await tx`select 1 from public.profiles where id = ${profileId} for update`; // one repair at a time
+    const p = await progress(tx, profileId);
+    if (!p.repair || p.repair.missed !== missed) return "not_allowed";
+    await tx`insert into public.streak_repairs (profile_id, missed_date) values (${profileId}, ${missed}::date) on conflict do nothing`;
+    return "ok";
+  });
+}
+
+/**
+ * Awards any badge this person has earned and not yet received. Returns the new ones (to celebrate
+ * once on Today; they also appear in the Sangh feed).
+ */
+async function awardBadges(tx: Tx, profileId: string, classId: string | null, p: Progress & { daysKept: number }): Promise<EarnedBadge[]> {
+  const [facts] = await tx<{ names: string[]; att: boolean; goals: string[] }[]>`
+    select
+      array(select distinct y.x from public.niyam_logs l join public.niyams n on n.id = l.niyam_id,
+        lateral (select coalesce((select (o ->> 'en') || ' ' || coalesce(o ->> 'hi', '') from jsonb_array_elements(n.options) o where o ->> 'value' = l.choice),
+                                 n.name || ' ' || coalesce(n.name_hi, '')) as x) y
+        where l.profile_id = ${profileId} and l.done and n.type in ('choice', 'yesno')
+          and y.x ~* '(eka?s|aya?mb|upa?vas|upwas|एकास|आयं|आयम्|उपवास)') as names,
+      coalesce((select count(*) >= 4 and bool_and(a.status in ('present', 'late')) from public.attendance a
+        where a.profile_id = ${profileId}
+          and a.day between date_trunc('month', private.local_today() - interval '1 month')::date and (date_trunc('month', private.local_today())::date - 1)
+          and not exists (select 1 from public.sangh_holidays h where h.sangh_id = a.sangh_id and h.day = a.day)), false) as att,
+      array(select g.id::text from public.sangh_goals g
+        where g.kind = 'challenge' and g.sangh_id = private.current_sangh_id() and g.start_date <= private.local_today()
+          and (g.all_classes or ${classId}::uuid = any(g.class_ids))
+          and not exists (select 1 from public.badges_earned b where b.profile_id = ${profileId} and b.badge = 'challenge:' || g.id)
+          and (select count(*) from public.niyam_logs l where l.profile_id = ${profileId} and l.niyam_id = g.niyam_id and l.done
+               and l.log_date between g.start_date and g.end_date) >= g.days) as goals`;
+  const ids = earnedBadges({ best: p.best, daysKept: p.daysKept, tej: p.tej, tapasyaNames: facts.names, fullAttendanceMonth: facts.att, challengesDone: facts.goals });
+  if (!ids.length) return [];
+  const rows = await tx<{ badge: string; earned_at: Date }[]>`
+    insert into public.badges_earned (profile_id, badge) select ${profileId}, b from unnest(${tx.array(ids)}::text[]) b
+    on conflict (profile_id, badge) do nothing returning badge, earned_at`;
+  if (!rows.length) return [];
+  const titles = await challengeTitles(tx, rows.map((r) => r.badge));
+  return rows.map((r) => toBadge(r.badge, r.earned_at, titles));
+}
+
+export async function challengeTitles(tx: Tx, badges: string[]): Promise<Map<string, string>> {
+  const ids = badges.filter((b) => b.startsWith("challenge:")).map((b) => b.slice(10));
+  if (!ids.length) return new Map();
+  const rows = await tx<{ id: string; title: string }[]>`select id, title from public.sangh_goals where id = any(${tx.array(ids)}::uuid[])`;
+  return new Map(rows.map((r) => [`challenge:${r.id}`, r.title]));
+}
+
+export function toBadge(id: string, at: Date | string, titles: Map<string, string>): EarnedBadge {
+  const b = badgeInfo(id, titles.get(id));
+  return { id, en: b.en, hi: b.hi, mark: b.mark, kind: b.kind, earnedAt: new Date(at).toISOString() };
+}
+
+/** Running personal vows, with today's tick and the days kept so far. */
+async function vowsFor(tx: Tx, profileId: string): Promise<Vow[]> {
+  const rows = await tx<{ id: string; name: string; start_date: string; end_date: string; done_today: boolean; days: number }[]>`
+    select v.id, v.name, v.start_date::text, v.end_date::text,
+      exists (select 1 from public.vow_logs l where l.vow_id = v.id and l.log_date = private.local_today()) as done_today,
+      (select count(*)::int from public.vow_logs l where l.vow_id = v.id) as days
+    from public.vows v
+    where v.profile_id = ${profileId} and v.ended_at is null and v.end_date >= private.local_today()
+    order by v.end_date, v.created_at`;
+  return rows.map((r) => ({ id: r.id, name: r.name, startDate: r.start_date, endDate: r.end_date, doneToday: r.done_today, daysKept: r.days }));
 }
 
 export async function getProgress(accountId: string, profileId: string): Promise<Progress | null> {
@@ -120,7 +197,7 @@ export async function getNiyamStats(accountId: string, profileId: string): Promi
 }
 
 /** Up to 3 slides for this person's class showing today, pinned first, then the admin's order. */
-async function announcementsFor(tx: Tx, profileId: string, prof: Prof): Promise<AnnouncementCard[]> {
+export async function announcementsFor(tx: Tx, profileId: string, prof: Prof): Promise<AnnouncementCard[]> {
   const rows = await tx`
     select an.id, an.title, an.body, an.image_url, an.button_label, an.button_url, an.pinned,
       -- Seen on an earlier day: it shows as one line. Seen today: still in full, however often Today reloads.
@@ -155,7 +232,11 @@ export async function getToday(accountId: string, profileId: string): Promise<To
     const [{ today }] = await tx<{ today: string }[]>`select private.local_today()::text as today`;
     const t = await dayView(tx, profileId, prof, today);
     const p = await progress(tx, profileId);
-    return { today: t, announcements: await announcementsFor(tx, profileId, prof), streak: p.streak, streakAlive: p.streak > 0, progress: p };
+    const newBadges = await awardBadges(tx, profileId, prof.classId, p);
+    return {
+      today: t, announcements: await announcementsFor(tx, profileId, prof), streak: p.streak, streakAlive: p.streak > 0, progress: p,
+      vows: await vowsFor(tx, profileId), newBadges,
+    };
   });
 }
 

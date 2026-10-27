@@ -394,3 +394,59 @@ html.hi-first .en-only { display: none; }
 html.hi-first .nc-names { display: flex; flex-direction: column; }
 html.hi-first .nc-hi { order: -1; font: 700 var(--fs-18) var(--font-body); color: var(--ink); }
 html.hi-first .nc-name { font-size: var(--fs-14); font-weight: 600; color: var(--ink-dim); }
+
+/* ---------------------------------------------------------------------------
+   P3: Sangh tab, goals, board, Anumodana feed, badges, vows, streak repair, install card.
+   .list and .switch-row repeat the admin panel's, which isn't loaded on member screens.
+   --------------------------------------------------------------------------- */
+.frame .list { background: var(--bg-2); border-radius: var(--r-l); box-shadow: var(--shadow-1); overflow: hidden; }
+.frame .switch-row { display: flex; align-items: center; gap: var(--s-3); min-height: 64px; padding: var(--s-2) var(--s-4); cursor: pointer; }
+.frame .switch-row .grow { flex: 1; }
+.frame .list > * + .switch-row { border-top: 1px solid var(--line); }
+.frame .switch-row .t { font: 600 var(--fs-16) var(--font-display); display: block; }
+.frame .switch-row .s { font-size: var(--fs-14); color: var(--ink-dim); display: block; }
+.frame .switch { appearance: none; flex: none; width: 52px; height: 32px; border-radius: var(--r-pill); background: var(--line); position: relative; cursor: pointer; transition: background var(--t-fast) var(--ease); }
+.frame .switch::after { content: ""; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-1); transition: transform var(--t-fast) var(--ease); }
+.frame .switch:checked { background: var(--ok); }
+.frame .switch:checked::after { transform: translateX(20px); }
+.frame .field { display: grid; gap: var(--s-1); }
+.grow { flex: 1; min-width: 0; }
+.stack-s { display: grid; gap: var(--s-1); }
+.link-btn { border: 0; background: none; padding: var(--s-1) 0; color: var(--secondary); font: 600 var(--fs-16) var(--font-body); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; justify-self: start; min-height: 44px; }
+.msg.ok { color: var(--ok); }
+
+.badge-mark { flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-text); font: 800 var(--fs-18) var(--font-display); box-shadow: inset 0 0 0 3px rgba(240,157,39,.35); }
+.badge-new, .post { display: flex; align-items: center; gap: var(--s-3); }
+.post { align-items: flex-start; }
+.badge-new { box-shadow: var(--glow), var(--shadow-1); }
+.badge-name { font: 700 var(--fs-18) var(--font-display); }
+.badges { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--s-3); }
+.badges li { display: grid; justify-items: center; gap: var(--s-1); text-align: center; font-size: var(--fs-14); }
+
+.repair { display: grid; gap: var(--s-3); border: 2px solid var(--accent); }
+
+.goal { display: grid; gap: var(--s-3); }
+.goal.gold { box-shadow: var(--glow), var(--shadow-1); }
+.goal-top { display: flex; gap: var(--s-3); align-items: flex-start; }
+.goal-title { font: 700 var(--fs-18)/1.25 var(--font-display); }
+
+.board { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; }
+.board li { display: flex; align-items: center; gap: var(--s-3); min-height: 48px; padding: 0 var(--s-3); border-radius: var(--r-s); }
+.board li.me { background: var(--accent-soft); }
+.b-rank { width: 28px; font: 800 var(--fs-18) var(--font-display); color: var(--ink-dim); }
+.board b { font: 800 var(--fs-18) var(--font-display); }
+.b-unit { font-size: var(--fs-14); color: var(--ink-dim); width: 34px; }
+
+.post-actions { display: flex; gap: var(--s-3); align-items: center; flex-wrap: wrap; }
+.anu-btn { min-height: 44px; padding: 0 var(--s-4); border-radius: var(--r-pill); border: 2px solid var(--accent); background: transparent; color: var(--ink); font: 700 var(--fs-16) var(--font-display); cursor: pointer; }
+.anu-btn.on { background: var(--accent); color: var(--accent-ink); }
+.caught-up { padding: var(--s-4) 0; }
+
+.vow-icon { font-size: 1.4rem; color: var(--accent-text); }
+.vow-end { border: 0; background: none; color: var(--ink-dim); font: 500 var(--fs-14) var(--font-body); text-decoration: underline; padding: var(--s-1) var(--s-4) var(--s-2); cursor: pointer; min-height: 36px; }
+
+.install { display: flex; gap: var(--s-3); align-items: flex-start; }
+.install img { border-radius: 12px; flex: none; }
+.install-steps { margin: 0; padding-left: 1.2em; display: grid; gap: var(--s-1); }
+.install-btns { display: flex; gap: var(--s-2); flex-wrap: wrap; }
+.pill.ok { background: rgba(23,128,111,.12); color: var(--ok); }

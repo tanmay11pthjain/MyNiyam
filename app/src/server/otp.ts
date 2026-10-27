@@ -7,7 +7,7 @@ import { log } from "./log";
 import type { OtpChannel } from "@/lib/api-types";
 import { OTP_LENGTH } from "@/lib/otp-code";
 
-/** The code that always works while OTP_DELIVERY=simulate. */
+/** The code that always works while OTP_DELIVERY=simulate, and for the DEMO_PHONES numbers. */
 export const SIMULATED_CODE = "1234";
 
 function hashCode(phone: string, code: string) {
@@ -26,7 +26,9 @@ export type SendResult =
  */
 export async function sendOtp(phone: string, channel: OtpChannel): Promise<SendResult> {
   const c = config();
-  const simulated = c.OTP_DELIVERY === "simulate";
+  // The demo numbers (DEMO_PHONES) keep the fixed code even after real SMS is switched on, so the
+  // demo family and admin still work; every other number gets a random code by SMS.
+  const simulated = c.OTP_DELIVERY === "simulate" || c.demoPhones.includes(phone);
   const code = simulated ? SIMULATED_CODE : String(randomInt(0, 10 ** OTP_LENGTH)).padStart(OTP_LENGTH, "0");
 
   const gate = await sql().begin(async (tx) => {

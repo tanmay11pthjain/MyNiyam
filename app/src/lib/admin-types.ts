@@ -38,6 +38,8 @@ export type AdminClass = {
   id: string; name: string; nameHi: string | null; hidden: boolean; ageMin: number | null; ageMax: number | null;
   /** Days the class meets, 0 = Sunday ... 6 = Saturday; empty = not set. */
   meetsOn: number[]; members: number;
+  /** Members of this class see a weekly leaderboard of days kept (off by default). */
+  leaderboard: boolean;
 };
 
 export type NiyamType = "yesno" | "count" | "duration" | "choice";
@@ -144,3 +146,13 @@ export type ReportCards = {
   sangh: string; className: string; month: string; daysInMonth: number;
   cards: { name: string; daysLogged: number; kept: number; bestStreak: number; attendance: { came: number; total: number } | null }[];
 };
+
+/** A pathshala goal: a total for everyone ("10 lakh Navkar") or a challenge each person finishes ("21 days of Navkarsi"). */
+export type Goal = {
+  id: string; kind: "total" | "challenge"; title: string; titleHi: string | null; niyamId: string; niyamName: string;
+  target: number | null; days: number | null; startDate: string; endDate: string; allClasses: boolean; classIds: string[];
+  state: "live" | "upcoming" | "ended"; total: number; finishers: number;
+};
+export type GoalInput = Pick<Goal, "kind" | "title" | "titleHi" | "niyamId" | "target" | "days" | "startDate" | "endDate" | "allClasses" | "classIds">;
+/** GET /api/admin/goals */
+export type GoalsPage = { goals: Goal[]; niyams: { id: string; name: string; type: NiyamType }[]; classes: { id: string; name: string }[]; today: string };

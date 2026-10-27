@@ -5,7 +5,7 @@ How to build this app: the workflow, the rules and the goals. Design comes first
 ## Goals
 
 1. **People understand it without being taught.** Someone non-technical finishes the main task on the first try, on a phone, without reading anything.
-2. **It looks made by a person, not a template.** One clear visual idea, a deliberate palette and real typography. No generic "AI startup" look.
+2. **It looks made by a person, not a template.** One clear visual idea, a deliberate palette and real typography. No generic "AI startup" look. Very clean interface specifically made for specially abled people (visually impared, hand-motor and elderly people)
 3. **It works end to end before it gets polished.** A thin, real, deployed flow beats a beautiful mockup.
 4. **It scales by design, not by rewrite.** Stateless servers, managed storage and database, and limits enforced in code. Moving from a free tier to production changes config, not architecture.
 5. **Be honest about status.** Everything claimed as done has been run and verified. Everything skipped is listed.
@@ -49,7 +49,6 @@ Work through these phases in order. Don't start a phase until the one before it 
 ### 5. Verify
 - Automated: unit tests for core logic and the protocol; API tests for every route, including limits and race conditions (fire concurrent requests at the invariants).
 - Manual: the full flow on **two real devices** over the public URL, not localhost.
-- Visual: screenshots at 375 px and 1440 px; check overflow, alignment, contrast and the focus states.
 - Measure the production build: memory use of the server and bundle size of the client.
 
 ### 6. Ship

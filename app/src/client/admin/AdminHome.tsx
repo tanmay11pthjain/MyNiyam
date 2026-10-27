@@ -96,6 +96,7 @@ export function AdminHome() {
           {can("admin") && <Link href="/admin/sangh#code"><Icon.qr />Share join code</Link>}
           {can("niyams") && <Link href="/admin/niyams?new=1"><Icon.plus />Add a niyam</Link>}
           {can("announcements") && <Link href="/admin/announcements"><Icon.megaphone />Announcements</Link>}
+          {can("niyams") && <Link href="/admin/goals"><Icon.layers />Goals and challenges</Link>}
           {can("view_members") && <Link href="/admin/members"><Icon.people />View members</Link>}
           {can("attendance") && <Link href="/admin/attendance"><Icon.roll />Take attendance</Link>}
           {can("view_members") && <Link href="/admin/reports"><Icon.layers />Reports</Link>}

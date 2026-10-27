@@ -48,6 +48,8 @@ export function say(err: ApiError | { error: "offline" }): Words {
     case "joins_closed": return { en: "This pathshala isn't taking new members right now. Ask your teacher.", hi: "यह पाठशाला अभी नए सदस्य नहीं ले रही। अपने शिक्षक से पूछें।" };
     case "demo_only": return { en: "This is a demo. Only the demo numbers can log in.", hi: "यह डेमो है। केवल डेमो नंबर से लॉग इन हो सकता है।" };
     case "log_window_closed": return { en: "That day has closed and can no longer be changed.", hi: "वह दिन बंद हो चुका है, अब बदल नहीं सकते।" };
+    case "vow_limit": return { en: "You can keep up to 5 vows at a time. End one to add another.", hi: "एक साथ 5 संकल्प रख सकते हैं। नया जोड़ने के लिए एक समाप्त करें।" };
+    case "push_off": return { en: "Reminders aren't switched on for MyNiyam yet.", hi: "MyNiyam पर अभी रिमाइंडर चालू नहीं हैं।" };
     default: return { en: "Something went wrong on our side. Please try again.", hi: "हमारी तरफ़ से गड़बड़ हुई। फिर कोशिश करें।" };
   }
 }

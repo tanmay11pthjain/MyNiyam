@@ -5,6 +5,7 @@ import type { z } from "zod";
 import { config } from "./config";
 import { log } from "./log";
 import { hit } from "./rate-limit";
+import { reportError } from "./report";
 import type { ApiError } from "@/lib/api-types";
 
 // Helpers every route handler uses: request ids, JSON with a size cap, schema checks,
@@ -19,6 +20,7 @@ const STATUS: Record<ApiError["error"], number> = {
   unauthorized: 401, forbidden: 403, too_large: 413, too_many_requests: 429, send_failed: 502, server_error: 500,
   joins_closed: 403, class_has_members: 409, invalid_field: 400, duplicate_key: 400, no_sangh: 404, unsupported_type: 415,
   log_window_closed: 400, demo_only: 403, already_admin: 409, already_member: 409, same_number: 400,
+  vow_limit: 409, push_off: 503,
 };
 
 export function fail(ctx: Ctx, body: ApiError): NextResponse {
@@ -75,6 +77,7 @@ export function route<P = unknown>(name: string, fn: (req: NextRequest, ctx: Ctx
     } catch (e) {
       if (e instanceof TooLarge) return fail(ctx, { error: "too_large" });
       log.error("unhandled", { route: name, requestId: ctx.requestId, error: (e as Error).message });
+      await reportError(`${name}: ${(e as Error).message}`, { route: name, requestId: ctx.requestId, stack: (e as Error).stack?.slice(0, 2000) });
       res = fail(ctx, { error: "server_error" });
     }
     log.info("request", { route: name, method: req.method, status: res.status, ms: Math.round(performance.now() - started), requestId: ctx.requestId });

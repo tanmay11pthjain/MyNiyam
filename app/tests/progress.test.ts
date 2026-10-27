@@ -6,7 +6,7 @@ const run = (from: string, n: number) => Array.from({ length: n }, (_, i) => new
 
 describe("streak and kshama days", () => {
   it("counts days in a row; today being empty doesn't break it", () => {
-    expect(walkStreak([], "2026-10-22")).toEqual({ streak: 0, best: 0, kshama: 0, usedOn: [] });
+    expect(walkStreak([], "2026-10-22")).toEqual({ streak: 0, best: 0, kshama: 0, usedOn: [], repairedOn: [] });
     expect(walkStreak(run("2026-10-19", 3), "2026-10-22").streak).toBe(3);
     expect(walkStreak(run("2026-10-18", 3), "2026-10-22").streak).toBe(0); // yesterday missed, nothing saved
   });

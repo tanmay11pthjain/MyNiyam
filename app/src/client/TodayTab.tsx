@@ -5,6 +5,9 @@ import { Announcements } from "./Announcements";
 import { applyPatch, NiyamCard, type LogPatch } from "./NiyamCard";
 import { enqueue, flushQueue, onQueueChange, queued, readCopy, saveCopy } from "./offline";
 import { Button } from "./ui";
+import { InstallCard } from "./Install";
+import { Vows } from "./Vows";
+import { shareCard } from "./share";
 import type { DayNiyam, DayView, TodayResponse } from "@/lib/today-types";
 
 type Words = { en: string; hi: string };
@@ -28,7 +31,7 @@ function withQueued(t: TodayResponse, profileId: string): TodayResponse {
 /** The server's Today, or offline the copy saved on this phone (only if it is still the same day). */
 async function fetchToday(profileId: string): Promise<{ data: TodayResponse; offline: boolean } | { err: Words }> {
   const r = await api<TodayResponse>("/api/today");
-  if (r.ok) { saveCopy(`today.${profileId}`, r.data); return { data: withQueued(r.data, profileId), offline: false }; }
+  if (r.ok) { saveCopy(`today.${profileId}`, { ...r.data, newBadges: [] }); return { data: withQueued(r.data, profileId), offline: false }; }
   if (r.err.error === "offline") {
     const copy = readCopy<TodayResponse>(`today.${profileId}`);
     if (copy && copy.today.date === indianToday()) return { data: withQueued(copy, profileId), offline: true };
@@ -39,7 +42,7 @@ async function fetchToday(profileId: string): Promise<{ data: TodayResponse; off
 const yesterdayOf = (d: string) => new Date(Date.parse(`${d}T00:00:00Z`) - 864e5).toISOString().slice(0, 10);
 
 /** The home tab: today's niyams, a progress bar and the streak. Yesterday is changed from History. */
-export function TodayTab({ profileId }: { profileId: string }) {
+export function TodayTab({ profileId, sangh }: { profileId: string; sangh: { name: string; code: string } }) {
   const [data, setData] = useState<TodayResponse | null>(null);
   const [err, setErr] = useState<Words | null>(null);
   const [toast, setToast] = useState<Words | null>(null);
@@ -48,6 +51,7 @@ export function TodayTab({ profileId }: { profileId: string }) {
   const dataRef = useRef<TodayResponse | null>(null);
   useEffect(() => { dataRef.current = data; }, [data]);
   const pending = useRef(new Map<string, { n: number; chain: Promise<unknown> }>());
+  const [repairing, setRepairing] = useState(false);
 
   const load = useCallback(async () => {
     const r = await fetchToday(profileId);
@@ -152,7 +156,38 @@ export function TodayTab({ profileId }: { profileId: string }) {
         {data.progress?.kshamaUsedOn.includes(yesterdayOf(day.date)) && (
           <p className="kshama-note">A kshama day kept your streak safe yesterday.</p>
         )}
+        {data.streak >= 3 && (
+          <button type="button" className="link-btn" onClick={() => void shareCard({ big: String(data.streak), line: `${data.streak}-day niyam streak`, sub: "Jai Jinendra", sangh: sangh.name, code: sangh.code })}>
+            Share my streak
+          </button>
+        )}
       </section>
+
+      {data.newBadges?.map((b) => (
+        <section key={b.id} className="card badge-new" role="status">
+          <span className="badge-mark" aria-hidden="true">{b.mark}</span>
+          <div className="grow">
+            <p className="label">New badge · नया बैज</p>
+            <p className="badge-name">{b.en} <span className="hi" lang="hi">{b.hi}</span></p>
+          </div>
+          <Button kind="secondary" onClick={() => void shareCard({ big: b.mark, line: b.en, sub: "Anumodana!", sangh: sangh.name, code: sangh.code })}>Share</Button>
+        </section>
+      ))}
+
+      {data.progress?.repair && (
+        <section className="card repair" aria-labelledby="repair-h">
+          <h2 id="repair-h" className="sec-h">Save your {data.progress.repair.streak}-day streak</h2>
+          <p>You missed {dayLabel(data.progress.repair.missed)}. Michchhami Dukkadam, start fresh: keep one small extra niyam today, like 1 extra Navkar mala, then tap below.</p>
+          <p className="hint" lang="hi">एक छोटा अतिरिक्त नियम करें, जैसे 1 नवकार माला, फिर नीचे दबाएँ।</p>
+          <Button busy={repairing} onClick={async () => {
+            setRepairing(true);
+            const r = await api("/api/repair", { body: { missed: data.progress.repair!.missed } });
+            setRepairing(false);
+            if (r.ok) { setToast({ en: "Your streak is safe again. Anumodana!", hi: "आपकी लगातार गिनती फिर सुरक्षित है।" }); void load(); } else setToast(say(r.err));
+          }}>I did it, keep my streak</Button>
+          <p className="hint">You can do this once a month.</p>
+        </section>
+      )}
 
       {(offline || waiting > 0) && (
         <div className="banner warn" role="status">
@@ -181,6 +216,10 @@ export function TodayTab({ profileId }: { profileId: string }) {
           )}
         </>
       )}
+
+      {data.vows && <Vows vows={data.vows} today={day.date} onChanged={() => void load()} />}
+
+      <InstallCard />
 
       {toast && (
         <div className="toast" role="alert">

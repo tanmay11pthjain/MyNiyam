@@ -52,11 +52,22 @@ const schema = z.object({
   MSG91_WHATSAPP_TEMPLATE: z.string().optional(),   // approved authentication template name
   MSG91_WHATSAPP_NAMESPACE: z.string().optional(),
   MSG91_WHATSAPP_LANGUAGE: z.string().default("en"),
+
+  // Reminders (web push). Make a key pair once with `npx web-push generate-vapid-keys`.
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().default("mailto:hello@myniyam.app"),
+  // The reminder job (/api/cron/remind) must send "Authorization: Bearer <CRON_SECRET>".
+  CRON_SECRET: z.string().min(24).optional(),
+  REMIND_BATCH: int(500),             // reminders sent per run, at most
+
+  // Error alerts: a Sentry project's DSN. Without it, errors only go to the host's logs.
+  SENTRY_DSN: z.string().url().optional(),
 });
 
 export type Config = z.infer<typeof schema> & {
   sessionSecret: string; whatsappEnabled: boolean; smsEnabled: boolean; superAdmins: string[]; supabaseStorage: boolean;
-  demoPhones: string[]; demoOnly: boolean;
+  demoPhones: string[]; demoOnly: boolean; pushEnabled: boolean;
 };
 
 let cached: Config | null = null;
@@ -93,6 +104,7 @@ export function config(): Config {
     sessionSecret,
     smsEnabled: Boolean(c.MSG91_AUTH_KEY && c.MSG91_SMS_TEMPLATE_ID),
     whatsappEnabled: Boolean(c.MSG91_AUTH_KEY && c.MSG91_WHATSAPP_NUMBER && c.MSG91_WHATSAPP_TEMPLATE),
+    pushEnabled: Boolean(c.VAPID_PUBLIC_KEY && c.VAPID_PRIVATE_KEY),
   };
   return cached;
 }
