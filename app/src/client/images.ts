@@ -4,17 +4,20 @@ import type { ApiError } from "@/lib/api-types";
 
 // Picture uploads (sangh logo, profile photo): shrink in the browser, then send the bytes.
 
-/** Shrinks a picked image to at most `size` px and returns JPEG bytes, so uploads stay small. */
-export async function shrinkImage(file: File, size = 512): Promise<Blob> {
+/** Shrinks a picked image to at most `size` px and returns JPEG bytes, so uploads stay small.
+ *  With `aspect` (width / height, e.g. 16 / 9) the middle of the picture is cut to that shape. */
+export async function shrinkImage(file: File, size = 512, aspect?: number): Promise<Blob> {
   const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, size / Math.max(bmp.width, bmp.height));
+  let sw = bmp.width, sh = bmp.height;
+  if (aspect) { if (sw / sh > aspect) sw = Math.round(sh * aspect); else sh = Math.round(sw / aspect); }
+  const scale = Math.min(1, size / Math.max(sw, sh));
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bmp.width * scale);
-  canvas.height = Math.round(bmp.height * scale);
+  canvas.width = Math.round(sw * scale);
+  canvas.height = Math.round(sh * scale);
   const ctx = canvas.getContext("2d")!;
   ctx.fillStyle = "#fff"; // transparent PNG logos become white, not black
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bmp, (bmp.width - sw) / 2, (bmp.height - sh) / 2, sw, sh, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("encode failed"))), "image/jpeg", 0.85));
 }
 

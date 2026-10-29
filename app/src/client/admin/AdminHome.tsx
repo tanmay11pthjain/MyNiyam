@@ -99,6 +99,7 @@ export function AdminHome() {
           {can("niyams") && <Link href="/admin/goals"><Icon.layers />Goals and challenges</Link>}
           {can("view_members") && <Link href="/admin/members"><Icon.people />View members</Link>}
           {can("attendance") && <Link href="/admin/attendance"><Icon.roll />Take attendance</Link>}
+          {can("view_members") && <Link href="/admin/leaderboard"><Icon.trophy />Leaderboard poster</Link>}
           {can("view_members") && <Link href="/admin/reports"><Icon.layers />Reports</Link>}
         </div>
       </section>

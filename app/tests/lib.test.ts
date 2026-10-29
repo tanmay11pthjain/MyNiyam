@@ -134,3 +134,13 @@ describe("sunrise and sunset", () => {
     expect(clock(18 * 60 + 5)).toBe("6:05 pm");
   });
 });
+
+describe("schema version", () => {
+  it("LATEST_MIGRATION names the newest migration file", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const { LATEST_MIGRATION } = await import("@/server/schema");
+    const files = fs.readdirSync(path.resolve(import.meta.dirname, "../supabase/migrations")).filter((f) => f.endsWith(".sql")).sort();
+    expect(LATEST_MIGRATION).toBe(files[files.length - 1]);
+  });
+});

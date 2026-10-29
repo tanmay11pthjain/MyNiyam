@@ -43,6 +43,16 @@ describe("attendance", () => {
     expect(after.people.find((p) => p.id === a.id)?.status).toBe("present");
   });
 
+  it("counts gathas with attendance; an absent person has none", async () => {
+    const a = await member(classA, "Gatha Kid"), b = await member(classA, "Away Kid");
+    expect(await saveMarks(admin, heer, { classId: classA, day: today, marks: [{ profileId: a.id, status: "present", gathas: 4 }, { profileId: b.id, status: "absent", gathas: 9 }] })).toBe("ok");
+    const sheet = (await getSheet(admin, heer, classA, today))!;
+    expect(sheet.people.find((p) => p.id === a.id)?.gathas).toBe(4);
+    expect(sheet.people.find((p) => p.id === b.id)?.gathas).toBe(0);
+    const month = (await getMonth(admin, heer, classA, today.slice(0, 7)))!;
+    expect(month.people.find((p) => p.id === a.id)?.gathas).toBe(4);
+  });
+
   it("never the future, never more than 30 days back", async () => {
     const a = await member(classA, "Date Check");
     const [{ tomorrow, old }] = await sql()`select (private.local_today() + 1)::text as tomorrow, (private.local_today() - 31)::text as old`;

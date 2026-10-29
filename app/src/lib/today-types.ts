@@ -29,8 +29,6 @@ export type AnnouncementCard = {
 /** GET /api/today. Yesterday is changed from History. */
 export type TodayResponse = {
   today: DayView;
-  /** At most 3, pinned first. */
-  announcements: AnnouncementCard[];
   streak: number;
   /** Days in a row, ending today or yesterday, with at least one niyam done. */
   streakAlive: boolean;

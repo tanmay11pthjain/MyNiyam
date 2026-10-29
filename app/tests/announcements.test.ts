@@ -2,7 +2,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sql } from "@/server/db";
 import { createProfile, findSanghByCode, joinSangh, setupProfile } from "@/server/onboarding";
-import { getToday, markSeen } from "@/server/today";
+import { markSeen } from "@/server/today";
+import { getSanghTab } from "@/server/engage";
+const getToday = getSanghTab; // slides show on the Sangh tab
 import { createAnnouncement, deleteAnnouncement, getAnnouncements, updateAnnouncement } from "@/server/admin/announcements";
 import { announcementInput } from "@/server/admin/announcements";
 
@@ -11,7 +13,7 @@ const phone = () => `+9194${String(Date.now() % 1e6).padStart(6, "0")}${String(n
 let heer: string, shan: string, cls: { id: string }[];
 const admin = phone();
 const shanAdmin = phone();
-const slide = (x: Record<string, unknown>) => announcementInput.parse({ title: "Notice", ...x });
+const slide = (x: Record<string, unknown>) => announcementInput.parse({ title: "Notice", imageUrl: `/api/files/photos/${heer}/${"a".repeat(24)}.jpg`, ...x });
 
 beforeAll(async () => {
   heer = (await findSanghByCode("HEER01"))!.id;
@@ -38,9 +40,11 @@ describe("announcements", () => {
     expect(announcementInput.safeParse({ title: "x", buttonLabel: "Go" }).success).toBe(false);
     expect(announcementInput.safeParse({ title: "x", buttonLabel: "Go", buttonUrl: "http://a.in" }).success).toBe(false);
     expect(announcementInput.safeParse({ title: "x", startDate: "2026-10-10", endDate: "2026-10-01" }).success).toBe(false);
+    expect(announcementInput.safeParse({ title: "x" }).success).toBe(false); // a picture is required
+    expect(slide({ title: "x" }).imageUrl).toBeTruthy();
   });
 
-  it("shows members their class's live slides, at most 3, pinned first; counts views", async () => {
+  it("shows members their class's live slides on the Sangh tab, pinned first; counts views", async () => {
     const [{ d }] = await sql()`select private.local_today()::text as d, (private.local_today() + 5)::text as later`;
     await createAnnouncement(admin, heer, slide({ title: "Everyone 1" }));
     await createAnnouncement(admin, heer, slide({ title: "Class B only", allClasses: false, classIds: [cls[1].id] }));
@@ -52,7 +56,7 @@ describe("announcements", () => {
 
     const m = await member(cls[0].id);
     const t = await getToday(m.accountId, m.profileId);
-    expect(t!.announcements.map((a) => a.title)).toEqual(["Pinned", "Everyone 3", "Everyone 2"]);
+    expect(t!.announcements.map((a) => a.title)).toEqual(["Pinned", "Everyone 3", "Everyone 2", "Everyone 1"]);
     expect(t!.announcements.every((a) => !a.seen)).toBe(true);
 
     await markSeen(m.accountId, m.profileId, [t!.announcements[0].id]);

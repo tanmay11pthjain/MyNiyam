@@ -6,6 +6,7 @@ import { config } from "./config";
 import { log } from "./log";
 import { hit } from "./rate-limit";
 import { reportError } from "./report";
+import { SCHEMA_BEHIND_CODES } from "./schema";
 import type { ApiError } from "@/lib/api-types";
 
 // Helpers every route handler uses: request ids, JSON with a size cap, schema checks,
@@ -76,7 +77,9 @@ export function route<P = unknown>(name: string, fn: (req: NextRequest, ctx: Ctx
       res = await fn(req, ctx, await segment.params);
     } catch (e) {
       if (e instanceof TooLarge) return fail(ctx, { error: "too_large" });
-      log.error("unhandled", { route: name, requestId: ctx.requestId, error: (e as Error).message });
+      const code = (e as { code?: unknown }).code;
+      const hint = SCHEMA_BEHIND_CODES.has(String(code)) ? "database is missing a migration: run npm run db:migrate against it" : undefined;
+      log.error("unhandled", { route: name, requestId: ctx.requestId, error: (e as Error).message, ...(hint ? { hint } : {}) });
       await reportError(`${name}: ${(e as Error).message}`, { route: name, requestId: ctx.requestId, stack: (e as Error).stack?.slice(0, 2000) });
       res = fail(ctx, { error: "server_error" });
     }

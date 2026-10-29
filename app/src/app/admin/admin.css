@@ -9,6 +9,12 @@
 .switcher .sangh-logo { width: 40px; height: 40px; margin: 0; font-size: var(--fs-18); flex: none; }
 .switcher .nm { font: 700 var(--fs-18)/1.15 var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .switcher .sub { font-size: var(--fs-12); color: var(--ink-dim); display: block; }
+.menu-btn { flex: none; width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--bg-2); color: var(--ink); cursor: pointer; }
+.menu-btn svg { width: 24px; height: 24px; }
+.menu { display: grid; gap: var(--s-4); }
+.menu h3 { font-size: var(--fs-14); color: var(--ink-dim); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 var(--s-1); }
+.menu .row { min-height: 56px; }
+.menu .row[aria-current] .t { color: var(--accent-text); }
 .switcher .chev { transform: rotate(90deg); width: 18px; height: 18px; color: var(--ink-dim); flex: none; }
 
 .page { flex: 1; display: flex; flex-direction: column; gap: var(--s-5); padding-top: var(--s-3); animation: enter var(--t-base) var(--ease); }
@@ -193,8 +199,17 @@ textarea.input { min-height: 88px; padding: var(--s-3) var(--s-4); resize: verti
 
 /* Attendance */
 .att-sum { font-size: var(--fs-16); }
-.att-row { min-height: 60px; }
-.att-pill { flex: none; min-width: 84px; text-align: center; padding: 6px 12px; border-radius: var(--r-pill); font-weight: 700; font-size: .9rem; }
+.att-row { min-height: 60px; cursor: default; gap: var(--s-2); }
+.att-row > button { border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.att-name { min-height: 48px; min-width: 0; padding: 0; }
+.att-name .t { display: block; overflow: hidden; text-overflow: ellipsis; }
+.gatha { flex: none; display: flex; align-items: center; gap: 2px; }
+.gatha > button { width: 36px; height: 40px; border-radius: var(--r-m); border: 1px solid var(--line); background: var(--bg-2); color: var(--ink); font-size: 1.25rem; font-weight: 700; cursor: pointer; }
+.gatha > button:disabled { opacity: .35; cursor: default; }
+.gatha .n { display: grid; justify-items: center; min-width: 38px; line-height: 1.1; }
+.gatha .n b { font-size: 1.05rem; }
+.gatha .n small { font-size: .7rem; color: var(--ink-dim); }
+.att-pill { flex: none; min-width: 76px; text-align: center; padding: 6px 12px; border-radius: var(--r-pill); font-weight: 700; font-size: .9rem; }
 .att-pill.present { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
 .att-pill.absent { background: var(--danger-soft); color: var(--danger); }
 .att-pill.late { background: var(--accent-soft); color: var(--accent-text); }

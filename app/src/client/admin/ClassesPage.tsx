@@ -69,7 +69,7 @@ function ClassSheet({ cls, all, onClose, onSaved }: { cls: AdminClass | null; al
   const [moveTo, setMoveTo] = useState<string | null>(null);
   const [f, setF] = useState({
     name: cls?.name ?? "", nameHi: cls?.nameHi ?? "",
-    ageMin: cls?.ageMin?.toString() ?? "", ageMax: cls?.ageMax?.toString() ?? "", hidden: cls?.hidden ?? false, meetsOn: cls?.meetsOn ?? [], leaderboard: cls?.leaderboard ?? false,
+    ageMin: cls?.ageMin?.toString() ?? "", ageMax: cls?.ageMax?.toString() ?? "", hidden: cls?.hidden ?? false, meetsOn: cls?.meetsOn ?? [], leaderboard: cls?.leaderboard ?? true,
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -141,7 +141,7 @@ function ClassSheet({ cls, all, onClose, onSaved }: { cls: AdminClass | null; al
         {cls && (
           <div className="list">
             <Switch label="Hide from new joins" sub="Members already in it keep it." checked={f.hidden} onChange={(v) => setF({ ...f, hidden: v })} />
-            <Switch label="Weekly class board" sub="Members of this class see who kept niyams on the most days this week (top 10). It counts days, never how much tapasya. Off by default."
+            <Switch label="Weekly class board" sub="Members of this class see who kept niyams on the most days this week (top 10). It counts days, never how much tapasya. On by default."
               checked={f.leaderboard} onChange={(v) => setF({ ...f, leaderboard: v })} />
           </div>
         )}

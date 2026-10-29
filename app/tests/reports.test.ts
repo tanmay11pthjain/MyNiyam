@@ -2,7 +2,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { asAdmin, sql } from "@/server/db";
 import { createProfile, findSanghByCode, joinSangh } from "@/server/onboarding";
-import { bestRun, getAlerts, getReport, getReportCards, membersCsv } from "@/server/admin/reports";
+import { bestRun, getAlerts, getReport, getReportCards, reportWorkbook } from "@/server/admin/reports";
 import { saveVolunteer } from "@/server/admin/volunteers";
 
 let n = 0;
@@ -72,19 +72,25 @@ describe("reports", () => {
     expect(after.quiet).toBe(al.quiet - 1);
   });
 
-  it("report cards and the member CSV", async () => {
+  it("report cards and the Excel report", async () => {
     const a = await member(classA, "Card Person");
     await logToday(a);
     const cards = (await getReportCards(admin, heer, classA, today.slice(0, 7)))!;
     const c = cards.cards.find((x) => x.name === "Card Person")!;
     expect(c).toMatchObject({ daysLogged: 1, kept: 1, bestStreak: 1, attendance: null });
-    const csv = await membersCsv(admin, heer);
-    expect(csv.split("\r\n")[0]).toContain('"Name","Class","Mobile"');
-    expect(csv).toContain('"Card Person"');
+    const book = await reportWorkbook(admin, heer);
+    expect(book.map((s) => s.name)).toEqual(["Members", "Attendance", "Niyams"]);
+    expect(book[0].rows[0].slice(0, 3)).toEqual(["Name", "Class", "Mobile"]);
+    expect(book[0].rows.some((r) => r[0] === "Card Person")).toBe(true);
   });
 
-  it("a CSV cell can't run as a spreadsheet formula", async () => {
-    await member(classA, "=HYPERLINK(1)");
-    expect(await membersCsv(admin, heer)).toContain(`"'=HYPERLINK(1)"`);
+  it("the Excel file is a real workbook, and text never runs as a formula", async () => {
+    const { toXlsx } = await import("@/server/xlsx");
+    const f = toXlsx([{ name: "Members", rows: [["Name", "Days"], ["=HYPERLINK(1) & <b>", 3]] }]);
+    expect(String.fromCharCode(f[0], f[1])).toBe("PK");
+    const text = new TextDecoder().decode(f);
+    expect(text).toContain('t="inlineStr"><is><t xml:space="preserve">=HYPERLINK(1) &amp; &lt;b&gt;</t>');
+    expect(text).toContain("<v>3</v>");
+    expect(text).not.toContain("<f>");
   });
 });

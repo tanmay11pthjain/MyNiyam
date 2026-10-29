@@ -1,7 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, say } from "./api";
-import { Announcements } from "./Announcements";
 import { applyPatch, NiyamCard, type LogPatch } from "./NiyamCard";
 import { enqueue, flushQueue, onQueueChange, queued, readCopy, saveCopy } from "./offline";
 import { Button } from "./ui";
@@ -195,8 +194,6 @@ export function TodayTab({ profileId, sangh }: { profileId: string; sangh: { nam
           <span>{waiting > 0 ? `${waiting} ${waiting === 1 ? "niyam is" : "niyams are"} saved on this phone and will be sent when you're back online.` : "Your taps are saved on this phone and sent when you're back online."}</span>
         </div>
       )}
-
-      <Announcements items={data.announcements} />
 
       {day.niyams.length === 0 ? (
         <div className="card">

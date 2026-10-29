@@ -111,9 +111,9 @@ function Body({ r, month, admin, sanghId }: { r: Report; month: string; admin: b
         <h2 id="dl-h">Print and download</h2>
         <div className="quick stacked">
           {cardClass && <Link href={`/admin/reports/cards?class=${cardClass}&month=${month}`}><Icon.print />Report cards for {r.classes.find((c) => c.id === cardClass)?.name}</Link>}
-          {admin && <a href={`/api/admin/reports/csv?s=${sanghId}`} download><Icon.download />Member list (Excel)</a>}
+          {admin && <a href={`/api/admin/reports/excel?s=${sanghId}`} download><Icon.download />Download Excel report</a>}
         </div>
-        {admin && <p className="hint">The member list has phone numbers. Keep the file safe and delete it when you&apos;re done.</p>}
+        {admin && <p className="hint">It has members, their phone numbers, attendance with gathas, and niyams for the last 30 days. Keep the file safe and delete it when you&apos;re done.</p>}
       </section>
     </>
   );

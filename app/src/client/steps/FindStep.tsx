@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
+import { useBack } from "../back";
 import { api, say } from "../api";
 import { Button, CityLine, Chevron, Msg, SanghLogo, Title } from "../ui";
 import { JOIN_CODE_LENGTH, normalizeJoinCode } from "@/lib/join-code";
@@ -15,6 +16,7 @@ export function FindStep({ initialCode, onFound }: { initialCode?: string; onFou
   const [code, setCode] = useState((initialCode ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, JOIN_CODE_LENGTH));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Words | null>(null);
+  useBack(() => setMode("code"), mode !== "code");
   const tried = useRef<string | null>(null);
 
   async function lookup(raw: string) {

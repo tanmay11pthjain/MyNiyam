@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useBack } from "./back";
 import { api, say } from "./api";
 import { applyPatch, NiyamCard, type LogPatch } from "./NiyamCard";
 import { dayLabel } from "./TodayTab";
@@ -148,6 +149,8 @@ function DayDialog({ date, onClose, onChanged }: { date: string; onClose: () => 
       onChanged();
     });
   }
+
+  useBack(() => ref.current?.close());
 
   return (
     <dialog ref={ref} className="sheet" aria-labelledby="day-title" onClose={onClose} onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }}>

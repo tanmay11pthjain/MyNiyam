@@ -196,7 +196,7 @@ export async function getNiyamStats(accountId: string, profileId: string): Promi
   });
 }
 
-/** Up to 3 slides for this person's class showing today, pinned first, then the admin's order. */
+/** Up to 6 slides for this person's class showing today, pinned first, then the admin's order. */
 export async function announcementsFor(tx: Tx, profileId: string, prof: Prof): Promise<AnnouncementCard[]> {
   const rows = await tx`
     select an.id, an.title, an.body, an.image_url, an.button_label, an.button_url, an.pinned,
@@ -209,7 +209,7 @@ export async function announcementsFor(tx: Tx, profileId: string, prof: Prof): P
       and (an.end_date is null or an.end_date >= private.local_today())
       and (an.all_classes or exists (select 1 from public.announcement_classes ac where ac.announcement_id = an.id and ac.class_id = ${prof.classId}))
     order by an.pinned desc, an.sort_order, an.created_at desc
-    limit 3`;
+    limit 6`;
   return rows.map((r) => ({
     id: r.id, title: r.title, body: r.body, imageUrl: r.image_url, buttonLabel: r.button_label, buttonUrl: r.button_url,
     pinned: r.pinned, seen: r.seen,
@@ -234,7 +234,7 @@ export async function getToday(accountId: string, profileId: string): Promise<To
     const p = await progress(tx, profileId);
     const newBadges = await awardBadges(tx, profileId, prof.classId, p);
     return {
-      today: t, announcements: await announcementsFor(tx, profileId, prof), streak: p.streak, streakAlive: p.streak > 0, progress: p,
+      today: t, streak: p.streak, streakAlive: p.streak > 0, progress: p,
       vows: await vowsFor(tx, profileId), newBadges,
     };
   });

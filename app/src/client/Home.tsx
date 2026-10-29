@@ -12,6 +12,7 @@ import { clearOfflineData, readCopy, registerServiceWorker, saveCopy } from "./o
 import { TodayTab } from "./TodayTab";
 import { SanghTab } from "./SanghTab";
 import { Reminders } from "./Reminders";
+import { useBack } from "./back";
 import { watchErrors } from "./errors";
 import { Button, Frame, goToLanding } from "./ui";
 import type { Me, Profile } from "@/lib/api-types";
@@ -44,6 +45,7 @@ export function Home() {
   const [me, setMe] = useState<Me | null>(null);
   const [err, setErr] = useState<{ en: string; hi: string } | null>(null);
   const [tab, setTab] = useState<Tab>("today");
+  useBack(() => { setTab("today"); window.scrollTo(0, 0); }, tab !== "today");
 
   useEffect(() => {
     registerServiceWorker();

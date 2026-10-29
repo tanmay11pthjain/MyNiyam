@@ -322,17 +322,16 @@ button.nc-row:active { transform: scale(.99); }
 .ann-track { display: flex; gap: var(--s-3); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
 .ann-track::-webkit-scrollbar { display: none; }
 .ann-slide { flex: 0 0 100%; scroll-snap-align: start; background: var(--bg-2); border-radius: var(--r-l); box-shadow: var(--shadow-1); overflow: hidden; display: flex; flex-direction: column; }
-.ann-img { width: 100%; height: 132px; object-fit: cover; display: block; background: var(--bg-3); }
+.ann-img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: var(--bg-3); }
+.ann-img.blank { display: grid; place-items: center; padding: var(--s-4); text-align: center; font: 700 var(--fs-22)/1.25 var(--font-display); color: #fff; background: linear-gradient(135deg, var(--accent), #b4532a); }
 .ann-text { display: grid; gap: var(--s-2); padding: var(--s-4); }
 .ann-title { font: 700 var(--fs-18)/1.3 var(--font-display); }
 .ann-title .pill { vertical-align: middle; margin-right: var(--s-1); }
 .ann-body { font-size: var(--fs-16); color: var(--ink-dim); }
 .ann-btn { min-height: 48px; font-size: var(--fs-16); }
-.ann-line { display: flex; align-items: center; gap: var(--s-3); width: 100%; min-height: 52px; padding: 0 var(--s-4); border: 0; background: none; color: var(--ink); font: 600 var(--fs-16)/1.3 var(--font-body); text-align: left; cursor: pointer; }
-.ann-line .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ann-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; }
-.ann-dots { display: flex; justify-content: center; gap: 6px; }
-.ann-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
+.ann-dots { display: flex; justify-content: center; }
+.ann-dots button { border: 0; background: none; padding: 8px 4px; cursor: pointer; display: grid; place-items: center; }
+.ann-dots i { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
 .ann-dots i.on { background: var(--accent); width: 16px; border-radius: 3px; }
 
 /* Attendance on History */

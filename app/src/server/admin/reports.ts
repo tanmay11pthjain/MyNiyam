@@ -2,6 +2,7 @@ import "server-only";
 import { asAdmin, type Tx } from "../db";
 import { formatPhone } from "@/lib/phone";
 import type { DashboardAlerts, Report, ReportCards } from "@/lib/admin-types";
+import type { SheetData } from "../xlsx";
 
 // Reports for admins and volunteers with "view_members". Row-level security limits a volunteer
 // to their own classes, so every query here simply reads what the caller may see.
@@ -80,31 +81,65 @@ export async function getReport(phone: string, sanghId: string, r: Range): Promi
   });
 }
 
-const csvCell = (v: unknown) => {
-  const s = v === null || v === undefined ? "" : String(v);
-  // Quote everything; a leading = + - @ could run as a formula in a spreadsheet, so prefix it.
-  return `"${(/^[=+\-@]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`;
-};
-const toCsv = (rows: unknown[][]) => "﻿" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+const short = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 
-/** Admins only (the route checks): every member with their class, number and last 30 days. */
-export async function membersCsv(phone: string, sanghId: string): Promise<string> {
+/** Admins only (the route checks): the Excel workbook. Members (with numbers), attendance and niyams, last 30 days. */
+export async function reportWorkbook(phone: string, sanghId: string): Promise<SheetData[]> {
   return asAdmin(phone, async (tx) => {
     const rows = await tx`
-      select p.name, c.name as class, a.phone, p.relation, (p.created_at at time zone 'Asia/Kolkata')::date::text as joined,
+      select p.id, p.name, c.name as class, a.phone, p.relation, (p.created_at at time zone 'Asia/Kolkata')::date::text as joined,
         (select max(l.log_date)::text from public.niyam_logs l where l.profile_id = p.id) as last_logged,
         (select count(distinct l.log_date)::int from public.niyam_logs l where l.profile_id = p.id and l.done and l.log_date > private.local_today() - 30) as days30,
-        (select count(*)::int from public.niyam_logs l where l.profile_id = p.id and l.done and l.log_date > private.local_today() - 30) as kept30,
-        (select round(100.0 * count(*) filter (where at.status <> 'absent') / nullif(count(*), 0))::int from public.attendance at
-          where at.profile_id = p.id and at.day > private.local_today() - 30
-            and not exists (select 1 from public.sangh_holidays h where h.sangh_id = at.sangh_id and h.day = at.day)) as att30
+        (select count(*)::int from public.niyam_logs l where l.profile_id = p.id and l.done and l.log_date > private.local_today() - 30) as kept30
       from public.profiles p join public.accounts a on a.id = p.account_id left join public.classes c on c.id = p.class_id
       where a.sangh_id = ${sanghId} and a.removed_at is null and p.removed_at is null
       order by c.sort_order nulls last, lower(p.name)`;
-    return toCsv([
-      ["Name", "Class", "Mobile", "Who", "Joined", "Last logged", "Days logged (30 days)", "Niyams kept (30 days)", "Attendance % (30 days)"],
-      ...rows.map((r) => [r.name, r.class ?? "", formatPhone(r.phone), r.relation === "self" ? "Self" : "Child", r.joined, r.last_logged ?? "", r.days30, r.kept30, r.att30 ?? ""]),
-    ]);
+    const marks = await tx<{ profile_id: string; day: string; status: "present" | "late" | "absent"; gathas: number }[]>`
+      select at.profile_id, at.day::text as day, at.status, at.gathas from public.attendance at
+      where at.sangh_id = ${sanghId} and at.day > private.local_today() - 30
+        and not exists (select 1 from public.sangh_holidays h where h.sangh_id = at.sangh_id and h.day = at.day)`;
+    const niyams = await tx<{ name: string; done: number; people: number }[]>`
+      select n.name, count(*)::int as done, count(distinct l.profile_id)::int as people
+      from public.niyam_logs l join public.niyams n on n.id = l.niyam_id
+      join public.profiles p on p.id = l.profile_id and p.removed_at is null
+      join public.accounts a on a.id = p.account_id and a.sangh_id = ${sanghId} and a.removed_at is null
+      where l.done and l.log_date > private.local_today() - 30
+      group by n.id, n.name order by done desc, n.name`;
+
+    const days = [...new Set(marks.map((m) => m.day))].sort();
+    const per = new Map<string, Map<string, { status: string; gathas: number }>>();
+    for (const m of marks) {
+      if (!per.has(m.profile_id)) per.set(m.profile_id, new Map());
+      per.get(m.profile_id)!.set(m.day, m);
+    }
+    const LETTER = { present: "P", late: "L", absent: "A" } as Record<string, string>;
+    const totals = (id: string) => {
+      const t = { present: 0, late: 0, absent: 0, gathas: 0 };
+      for (const m of per.get(id)?.values() ?? []) { t[m.status as "present"]++; t.gathas += m.gathas; }
+      const n = t.present + t.late + t.absent;
+      return { ...t, pct: n ? Math.round(((t.present + t.late) / n) * 100) : null };
+    };
+
+    return [
+      {
+        name: "Members", widths: [24, 16, 16, 8, 12, 12, 12, 12, 12, 10],
+        rows: [
+          ["Name", "Class", "Mobile", "Who", "Joined", "Last logged", "Days logged (30 days)", "Niyams kept (30 days)", "Attendance % (30 days)", "Gathas (30 days)"],
+          ...rows.map((r) => { const t = totals(r.id); return [r.name, r.class ?? "", formatPhone(r.phone), r.relation === "self" ? "Self" : "Child", r.joined, r.last_logged ?? "", r.days30, r.kept30, t.pct, t.gathas]; }),
+        ],
+      },
+      {
+        name: "Attendance", widths: [24, 16, ...days.map(() => 7), 9, 7, 9, 9, 9],
+        rows: [
+          ["Name", "Class", ...days.map(short), "Present", "Late", "Absent", "%", "Gathas"],
+          ...rows.filter((r) => per.has(r.id)).map((r) => {
+            const t = totals(r.id), mine = per.get(r.id)!;
+            return [r.name, r.class ?? "", ...days.map((d) => { const m = mine.get(d); return m ? LETTER[m.status] + (m.gathas ? ` ${m.gathas}` : "") : ""; }), t.present, t.late, t.absent, t.pct, t.gathas];
+          }),
+        ],
+      },
+      { name: "Niyams", widths: [30, 14, 10], rows: [["Niyam", "Times kept (30 days)", "People"], ...niyams.map((n) => [n.name, n.done, n.people])] },
+    ];
   });
 }
 

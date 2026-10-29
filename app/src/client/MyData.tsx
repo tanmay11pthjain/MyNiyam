@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useBack } from "./back";
 import { api, say } from "./api";
 import { clearOfflineData } from "./offline";
 import { Button } from "./ui";
@@ -42,6 +43,8 @@ function DeleteDialog({ phone, names, onClose }: { phone: string; names: string[
     if (r.ok) { clearOfflineData(); window.location.replace("/"); return; }
     setBusy(false); setCode(""); setErr(say(r.err));
   }
+
+  useBack(() => ref.current?.close());
 
   return (
     <dialog ref={ref} className="sheet" aria-labelledby="del-title" onClose={onClose} onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }}>

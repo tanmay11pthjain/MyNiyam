@@ -25,6 +25,7 @@ export const announcementInput = z.object({
   if (a.buttonUrl && !/^https:\/\/[^\s]+\.[^\s]+$/.test(a.buttonUrl)) bad("buttonUrl");
   if (a.startDate && a.endDate && a.startDate > a.endDate) bad("dates");
   if (!a.allClasses && a.classIds.length === 0) bad("classIds");
+  if (!a.imageUrl) bad("imageUrl"); // every slide has a wide (16:9) picture
 });
 export type AnnouncementBody = z.infer<typeof announcementInput>;
 

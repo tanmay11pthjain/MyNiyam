@@ -38,7 +38,7 @@ export type AdminClass = {
   id: string; name: string; nameHi: string | null; hidden: boolean; ageMin: number | null; ageMax: number | null;
   /** Days the class meets, 0 = Sunday ... 6 = Saturday; empty = not set. */
   meetsOn: number[]; members: number;
-  /** Members of this class see a weekly leaderboard of days kept (off by default). */
+  /** Members of this class see a weekly leaderboard of days kept (on by default). */
   leaderboard: boolean;
 };
 
@@ -119,14 +119,14 @@ export type AttendanceSheet = {
   classId: string | null; day: string; today: string; minDay: string;
   holiday: { note: string | null } | null;
   taken: boolean;
-  people: { id: string; name: string; status: "present" | "late" | "absent" | null }[];
+  people: { id: string; name: string; status: "present" | "late" | "absent" | null; gathas: number }[];
 };
 
 /** GET /api/admin/attendance/month: holidays are left out of every count. */
 export type AttendanceMonth = {
   classId: string; className: string; month: string;
   days: { day: string; came: number; total: number }[];
-  people: { id: string; name: string; present: number; late: number; absent: number; pct: number | null }[];
+  people: { id: string; name: string; present: number; late: number; absent: number; gathas: number; pct: number | null }[];
   holidays: { day: string; note: string | null }[];
 };
 
@@ -156,3 +156,13 @@ export type Goal = {
 export type GoalInput = Pick<Goal, "kind" | "title" | "titleHi" | "niyamId" | "target" | "days" | "startDate" | "endDate" | "allClasses" | "classIds">;
 /** GET /api/admin/goals */
 export type GoalsPage = { goals: Goal[]; niyams: { id: string; name: string; type: NiyamType }[]; classes: { id: string; name: string }[]; today: string };
+
+/** GET /api/admin/leaderboard: one class's week (Monday to Sunday), most days kept first. */
+export type AdminBoard = {
+  sangh: string;
+  classes: { id: string; name: string; on: boolean }[];
+  classId: string | null;
+  week: "this" | "last"; weekStart: string; weekEnd: string;
+  /** Names as members see them on the board; photoUrl is null for those who show only initials. */
+  rows: { rank: number; id: string; name: string; photoUrl: string | null; days: number }[];
+};

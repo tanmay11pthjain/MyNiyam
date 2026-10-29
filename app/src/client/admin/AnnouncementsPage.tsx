@@ -23,7 +23,7 @@ function when(a: Announcement): string {
   return "No end date";
 }
 
-/** Announcements: slides on members' Today screen. Members see at most 3 at a time, pinned first. */
+/** Announcements: picture slides on members' Sangh tab. Members see up to 6 at a time, pinned first. */
 export function AnnouncementsPage() {
   const { sangh } = useAdmin();
   const toast = useToast();
@@ -65,7 +65,7 @@ export function AnnouncementsPage() {
 
   return (
     <main className="page">
-      <div className="page-title"><h1 data-hi="घोषणाएँ">Announcements</h1><p>Shown on members&apos; Today screen, at most 3 at a time. The pinned one comes first.</p></div>
+      <div className="page-title"><h1 data-hi="घोषणाएँ">Announcements</h1><p>Picture slides on members&apos; Sangh tab, up to 6 at a time. The pinned one comes first.</p></div>
       <Button onClick={() => setEditing({ a: null, draft: { ...BLANK } })}><Icon.plus />New announcement</Button>
       {page.announcements.length === 0 && (
         <div className="notice"><b>No announcements yet</b><span>Post a notice, an event or a registration link, for everyone or for one class.</span></div>
@@ -93,6 +93,7 @@ function Editor({ a, initial, page, onClose, onSaved }: {
 
   function problem(): string | null {
     if (!f.title.trim()) return "Write a title.";
+    if (!f.imageUrl) return "Add a picture. Every announcement needs one.";
     if (hasButton && (!f.buttonLabel?.trim() || !f.buttonUrl?.trim())) return "Write both the button's words and its link, or remove the button.";
     if (hasButton && !/^https:\/\/\S+\.\S+$/.test(f.buttonUrl!.trim())) return "The link must start with https://";
     if (f.startDate && f.endDate && f.startDate > f.endDate) return "The end date is before the start date.";
@@ -116,7 +117,7 @@ function Editor({ a, initial, page, onClose, onSaved }: {
     if (!file) return;
     setUploading(true); setErr(null);
     try {
-      const r = await upload<{ imageUrl: string }>("/api/admin/announcements/image", await shrinkImage(file, 1024));
+      const r = await upload<{ imageUrl: string }>("/api/admin/announcements/image", await shrinkImage(file, 1280, 16 / 9));
       if (r.ok) up({ imageUrl: r.data.imageUrl }); else setErr(sayAdmin(r.err));
     } catch {
       setErr("That picture couldn't be read. Try another one.");
@@ -127,7 +128,7 @@ function Editor({ a, initial, page, onClose, onSaved }: {
   if (del && a) {
     return (
       <Confirm title="Delete this announcement?" action="Delete" onClose={() => setDel(false)}
-        body={<p>&ldquo;{a.title}&rdquo; disappears from members&apos; Today screen.</p>}
+        body={<p>&ldquo;{a.title}&rdquo; disappears from members&apos; Sangh tab.</p>}
         onConfirm={async () => {
           const r = await api<{ announcements: Announcement[] }>(`/api/admin/announcements/${a.id}`, { method: "DELETE", body: {} });
           if (!r.ok) return sayAdmin(r.err);
@@ -146,18 +147,13 @@ function Editor({ a, initial, page, onClose, onSaved }: {
           <textarea id="ab" className="input" rows={3} value={f.body ?? ""} maxLength={200} onChange={(e) => up({ body: e.target.value || null })} /></div>
 
         <div className="field">
-          <span className="label">Picture <span className="opt">(optional)</span></span>
-          {f.imageUrl ? (
-            <div className="stack">
-              <img src={f.imageUrl} alt="" style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: "var(--r-m)" }} />
-              <Button kind="quiet" onClick={() => up({ imageUrl: null })}>Remove picture</Button>
-            </div>
-          ) : (
-            <label className="btn btn-secondary" style={{ cursor: "pointer" }}>
-              {uploading ? "Uploading…" : "Add a picture"}
-              <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={uploading} onChange={(e) => void pick(e.target.files?.[0])} />
-            </label>
-          )}
+          <span className="label">Picture</span>
+          <span className="hint">A wide picture (16:9). We trim it to fit.</span>
+          {f.imageUrl && <img src={f.imageUrl} alt="" style={{ width: "100%", aspectRatio: "16 / 9", objectFit: "cover", borderRadius: "var(--r-m)" }} />}
+          <label className={`btn btn-${f.imageUrl ? "quiet" : "secondary"}`} style={{ cursor: "pointer" }}>
+            {uploading ? "Uploading…" : f.imageUrl ? "Change picture" : "Add a picture"}
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={uploading} onChange={(e) => void pick(e.target.files?.[0])} />
+          </label>
         </div>
 
         <Switch label="Add a button" sub="For example a registration form link." checked={hasButton}

@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, type ReactNode } from "react";
+import { useBack } from "./back";
 
 // Small shared pieces of the onboarding screens.
 
 export function Frame({ onBack, backLabel = "Back", lamps, right, children }: {
   onBack?: () => void; backLabel?: string; lamps?: { total: number; lit: number }; right?: ReactNode; children: ReactNode;
 }) {
+  useBack(onBack);
   return (
     <div className="frame">
       <header className="bar">

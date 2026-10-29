@@ -25,6 +25,7 @@ export const Icon = {
   form: () => <S><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></S>,
   layers: () => <S><path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" /></S>,
   megaphone: () => <S><path d="M3 10v4a1 1 0 0 0 1 1h3l6 4V5L7 9H4a1 1 0 0 0-1 1z" /><path d="M17 8.5a5 5 0 0 1 0 7" /></S>,
+  trophy: () => <S><path d="M8 4h8v5a4 4 0 0 1-8 0V4z" /><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4" /><path d="M12 13v4M8 21h8M9 21v-2h6v2" /></S>,
   shield: () => <S><path d="M12 3l8 3v6c0 4.6-3.4 8.2-8 9-4.6-.8-8-4.4-8-9V6l8-3z" /><path d="M9 12l2 2 4-4" /></S>,
 };
 

@@ -1,5 +1,6 @@
 // P3: vows, badges and the Sangh feed, Anumodana, goals and challenges, the class leaderboard,
 // streak repair and reminders. Checked where the rules live: the server and the database.
+import { getBoard } from "@/server/admin/leaderboard";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const pushed = vi.hoisted(() => [] as { endpoint: string; body: string }[]);
@@ -196,11 +197,13 @@ describe("goals and challenges", () => {
 });
 
 describe("class leaderboard", () => {
-  it("is off until the admin turns it on; ranks days kept this week, with initials if chosen", async () => {
+  it("is on by default and can be turned off; ranks days kept this week, with initials if chosen", async () => {
     const c = cls[1];
     const a = await member("Top Kid", c), b = await member("Second Kid", c);
     await logLocalWeek(a.profileId, 2);
     await logLocalWeek(b.profileId, 1);
+    expect((await getSanghTab(a.accountId, a.profileId))!.board).not.toBeNull();
+    await updateClass(admin, heer, c, { leaderboard: false });
     expect((await getSanghTab(a.accountId, a.profileId))!.board).toBeNull();
     await updateClass(admin, heer, c, { leaderboard: true });
     await setSharePrefs(b.accountId, b.profileId, { boardInitials: true });
@@ -208,7 +211,11 @@ describe("class leaderboard", () => {
     expect(board.rows[0].days).toBeGreaterThanOrEqual(board.rows[board.rows.length - 1].days);
     expect(board.rows.some((r) => r.name === "Top K.")).toBe(true);
     expect(board.me).toMatchObject({ name: "S. K.", me: true });
-    await updateClass(admin, heer, c, { leaderboard: false });
+    // The admin's view (for the top-3 poster): same names, no photo for someone showing initials.
+    const ab = (await getBoard(admin, heer, c, "this"))!;
+    expect(ab.rows[0]).toMatchObject({ rank: 1 });
+    expect(ab.rows.find((r) => r.name === "S. K.")).toMatchObject({ photoUrl: null });
+    expect((await getBoard(admin, heer, c, "last"))!.weekEnd < ab.weekStart).toBe(true);
   });
 });
 

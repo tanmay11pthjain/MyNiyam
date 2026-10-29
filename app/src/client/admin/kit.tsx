@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, type Result } from "../api";
 import { Button } from "../ui";
+import { useBack } from "../back";
 import type { ApiError } from "@/lib/api-types";
 
 // Small shared pieces of the admin screens. English only for now (Hindi admin labels are P2).
@@ -94,6 +95,7 @@ export function ToastHost({ children }: { children: ReactNode }) {
 // ---------------------------------------------------------------------------
 export function Sheet({ title, danger, onClose, children }: { title: string; danger?: boolean; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
+  useBack(onClose);
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     ref.current?.querySelector<HTMLElement>("input, select, textarea, button:not([data-close])")?.focus();

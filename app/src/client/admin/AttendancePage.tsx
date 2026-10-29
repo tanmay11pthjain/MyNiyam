@@ -65,6 +65,7 @@ function DayView({ s, onDay, onSaved, admin }: { s: AttendanceSheet; onDay: (d: 
   const cls = s.classes.find((c) => c.id === s.classId)!;
   // Not taken yet: everyone starts as present, so the teacher only taps the few who aren't.
   const [marks, setMarks] = useState<Record<string, Status>>(() => Object.fromEntries(s.people.map((p) => [p.id, p.status ?? "present"])));
+  const [gathas, setGathas] = useState<Record<string, number>>(() => Object.fromEntries(s.people.map((p) => [p.id, p.gathas])));
   const [dirty, setDirty] = useState(!s.taken);
   const [busy, setBusy] = useState(false);
   const [holiday, setHoliday] = useState(false);
@@ -75,7 +76,7 @@ function DayView({ s, onDay, onSaved, admin }: { s: AttendanceSheet; onDay: (d: 
 
   async function save() {
     setBusy(true);
-    const r = await api<AttendanceSheet>("/api/admin/attendance", { method: "PUT", body: { classId: s.classId, day: s.day, marks: s.people.map((p) => ({ profileId: p.id, status: marks[p.id] })) } });
+    const r = await api<AttendanceSheet>("/api/admin/attendance", { method: "PUT", body: { classId: s.classId, day: s.day, marks: s.people.map((p) => ({ profileId: p.id, status: marks[p.id], gathas: gathas[p.id] ?? 0 })) } });
     setBusy(false);
     if (r.ok) { onSaved(r.data); setDirty(false); toast(`Saved: ${counts.present + counts.late} of ${s.people.length} came`); } else toast(sayAdmin(r.err));
   }
@@ -104,16 +105,26 @@ function DayView({ s, onDay, onSaved, admin }: { s: AttendanceSheet; onDay: (d: 
             <div className="notice"><b>No one in {cls.name} yet</b><span>Members appear here once they join this class.</span></div>
           ) : (
             <>
-              <p className="att-sum" aria-live="polite"><b>{counts.present}</b> present · <b>{counts.absent}</b> absent · <b>{counts.late}</b> late</p>
-              <p className="hint">Tap a name to change it: present, absent, late.</p>
+              <p className="att-sum" aria-live="polite"><b>{counts.present}</b> present · <b>{counts.absent}</b> absent · <b>{counts.late}</b> late · <b>{s.people.reduce((a, p) => a + (marks[p.id] === "absent" ? 0 : gathas[p.id] ?? 0), 0)}</b> gathas</p>
+              <p className="hint">Tap a name to change it: present, absent, late. Use − and + to count the gathas each person said.</p>
               <div className="list">
-                {s.people.map((p) => (
-                  <button key={p.id} type="button" className="row att-row" aria-label={`${p.name}: ${WORD[marks[p.id]]}. Tap to change.`}
-                    onClick={() => { setMarks((m) => ({ ...m, [p.id]: NEXT[m[p.id]] })); setDirty(true); }}>
-                    <span className="grow"><span className="t">{p.name}</span></span>
-                    <span className={`att-pill ${marks[p.id]}`}>{WORD[marks[p.id]]}</span>
-                  </button>
-                ))}
+                {s.people.map((p) => {
+                  const tap = () => { setMarks((m) => ({ ...m, [p.id]: NEXT[m[p.id]] })); setDirty(true); };
+                  const g = gathas[p.id] ?? 0;
+                  const setG = (n: number) => { setGathas((x) => ({ ...x, [p.id]: Math.max(0, Math.min(999, n)) })); setDirty(true); };
+                  const away = marks[p.id] === "absent";
+                  return (
+                    <div key={p.id} className="row att-row">
+                      <button type="button" className="grow att-name" onClick={tap} aria-label={`${p.name}: ${WORD[marks[p.id]]}. Tap to change.`}><span className="t">{p.name}</span></button>
+                      <span className="gatha" role="group" aria-label={`Gathas for ${p.name}`}>
+                        <button type="button" aria-label="One less gatha" disabled={away || g === 0} onClick={() => setG(g - 1)}>−</button>
+                        <span className="n"><b>{away ? "–" : g}</b><small>Gatha</small></span>
+                        <button type="button" aria-label="One more gatha" disabled={away} onClick={() => setG(g + 1)}>+</button>
+                      </span>
+                      <button type="button" className={`att-pill ${marks[p.id]}`} onClick={tap} aria-hidden="true" tabIndex={-1}>{WORD[marks[p.id]]}</button>
+                    </div>
+                  );
+                })}
               </div>
               {dirty || !s.taken
                 ? <Button busy={busy} onClick={() => void save()}>{busy ? "Saving…" : s.taken ? "Save changes" : "Save attendance"}</Button>
@@ -184,7 +195,7 @@ function MonthView({ classId, sanghId, today }: { classId: string; sanghId: stri
               <div key={p.id} className="row" style={{ cursor: "default" }}>
                 <span className="grow">
                   <span className="t">{p.name}</span>
-                  <span className="s">{p.present + p.late} of {p.present + p.late + p.absent} came{p.late ? ` · ${p.late} late` : ""}</span>
+                  <span className="s">{p.present + p.late} of {p.present + p.late + p.absent} came{p.late ? ` · ${p.late} late` : ""}{p.gathas ? ` · ${p.gathas} ${p.gathas === 1 ? "gatha" : "gathas"}` : ""}</span>
                 </span>
                 <span className={`att-pct${p.pct !== null && p.pct < 60 ? " low" : ""}`}>{p.pct === null ? "–" : `${p.pct}%`}</span>
               </div>

@@ -24,7 +24,7 @@ export function useAdmin(): AdminState {
 export const canFor = (sangh: AdminSangh | null): Can => (p) => !!sangh && (sangh.role === "admin" || (p !== "admin" && sangh.perms.includes(p)));
 
 const TABS: { href: string; label: string; hi?: string; icon: () => ReactNode; match: (p: string) => boolean; show: (can: Can) => boolean }[] = [
-  { href: "/admin", label: "Home", hi: "मुख्य", icon: Icon.home, match: (p: string) => p === "/admin" || p.startsWith("/admin/announcements") || p.startsWith("/admin/reports") || p.startsWith("/admin/goals"), show: () => true },
+  { href: "/admin", label: "Home", hi: "मुख्य", icon: Icon.home, match: (p: string) => p === "/admin" || ["/admin/announcements", "/admin/reports", "/admin/goals", "/admin/leaderboard"].some((x) => p.startsWith(x)), show: () => true },
   { href: "/admin/members", label: "Members", hi: "सदस्य", icon: Icon.people, match: (p: string) => p.startsWith("/admin/members"), show: (can) => can("view_members") },
   { href: "/admin/attendance", label: "Attendance", hi: "हाज़िरी", icon: Icon.roll, match: (p: string) => p.startsWith("/admin/attendance"), show: (can) => can("attendance") },
   { href: "/admin/niyams", label: "Niyams", hi: "नियम", icon: Icon.niyam, match: (p: string) => p.startsWith("/admin/niyams"), show: (can) => can("niyams") },
@@ -95,6 +95,7 @@ function Chrome({ path, me, sangh, onChanged, noTabs, children }: {
   path: string; me: AdminMe; sangh: AdminSangh | null; onChanged: (m: AdminMe) => void; noTabs?: boolean; children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuAt, setMenuAt] = useState<string | null>(null); // the menu closes by itself when a page opens
   const [scrolled, setScrolled] = useState(false);
   const wide = path.startsWith("/admin/form");
   useEffect(() => {
@@ -114,6 +115,11 @@ function Chrome({ path, me, sangh, onChanged, noTabs, children }: {
           </span>
           <Chevron />
         </button>
+        {!noTabs && sangh && (
+          <button type="button" className="menu-btn" onClick={() => setMenuAt(path)} aria-haspopup="dialog" aria-label="Menu: all features">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
+        )}
       </header>
       {children}
       {!noTabs && (
@@ -125,8 +131,56 @@ function Chrome({ path, me, sangh, onChanged, noTabs, children }: {
           </nav>
         </div>
       )}
+      {menuAt === path && sangh && <MenuSheet me={me} can={canFor(sangh)} path={path} onClose={() => setMenuAt(null)} />}
       {open && <SwitchSheet me={me} onClose={() => setOpen(false)} onChanged={(m) => { onChanged(m); setOpen(false); }} />}
     </div>
+  );
+}
+
+/** The top-right menu: every feature, in plain words, one tap away. Shows only what this phone may do. */
+function MenuSheet({ me, can, path, onClose }: { me: AdminMe; can: Can; path: string; onClose: () => void }) {
+  const groups: { h: string; items: { href: string; icon: () => ReactNode; t: string; show: boolean }[] }[] = [
+    { h: "Every day", items: [
+      { href: "/admin", icon: Icon.home, t: "Home", show: true },
+      { href: "/admin/attendance", icon: Icon.roll, t: "Take attendance", show: can("attendance") },
+      { href: "/admin/members", icon: Icon.people, t: "Members", show: can("view_members") },
+      { href: "/admin/announcements", icon: Icon.megaphone, t: "Announcements", show: can("announcements") },
+      { href: "/admin/leaderboard", icon: Icon.trophy, t: "Leaderboard and poster", show: can("view_members") },
+    ] },
+    { h: "Niyams and progress", items: [
+      { href: "/admin/niyams", icon: Icon.niyam, t: "Niyams", show: can("niyams") },
+      { href: "/admin/goals", icon: Icon.layers, t: "Goals and challenges", show: can("niyams") },
+      { href: "/admin/reports", icon: Icon.download, t: "Reports and Excel", show: can("view_members") },
+    ] },
+    { h: "Setup", items: [
+      { href: "/admin/sangh", icon: Icon.qr, t: "Pathshala and join code", show: can("admin") },
+      { href: "/admin/classes", icon: Icon.layers, t: "Classes", show: can("setup") },
+      { href: "/admin/form", icon: Icon.form, t: "Join form", show: can("setup") },
+      { href: "/admin/volunteers", icon: Icon.people, t: "Volunteers and teachers", show: can("admin") },
+      { href: "/admin/setup", icon: Icon.setup, t: "All settings", show: true },
+      { href: "/admin/super", icon: Icon.shield, t: "Super admin", show: me.isSuper },
+    ] },
+  ];
+  return (
+    <Sheet title="Menu" onClose={onClose}>
+      <nav className="menu" aria-label="All features">
+        {groups.map((gr) => {
+          const items = gr.items.filter((i) => i.show);
+          return items.length ? (
+            <div key={gr.h}>
+              <h3>{gr.h}</h3>
+              <div className="list">
+                {items.map((i) => (
+                  <Link key={i.href} className="row" href={i.href} onClick={path === i.href ? onClose : undefined} aria-current={path === i.href || undefined}>
+                    <span className="niyam-icon"><i.icon /></span><span className="grow"><span className="t">{i.t}</span></span><Chevron />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ) : null;
+        })}
+      </nav>
+    </Sheet>
   );
 }
 

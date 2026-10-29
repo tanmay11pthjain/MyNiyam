@@ -5,6 +5,8 @@ Short and in order. Start at the top.
 1. **Is the site up?** Open https://myniyam.vercel.app/healthz.
    - `"ok":true` means the app and database are fine. Read the other lines: anything that says
      `MISSING` is a setting to add in Vercel (Settings > Environment Variables), then Redeploy.
+   - `"schema"` says `BEHIND`: the app is newer than the database, so most screens show "Something went
+     wrong on our side". Run `npm run db:migrate` against Supabase (SETUP.md, top of the file).
    - `"db":"down"` or no answer: check Supabase (project paused? over the free limit?) and Vercel
      (Deployments: is the latest one Ready?).
 2. **A bad deploy.** In Vercel > Deployments, open the last good one and choose "Promote to
