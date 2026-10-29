@@ -78,10 +78,7 @@ export async function progress(tx: Tx, profileId: string): Promise<Progress & { 
     from public.streak_repairs where profile_id = ${profileId}`;
   const [t] = await tx<{ today: string; tej: number; tej_today: number }[]>`
     with pts as (
-      select l.log_date, case
-        when n.type in ('count', 'duration') then least(greatest(coalesce(l.value, 1), 1), 10) * n.points
-        when n.type = 'choice' then coalesce((select (o ->> 'points')::int from jsonb_array_elements(n.options) o where o ->> 'value' = l.choice), n.points)
-        else n.points end as p
+      select l.log_date, private.log_tej(n.type, n.points, n.options, l.value, l.choice) as p
       from public.niyam_logs l join public.niyams n on n.id = l.niyam_id
       where l.profile_id = ${profileId} and l.done)
     select private.local_today()::text as today, coalesce(sum(p), 0)::int as tej,

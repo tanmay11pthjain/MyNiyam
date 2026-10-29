@@ -293,11 +293,9 @@ function NiyamEditor({ editing, classes, onClose, onSaved }: {
             </div>
           )}
           <div className="field">
-            <span className="label">Tej for keeping it</span>
-            <div className="chips">
-              {[0, 5, 10, 20, 50].map((v) => <button key={v} type="button" className="chip" aria-pressed={f.points === v} onClick={() => set({ points: v })}>{v === 0 ? "None" : `${v} Tej`}</button>)}
-            </div>
-            <p className="hint">{f.type === "count" || f.type === "duration" ? `${f.points} Tej for each ${f.type === "count" ? "count" : "minute"}, up to 10 a day.` : "Members earn Tej points each time they keep it."}</p>
+            <label className="label" htmlFor="ntej">Tej points for keeping it</label>
+            <PointsInput id="ntej" value={f.points} onChange={(points) => set({ points })} />
+            <p className="hint">{f.type === "count" || f.type === "duration" ? `${f.points} Tej for each ${f.type === "count" ? "count" : "minute"}, up to 10 a day.` : "Members earn these Tej points each time they keep it."} Any number from 0 (no Tej) to 100.</p>
           </div>
           <Switch label="Counts in daily progress" sub={f.isCore ? "A core niyam." : "Optional: members can log it, but it doesn't count."} checked={f.isCore} onChange={(v) => set({ isCore: v })} />
         </div>
@@ -380,5 +378,23 @@ function CopySheet({ classes, onClose, onDone }: { classes: { id: string; name: 
         <Button type="submit" busy={busy}>{busy ? "Copying…" : "Copy niyams"}</Button>
       </form>
     </Sheet>
+  );
+}
+
+/** A whole number from 0 to 100. Empty while typing; an empty box counts as 0 when you leave it. */
+function PointsInput({ id, value, onChange }: { id: string; value: number; onChange: (v: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  return (
+    <div className="points-input">
+      <input id={id} className="input input-sm" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={3} value={draft}
+        onChange={(e) => {
+          const d = e.target.value.replace(/\D/g, "").slice(0, 3);
+          const n = d === "" ? 0 : Math.min(100, Number(d));
+          setDraft(d === "" ? "" : String(n));
+          onChange(n);
+        }}
+        onBlur={() => setDraft(String(value))} />
+      <span>Tej</span>
+    </div>
   );
 }

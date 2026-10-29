@@ -81,7 +81,8 @@ export type GoalCard = {
 /** A milestone post in the feed. myMsg: the Anumodana this person sent (index into the presets), if any. */
 export type FeedPost = { id: number; badge: string; en: string; hi: string; mark: string; name: string; mine: boolean; at: string; count: number; myMsg: number | null };
 
-export type BoardRow = { rank: number; name: string; days: number; me: boolean };
+/** Tej earned this week (Monday onwards); days kept break a tie. */
+export type BoardRow = { rank: number; name: string; points: number; days: number; me: boolean };
 
 /** GET /api/sangh: the Sangh tab. board: null when the class has no leaderboard. */
 export type SanghTabResponse = {

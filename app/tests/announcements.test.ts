@@ -40,8 +40,7 @@ describe("announcements", () => {
     expect(announcementInput.safeParse({ title: "x", buttonLabel: "Go" }).success).toBe(false);
     expect(announcementInput.safeParse({ title: "x", buttonLabel: "Go", buttonUrl: "http://a.in" }).success).toBe(false);
     expect(announcementInput.safeParse({ title: "x", startDate: "2026-10-10", endDate: "2026-10-01" }).success).toBe(false);
-    expect(announcementInput.safeParse({ title: "x" }).success).toBe(false); // a picture is required
-    expect(slide({ title: "x" }).imageUrl).toBeTruthy();
+    expect(announcementInput.safeParse({ title: "x" }).success).toBe(true); // a picture is optional
   });
 
   it("shows members their class's live slides on the Sangh tab, pinned first; counts views", async () => {

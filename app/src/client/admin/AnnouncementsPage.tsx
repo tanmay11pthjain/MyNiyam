@@ -93,7 +93,6 @@ function Editor({ a, initial, page, onClose, onSaved }: {
 
   function problem(): string | null {
     if (!f.title.trim()) return "Write a title.";
-    if (!f.imageUrl) return "Add a picture. Every announcement needs one.";
     if (hasButton && (!f.buttonLabel?.trim() || !f.buttonUrl?.trim())) return "Write both the button's words and its link, or remove the button.";
     if (hasButton && !/^https:\/\/\S+\.\S+$/.test(f.buttonUrl!.trim())) return "The link must start with https://";
     if (f.startDate && f.endDate && f.startDate > f.endDate) return "The end date is before the start date.";
@@ -147,13 +146,14 @@ function Editor({ a, initial, page, onClose, onSaved }: {
           <textarea id="ab" className="input" rows={3} value={f.body ?? ""} maxLength={200} onChange={(e) => up({ body: e.target.value || null })} /></div>
 
         <div className="field">
-          <span className="label">Picture</span>
-          <span className="hint">A wide picture (16:9). We trim it to fit.</span>
+          <span className="label">Picture <span className="opt">(optional)</span></span>
+          <span className="hint">A wide picture (16:9) works best. We trim it to fit. Without one, the title shows on a saffron card.</span>
           {f.imageUrl && <img src={f.imageUrl} alt="" style={{ width: "100%", aspectRatio: "16 / 9", objectFit: "cover", borderRadius: "var(--r-m)" }} />}
           <label className={`btn btn-${f.imageUrl ? "quiet" : "secondary"}`} style={{ cursor: "pointer" }}>
             {uploading ? "Uploading…" : f.imageUrl ? "Change picture" : "Add a picture"}
             <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={uploading} onChange={(e) => void pick(e.target.files?.[0])} />
           </label>
+          {f.imageUrl && <Button kind="quiet" onClick={() => up({ imageUrl: null })}>Remove picture</Button>}
         </div>
 
         <Switch label="Add a button" sub="For example a registration form link." checked={hasButton}

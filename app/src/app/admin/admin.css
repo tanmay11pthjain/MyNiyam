@@ -259,3 +259,8 @@ textarea.input { min-height: 88px; padding: var(--s-3) var(--s-4); resize: verti
 .tab-hi { display: none; }
 html.admin-hi .tab-hi { display: block; font: 500 10px var(--font-body); }
 html.admin-hi .page-title h1[data-hi]::after { content: attr(data-hi); display: block; font: 600 var(--fs-16) var(--font-body); color: var(--ink-dim); margin-top: 2px; }
+.points-input { display: flex; align-items: center; gap: var(--s-2); }
+.points-input .input { width: 96px; text-align: center; font-size: var(--fs-18); font-weight: 700; }
+.points-input span { font-weight: 700; color: var(--ink-dim); }
+.date-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
+.date-pair .input { min-width: 0; }

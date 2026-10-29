@@ -167,7 +167,7 @@ function BadgesCard() {
       <div className="list">
         <Switch label="Show my milestones to my pathshala" sub="Others in your pathshala see “Riya S. reached a 21-day streak” and can send Anumodana."
           checked={d.prefs.shareMilestones} busy={busy} onChange={(v) => void set({ shareMilestones: v })} />
-        <Switch label="Only my initials on the class board" sub="If your class has a weekly board, it shows “R. S.” instead of your name."
+        <Switch label="Only my initials on the class board" sub="Your class's weekly Tej board, and the top-3 poster, show “R. S.” instead of your name and photo."
           checked={d.prefs.boardInitials} busy={busy} onChange={(v) => void set({ boardInitials: v })} />
       </div>
     </section>

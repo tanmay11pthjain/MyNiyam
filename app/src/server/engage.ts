@@ -74,14 +74,14 @@ export async function getSanghTab(accountId: string, profileId: string): Promise
       order by (private.local_today() > g.end_date), g.end_date
       limit 10`;
 
-    const board = await tx<{ rank: number; name: string; days: number; me: boolean }[]>`select * from public.class_board(${profileId})`;
+    const board = await tx<{ rank: number; name: string; points: number; days: number; me: boolean }[]>`select * from public.class_board(${profileId})`;
     const [cls] = prof.classId ? await tx<{ name: string; leaderboard: boolean }[]>`select name, leaderboard from public.classes where id = ${prof.classId}` : [];
 
     const feedRows = await tx<{ id: string; badge: string; earned_at: Date; name: string; mine: boolean; count: number; my_msg: number | null }[]>`
       select * from public.sangh_feed(${profileId})`;
     const titles = await challengeTitles(tx, feedRows.map((r) => r.badge));
 
-    const rows: BoardRow[] = board.map((r) => ({ rank: r.rank, name: r.name, days: r.days, me: r.me }));
+    const rows: BoardRow[] = board.map((r) => ({ rank: r.rank, name: r.name, points: r.points, days: r.days, me: r.me }));
     const feed: FeedPost[] = feedRows.map((r) => {
       const b = badgeInfo(r.badge, titles.get(r.badge));
       return { id: Number(r.id), badge: r.badge, en: b.en, hi: b.hi, mark: b.mark, name: r.name, mine: r.mine, at: new Date(r.earned_at).toISOString(), count: r.count, myMsg: r.my_msg };
@@ -94,8 +94,8 @@ export async function getSanghTab(accountId: string, profileId: string): Promise
       })),
       board: cls?.leaderboard ? {
         className: cls.name,
-        // The top 10 who kept at least one day, and where this person stands.
-        rows: rows.filter((r) => r.days > 0).slice(0, 10),
+        // The top 10 who earned Tej this week, and where this person stands.
+        rows: rows.filter((r) => r.points > 0).slice(0, 10),
         me: rows.find((r) => r.me) ?? null,
       } : null,
       feed,

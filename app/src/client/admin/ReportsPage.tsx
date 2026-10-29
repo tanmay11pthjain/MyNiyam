@@ -3,7 +3,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAdmin } from "./AdminApp";
 import { Icon } from "./icons";
-import { LoadError, Loading, useLoad } from "./kit";
+import { LoadError, Loading, Sheet, useLoad } from "./kit";
+import { DateRangePicker, presetRange, type Range } from "./DateRange";
 import type { Report } from "@/lib/admin-types";
 
 const short = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -40,6 +41,7 @@ export function ReportsPage() {
 }
 
 function Body({ r, month, admin, sanghId }: { r: Report; month: string; admin: boolean; sanghId: string }) {
+  const [excel, setExcel] = useState(false);
   const avg = r.trend.length ? Math.round(r.trend.reduce((a, t) => a + t.pct, 0) / r.trend.length) : 0;
   const today = r.trend[r.trend.length - 1];
   const cardClass = r.classId ?? r.classes[0]?.id;
@@ -111,10 +113,30 @@ function Body({ r, month, admin, sanghId }: { r: Report; month: string; admin: b
         <h2 id="dl-h">Print and download</h2>
         <div className="quick stacked">
           {cardClass && <Link href={`/admin/reports/cards?class=${cardClass}&month=${month}`}><Icon.print />Report cards for {r.classes.find((c) => c.id === cardClass)?.name}</Link>}
-          {admin && <a href={`/api/admin/reports/excel?s=${sanghId}`} download><Icon.download />Download Excel report</a>}
+          {admin && <button type="button" onClick={() => setExcel(true)}><Icon.download />Download Excel report</button>}
         </div>
-        {admin && <p className="hint">It has members, their phone numbers, attendance with gathas, and niyams for the last 30 days. Keep the file safe and delete it when you&apos;re done.</p>}
+        {admin && <p className="hint">You choose the dates first. It has members with their phone numbers, Tej points, attendance with gathas, and niyams. Keep the file safe and delete it when you&apos;re done.</p>}
+        {excel && <ExcelSheet sanghId={sanghId} today={r.to} onClose={() => setExcel(false)} />}
       </section>
     </>
+  );
+}
+
+/** Asks for the dates, then downloads the Excel file for them. */
+function ExcelSheet({ sanghId, today, onClose }: { sanghId: string; today: string; onClose: () => void }) {
+  const [range, setRange] = useState<Range | null>(() => presetRange("30", today));
+  return (
+    <Sheet title="Excel report" onClose={onClose}>
+      <p>Which dates should the report cover?</p>
+      <DateRangePicker today={today} initial="30" onChange={setRange} />
+      {range ? (
+        <>
+          <p className="hint">{range.label}: both days are counted.</p>
+          <a className="btn btn-primary" href={`/api/admin/reports/excel?s=${sanghId}&from=${range.from}&to=${range.to}`} download onClick={() => window.setTimeout(onClose, 300)}>
+            <Icon.download />Download Excel
+          </a>
+        </>
+      ) : <button type="button" className="btn btn-primary" disabled><Icon.download />Download Excel</button>}
+    </Sheet>
   );
 }

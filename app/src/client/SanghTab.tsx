@@ -53,18 +53,18 @@ export function SanghTab({ sangh }: { sangh: { name: string; code: string } }) {
       {data.board && (
         <section className="card stack" aria-labelledby="board-h">
           <h2 id="board-h" className="sec-h">{data.board.className} this week</h2>
-          <p className="hint">Days with at least one niyam kept, since Monday. It starts again every Monday.</p>
+          <p className="hint">Tej earned since Monday. It starts again every Monday.</p>
           {data.board.rows.length === 0 ? <p className="hint">Nobody has logged this week yet. Be the first!</p> : (
             <ol className="board">
               {data.board.rows.map((r, i) => (
                 <li key={i} className={r.me ? "me" : undefined}>
-                  <span className="b-rank">{r.rank}</span><span className="grow">{r.name}{r.me && " (you)"}</span><b>{r.days}</b><span className="b-unit">{r.days === 1 ? "day" : "days"}</span>
+                  <span className="b-rank">{r.rank}</span><span className="grow">{r.name}{r.me && " (you)"}</span><b>{r.points.toLocaleString("en-IN")}</b><span className="b-unit">Tej</span>
                 </li>
               ))}
             </ol>
           )}
           {data.board.me && !data.board.rows.some((r) => r.me) && (
-            <p className="hint">You: {data.board.me.days} {data.board.me.days === 1 ? "day" : "days"} this week. Every day you log counts.</p>
+            <p className="hint">You: {data.board.me.points.toLocaleString("en-IN")} Tej this week. Every niyam you keep adds Tej.</p>
           )}
         </section>
       )}

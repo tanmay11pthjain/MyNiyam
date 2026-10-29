@@ -78,10 +78,17 @@ describe("reports", () => {
     const cards = (await getReportCards(admin, heer, classA, today.slice(0, 7)))!;
     const c = cards.cards.find((x) => x.name === "Card Person")!;
     expect(c).toMatchObject({ daysLogged: 1, kept: 1, bestStreak: 1, attendance: null });
-    const book = await reportWorkbook(admin, heer);
+    const book = await reportWorkbook(admin, heer, today, today);
     expect(book.map((s) => s.name)).toEqual(["Members", "Attendance", "Niyams"]);
-    expect(book[0].rows[0].slice(0, 3)).toEqual(["Name", "Class", "Mobile"]);
-    expect(book[0].rows.some((r) => r[0] === "Card Person")).toBe(true);
+    const head = book[0].rows[0];
+    expect(head.slice(0, 3)).toEqual(["Name", "Class", "Mobile"]);
+    const row = book[0].rows.find((r) => r[0] === "Card Person")!;
+    expect(row[head.indexOf("Tej points")]).toBeGreaterThan(0);
+    expect(row[head.indexOf("Days logged")]).toBe(1);
+    // Dates before the log: no Tej, no days.
+    const old = await reportWorkbook(admin, heer, "2026-01-01", "2026-01-31");
+    const before = old[0].rows.find((r) => r[0] === "Card Person")!;
+    expect([before[head.indexOf("Tej points")], before[head.indexOf("Days logged")]]).toEqual([0, 0]);
   });
 
   it("the Excel file is a real workbook, and text never runs as a formula", async () => {

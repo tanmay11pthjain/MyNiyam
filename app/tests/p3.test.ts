@@ -197,7 +197,7 @@ describe("goals and challenges", () => {
 });
 
 describe("class leaderboard", () => {
-  it("is on by default and can be turned off; ranks days kept this week, with initials if chosen", async () => {
+  it("is on by default and can be turned off; ranks Tej earned this week, with initials if chosen", async () => {
     const c = cls[1];
     const a = await member("Top Kid", c), b = await member("Second Kid", c);
     await logLocalWeek(a.profileId, 2);
@@ -208,14 +208,23 @@ describe("class leaderboard", () => {
     await updateClass(admin, heer, c, { leaderboard: true });
     await setSharePrefs(b.accountId, b.profileId, { boardInitials: true });
     const board = (await getSanghTab(b.accountId, b.profileId))!.board!;
-    expect(board.rows[0].days).toBeGreaterThanOrEqual(board.rows[board.rows.length - 1].days);
-    expect(board.rows.some((r) => r.name === "Top K.")).toBe(true);
+    for (let i = 1; i < board.rows.length; i++) expect(board.rows[i - 1].points).toBeGreaterThanOrEqual(board.rows[i].points);
+    // Same Tej rule as the member's own total (all of Top Kid's logs are this week).
+    const tejA = (await getProgress(a.accountId, a.profileId))!.tej;
+    expect(tejA).toBeGreaterThan(0);
+    expect(board.rows.find((r) => r.name === "Top K.")).toMatchObject({ points: tejA });
     expect(board.me).toMatchObject({ name: "S. K.", me: true });
-    // The admin's view (for the top-3 poster): same names, no photo for someone showing initials.
-    const ab = (await getBoard(admin, heer, c, "this"))!;
+
+    // The admin's view (for the top-3 poster): same names and Tej, no photo for someone showing initials.
+    const ab = (await getBoard(admin, heer, c, null, null))!;
     expect(ab.rows[0]).toMatchObject({ rank: 1 });
+    expect(ab.rows.find((r) => r.name === "Top K.")).toMatchObject({ points: tejA });
     expect(ab.rows.find((r) => r.name === "S. K.")).toMatchObject({ photoUrl: null });
-    expect((await getBoard(admin, heer, c, "last"))!.weekEnd < ab.weekStart).toBe(true);
+    // Any dates: a range before these logs earns nothing; a bad range is refused.
+    const old = (await getBoard(admin, heer, c, "2026-01-01", "2026-01-31"))!;
+    expect(old.rows.every((r) => r.points === 0)).toBe(true);
+    expect(await getBoard(admin, heer, c, "2026-02-01", "2026-01-01")).toBeNull();
+    expect(await getBoard(admin, heer, c, "2024-01-01", "2026-01-01")).toBeNull(); // over a year
   });
 });
 

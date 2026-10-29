@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { config } from "@/server/config";
 import { sql } from "@/server/db";
 import { LATEST_MIGRATION } from "@/server/schema";
+import { storageCheck } from "@/server/storage";
 
 // GET /healthz → 200 { ok: true, db: "up", ... } or 503. Used by the host and the post-deploy check.
 // It also says which outside services are switched on (never their keys), so a missing setting shows.
@@ -11,11 +12,12 @@ export async function GET(req: NextRequest) {
   try {
     await sql()`select 1`;
     const c = config();
+    const bucket = c.supabaseStorage ? await storageCheck() : null;
     const [m] = await sql()`select max(name) as name from public.schema_migrations`.catch(() => [{ name: null }]);
     return NextResponse.json({
       ok: true, db: "up", dbMs: Math.round(performance.now() - started),
       otp: c.OTP_DELIVERY === "simulate" ? "simulated (1234)" : c.smsEnabled ? "sms" : "MISSING MSG91 keys",
-      storage: c.supabaseStorage ? "supabase" : c.NODE_ENV === "production" ? "MISSING SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY (photo uploads fail)" : "local only",
+      storage: storageWords(bucket, c.STORAGE_BUCKET, c.NODE_ENV === "production"),
       reminders: c.pushEnabled ? (c.CRON_SECRET ? "on" : "MISSING CRON_SECRET") : "off",
       errorAlerts: c.SENTRY_DSN ? "on" : "off",
       // "BEHIND" means the code is newer than the database: run `npm run db:migrate` against it.
@@ -24,4 +26,11 @@ export async function GET(req: NextRequest) {
   } catch {
     return NextResponse.json({ ok: false, db: "down" }, { status: 503, headers: { "cache-control": "no-store" } });
   }
+}
+
+function storageWords(bucket: Awaited<ReturnType<typeof storageCheck>> | null, name: string, production: boolean): string {
+  if (!bucket) return production ? "MISSING SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY (photo uploads fail)" : "local only";
+  if (bucket === "ok") return "supabase";
+  const why = bucket === "no bucket" ? `no "${name}" bucket in Supabase Storage` : bucket === "bad key" ? "SUPABASE_SERVICE_ROLE_KEY is wrong" : "Supabase can't be reached";
+  return `BROKEN: ${why} (photo uploads fail)`;
 }

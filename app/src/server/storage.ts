@@ -30,24 +30,62 @@ export function newKey(kind: "logos" | "photos", sanghId: string, type: ImageTyp
   return `${kind}/${sanghId}/${randomBytes(12).toString("hex")}.${EXT[type]}`;
 }
 
+/** Only the project's address counts: a SUPABASE_URL pasted with a path (like ".../rest/v1/") still works. */
+const storageBase = () => `${new URL(config().SUPABASE_URL!).origin}/storage/v1`;
+
 function supabaseUrl(key: string) {
-  const c = config();
-  return `${c.SUPABASE_URL!.replace(/\/$/, "")}/storage/v1/object/${encodeURIComponent(c.STORAGE_BUCKET)}/${key}`;
+  return `${storageBase()}/object/${encodeURIComponent(config().STORAGE_BUCKET)}/${key}`;
 }
 
-const localPath = (key: string) => path.resolve(process.cwd(), config().LOCAL_STORAGE_DIR, key);
+/** Makes the PRIVATE photo bucket (same settings as migration 20261022000010). */
+async function createBucket(): Promise<boolean> {
+  const c = config();
+  const res = await fetch(`${storageBase()}/bucket`, {
+    method: "POST",
+    headers: { apikey: c.SUPABASE_SERVICE_ROLE_KEY!, authorization: `Bearer ${c.SUPABASE_SERVICE_ROLE_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({ id: c.STORAGE_BUCKET, name: c.STORAGE_BUCKET, public: false, file_size_limit: 2097152, allowed_mime_types: ["image/jpeg", "image/png", "image/webp"] }),
+    signal: AbortSignal.timeout(15_000),
+  }).catch(() => null);
+  return !!res && (res.ok || res.status === 409); // 409: made meanwhile
+}
+
+/** Whether the photo bucket exists and the key can reach it (for /healthz). Never throws. */
+export async function storageCheck(): Promise<"ok" | "no bucket" | "bad key" | "unreachable"> {
+  const c = config();
+  try {
+    const res = await fetch(`${storageBase()}/bucket/${encodeURIComponent(c.STORAGE_BUCKET)}`, {
+      headers: { apikey: c.SUPABASE_SERVICE_ROLE_KEY!, authorization: `Bearer ${c.SUPABASE_SERVICE_ROLE_KEY}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (res.ok) return "ok";
+    if (res.status === 401 || res.status === 403) return "bad key";
+    return "no bucket";
+  } catch {
+    return "unreachable";
+  }
+}
+
+// Local dev only; the ignore keeps the build from bundling the whole project for this one path.
+const localPath = (key: string) => path.resolve(/*turbopackIgnore: true*/ process.cwd(), config().LOCAL_STORAGE_DIR, key);
 
 export async function putFile(key: string, bytes: Uint8Array, type: ImageType): Promise<void> {
   if (!isStorageKey(key)) throw new Error("bad storage key");
   const c = config();
   if (c.supabaseStorage) {
-    const res = await fetch(supabaseUrl(key), {
+    const send = () => fetch(supabaseUrl(key), {
       method: "POST",
       headers: { apikey: c.SUPABASE_SERVICE_ROLE_KEY!, authorization: `Bearer ${c.SUPABASE_SERVICE_ROLE_KEY}`, "content-type": type, "x-upsert": "false", "cache-control": "31536000" },
       body: Buffer.from(bytes),
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) throw new Error(`storage upload failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
+    let res = await send();
+    let text = res.ok ? "" : await res.text();
+    // The private bucket was never made (the database update that makes it didn't run there): make it once.
+    if (!res.ok && /bucket not found/i.test(text) && (await createBucket())) {
+      res = await send();
+      text = res.ok ? "" : await res.text();
+    }
+    if (!res.ok) throw new Error(`storage upload failed: ${res.status} ${text.slice(0, 200)}`);
     return;
   }
   // Local disk is for one dev machine only: on a real server it would vanish on redeploy.
@@ -84,7 +122,7 @@ export async function deleteFiles(keys: string[]): Promise<void> {
   const c = config();
   try {
     if (c.supabaseStorage) {
-      await fetch(`${c.SUPABASE_URL!.replace(/\/$/, "")}/storage/v1/object/${encodeURIComponent(c.STORAGE_BUCKET)}`, {
+      await fetch(`${storageBase()}/object/${encodeURIComponent(c.STORAGE_BUCKET)}`, {
         method: "DELETE",
         headers: { apikey: c.SUPABASE_SERVICE_ROLE_KEY!, authorization: `Bearer ${c.SUPABASE_SERVICE_ROLE_KEY}`, "content-type": "application/json" },
         body: JSON.stringify({ prefixes: ok }),

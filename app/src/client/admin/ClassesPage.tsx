@@ -141,7 +141,7 @@ function ClassSheet({ cls, all, onClose, onSaved }: { cls: AdminClass | null; al
         {cls && (
           <div className="list">
             <Switch label="Hide from new joins" sub="Members already in it keep it." checked={f.hidden} onChange={(v) => setF({ ...f, hidden: v })} />
-            <Switch label="Weekly class board" sub="Members of this class see who kept niyams on the most days this week (top 10). It counts days, never how much tapasya. On by default."
+            <Switch label="Weekly class board" sub="Members of this class see who earned the most Tej this week (top 10). On by default."
               checked={f.leaderboard} onChange={(v) => setF({ ...f, leaderboard: v })} />
           </div>
         )}

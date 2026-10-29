@@ -83,27 +83,30 @@ export async function getReport(phone: string, sanghId: string, r: Range): Promi
 
 const short = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 
-/** Admins only (the route checks): the Excel workbook. Members (with numbers), attendance and niyams, last 30 days. */
-export async function reportWorkbook(phone: string, sanghId: string): Promise<SheetData[]> {
+/** Admins only (the route checks): the Excel workbook for `from` to `to` (both days counted).
+ *  Members (with numbers, Tej and attendance), attendance day by day, and niyams kept. */
+export async function reportWorkbook(phone: string, sanghId: string, from: string, to: string): Promise<SheetData[]> {
   return asAdmin(phone, async (tx) => {
     const rows = await tx`
       select p.id, p.name, c.name as class, a.phone, p.relation, (p.created_at at time zone 'Asia/Kolkata')::date::text as joined,
         (select max(l.log_date)::text from public.niyam_logs l where l.profile_id = p.id) as last_logged,
-        (select count(distinct l.log_date)::int from public.niyam_logs l where l.profile_id = p.id and l.done and l.log_date > private.local_today() - 30) as days30,
-        (select count(*)::int from public.niyam_logs l where l.profile_id = p.id and l.done and l.log_date > private.local_today() - 30) as kept30
+        (select count(distinct l.log_date)::int from public.niyam_logs l where l.profile_id = p.id and l.done and l.log_date between ${from}::date and ${to}::date) as days,
+        (select count(*)::int from public.niyam_logs l where l.profile_id = p.id and l.done and l.log_date between ${from}::date and ${to}::date) as kept,
+        (select coalesce(sum(private.log_tej(n.type, n.points, n.options, l.value, l.choice)), 0)::int from public.niyam_logs l
+          join public.niyams n on n.id = l.niyam_id where l.profile_id = p.id and l.done and l.log_date between ${from}::date and ${to}::date) as tej
       from public.profiles p join public.accounts a on a.id = p.account_id left join public.classes c on c.id = p.class_id
       where a.sangh_id = ${sanghId} and a.removed_at is null and p.removed_at is null
       order by c.sort_order nulls last, lower(p.name)`;
     const marks = await tx<{ profile_id: string; day: string; status: "present" | "late" | "absent"; gathas: number }[]>`
       select at.profile_id, at.day::text as day, at.status, at.gathas from public.attendance at
-      where at.sangh_id = ${sanghId} and at.day > private.local_today() - 30
+      where at.sangh_id = ${sanghId} and at.day between ${from}::date and ${to}::date
         and not exists (select 1 from public.sangh_holidays h where h.sangh_id = at.sangh_id and h.day = at.day)`;
     const niyams = await tx<{ name: string; done: number; people: number }[]>`
       select n.name, count(*)::int as done, count(distinct l.profile_id)::int as people
       from public.niyam_logs l join public.niyams n on n.id = l.niyam_id
       join public.profiles p on p.id = l.profile_id and p.removed_at is null
       join public.accounts a on a.id = p.account_id and a.sangh_id = ${sanghId} and a.removed_at is null
-      where l.done and l.log_date > private.local_today() - 30
+      where l.done and l.log_date between ${from}::date and ${to}::date
       group by n.id, n.name order by done desc, n.name`;
 
     const days = [...new Set(marks.map((m) => m.day))].sort();
@@ -122,10 +125,12 @@ export async function reportWorkbook(phone: string, sanghId: string): Promise<Sh
 
     return [
       {
-        name: "Members", widths: [24, 16, 16, 8, 12, 12, 12, 12, 12, 10],
+        name: "Members", widths: [24, 16, 16, 8, 12, 12, 10, 12, 12, 12, 10],
         rows: [
-          ["Name", "Class", "Mobile", "Who", "Joined", "Last logged", "Days logged (30 days)", "Niyams kept (30 days)", "Attendance % (30 days)", "Gathas (30 days)"],
-          ...rows.map((r) => { const t = totals(r.id); return [r.name, r.class ?? "", formatPhone(r.phone), r.relation === "self" ? "Self" : "Child", r.joined, r.last_logged ?? "", r.days30, r.kept30, t.pct, t.gathas]; }),
+          ["Name", "Class", "Mobile", "Who", "Joined", "Last logged", "Tej points", "Days logged", "Niyams kept", "Attendance %", "Gathas"],
+          ...rows.map((r) => { const t = totals(r.id); return [r.name, r.class ?? "", formatPhone(r.phone), r.relation === "self" ? "Self" : "Child", r.joined, r.last_logged ?? "", r.tej, r.days, r.kept, t.pct, t.gathas]; }),
+          [],
+          [`Dates: ${short(from)} to ${short(to)} (both days counted). Last logged is the latest day ever logged.`],
         ],
       },
       {
@@ -138,7 +143,7 @@ export async function reportWorkbook(phone: string, sanghId: string): Promise<Sh
           }),
         ],
       },
-      { name: "Niyams", widths: [30, 14, 10], rows: [["Niyam", "Times kept (30 days)", "People"], ...niyams.map((n) => [n.name, n.done, n.people])] },
+      { name: "Niyams", widths: [30, 14, 10], rows: [["Niyam", "Times kept", "People"], ...niyams.map((n) => [n.name, n.done, n.people])] },
     ];
   });
 }

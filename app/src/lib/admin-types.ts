@@ -157,12 +157,12 @@ export type GoalInput = Pick<Goal, "kind" | "title" | "titleHi" | "niyamId" | "t
 /** GET /api/admin/goals */
 export type GoalsPage = { goals: Goal[]; niyams: { id: string; name: string; type: NiyamType }[]; classes: { id: string; name: string }[]; today: string };
 
-/** GET /api/admin/leaderboard: one class's week (Monday to Sunday), most days kept first. */
+/** GET /api/admin/leaderboard: one class between two dates, most Tej first (days kept break a tie). */
 export type AdminBoard = {
   sangh: string;
   classes: { id: string; name: string; on: boolean }[];
   classId: string | null;
-  week: "this" | "last"; weekStart: string; weekEnd: string;
+  from: string; to: string; today: string;
   /** Names as members see them on the board; photoUrl is null for those who show only initials. */
-  rows: { rank: number; id: string; name: string; photoUrl: string | null; days: number }[];
+  rows: { rank: number; id: string; name: string; photoUrl: string | null; points: number; days: number }[];
 };
