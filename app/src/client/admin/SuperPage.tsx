@@ -4,6 +4,7 @@ import { api } from "../api";
 import { Button, Chevron, SanghLogo } from "../ui";
 import { useAdmin } from "./AdminApp";
 import { Icon } from "./icons";
+import { OtpLogSection } from "./OtpLogSection";
 import { Confirm, LoadError, Loading, Sheet, sayAdmin, shortDate, useLoad, useToast } from "./kit";
 import type { SuperSangh } from "@/lib/admin-types";
 import { normalizeIndianPhone } from "@/lib/phone";
@@ -36,7 +37,7 @@ export function SuperPage() {
 
   return (
     <main className="page">
-      <div className="page-title"><h1>Super admin</h1><p>Approve new pathshalas and choose who runs each one.</p></div>
+      <div className="page-title"><h1>Super admin</h1><p>Approve new pathshalas, choose who runs each one, and check login codes.</p></div>
 
       <section className="section">
         <h2>Waiting for approval <small>{pending.length}</small></h2>
@@ -75,6 +76,8 @@ export function SuperPage() {
         </div>
         <Button kind="secondary" onClick={() => setAdding(true)}><Icon.plus /> Add a pathshala</Button>
       </section>
+
+      <OtpLogSection />
 
       {adding && <AddSangh onClose={() => setAdding(false)} onDone={(name) => { setAdding(false); toast(`${name} added`); reload(); refresh(); }} />}
       {openSangh && <Admins sangh={openSangh} onClose={() => setOpen(null)} act={act} />}

@@ -18,7 +18,6 @@ export default defineConfig({
       DATABASE_URL: process.env.TEST_DATABASE_URL ?? "postgres://postgres:myniyam-local@127.0.0.1:54329/myniyam_test",
       SESSION_SECRET: "test-secret-test-secret-test-secret-0123",
       OTP_DELIVERY: "simulate",
-      OTP_RESEND_AFTER_SEC: "0",
       DB_POOL_MAX: "10",
     },
   },

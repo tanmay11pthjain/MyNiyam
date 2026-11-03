@@ -162,3 +162,15 @@ export type AdminBoard = {
   /** Names as members see them on the board; photoUrl is null for those who show only initials. */
   rows: { rank: number; id: string; name: string; photoUrl: string | null; points: number; days: number }[];
 };
+
+/** One login code in the super admin's OTP log. */
+export type OtpLogRow = {
+  id: number; phone: string; code: string; delivery: "practice" | "msg91" | "phone"; channel: "whatsapp" | "sms";
+  status: "practice" | "sending" | "queued" | "sent" | "delivered" | "failed" | "verified";
+  error: string | null; createdAt: string; updatedAt: string; verifiedAt: string | null;
+};
+export type OtpLog = {
+  rows: OtpLogRow[];
+  /** How codes go out now. phone: our SMS phone; relayOk is false when its relay couldn't be read. */
+  delivery: "simulate" | "msg91" | "phone"; relayOk: boolean | null; lastPhoneReport: string | null;
+};

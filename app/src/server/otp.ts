@@ -3,6 +3,7 @@ import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { config } from "./config";
 import { sql } from "./db";
 import { deliverOtp } from "./msg91";
+import { otpText, sendViaPhone } from "./sms-phone";
 import { log } from "./log";
 import type { OtpChannel } from "@/lib/api-types";
 import { OTP_LENGTH } from "@/lib/otp-code";
@@ -15,21 +16,31 @@ function hashCode(phone: string, code: string) {
 }
 
 export type SendResult =
-  | { ok: true; channel: OtpChannel; resendAfterSec: number; expiresInSec: number; simulated: boolean }
+  | { ok: true; channel: OtpChannel; resendAfterSec: number; expiresInSec: number; simulated: boolean; sendsLeft: number }
   | { ok: false; reason: "too_many_requests"; retryAfterSec: number }
   | { ok: false; reason: "send_failed" };
 
+/** Seconds to wait after the `n`th code (1-based) before the next one: 60, then 120 by default. */
+export function waitAfter(n: number): number {
+  const w = config().resendWaits;
+  return w[Math.min(Math.max(n, 1), w.length) - 1];
+}
+
 /**
- * Creates a fresh 4-digit code for `phone` (E.164) and sends it. Server code only.
- * Limits: OTP_SENDS_PER_WINDOW sends per number per OTP_WINDOW_SEC, and at least
- * OTP_RESEND_AFTER_SEC between two sends. Each send replaces the previous code.
+ * Creates a fresh random 4-digit code for `phone` (E.164) and sends it. Server code only.
+ * Limits per number: OTP_SENDS_PER_WINDOW codes per OTP_WINDOW_SEC (3 per 24 hours), and a growing
+ * wait between codes (OTP_RESEND_WAITS: 60 s, then 120 s). Each send replaces the
+ * previous code, and every code is written to private.otp_log so the super admin can check it.
+ * A delivery that fails does not count toward the limits.
  */
 export async function sendOtp(phone: string, channel: OtpChannel): Promise<SendResult> {
   const c = config();
   // The demo numbers (DEMO_PHONES) keep the fixed code even after real SMS is switched on, so the
-  // demo family and admin still work; every other number gets a random code by SMS.
-  const simulated = c.OTP_DELIVERY === "simulate" || c.demoPhones.includes(phone);
+  // demo family and admin still work; every other number gets a random code.
+  const demo = c.demoPhones.includes(phone);
+  const simulated = c.OTP_DELIVERY === "simulate" || demo;
   const code = simulated ? SIMULATED_CODE : String(randomInt(0, 10 ** OTP_LENGTH)).padStart(OTP_LENGTH, "0");
+  const delivery = simulated ? "practice" : c.OTP_DELIVERY;
 
   const gate = await sql().begin(async (tx) => {
     // One sender at a time per number, so two taps or two tabs can't both slip under the limit.
@@ -42,35 +53,60 @@ export async function sendOtp(phone: string, channel: OtpChannel): Promise<SendR
       from private.otp_sends
       where phone = ${phone} and sent_at > now() - make_interval(secs => ${c.OTP_WINDOW_SEC})`;
     const now = new Date(w.now).getTime();
-    if (w.n >= c.OTP_SENDS_PER_WINDOW) {
-      const reset = new Date(w.oldest).getTime() + c.OTP_WINDOW_SEC * 1000;
-      return { ok: false as const, retryAfterSec: Math.max(1, Math.ceil((reset - now) / 1000)) };
+    const resetAt = (w.oldest ? new Date(w.oldest).getTime() : now) + c.OTP_WINDOW_SEC * 1000;
+    // Demo numbers are shared by everyone trying the demo, so they skip the per-number limits.
+    if (!demo) {
+      if (w.n >= c.OTP_SENDS_PER_WINDOW) {
+        return { ok: false as const, retryAfterSec: Math.max(1, Math.ceil((resetAt - now) / 1000)) };
+      }
+      if (w.newest) {
+        const wait = new Date(w.newest).getTime() + waitAfter(w.n) * 1000 - now;
+        if (wait > 0) return { ok: false as const, retryAfterSec: Math.ceil(wait / 1000) };
+      }
     }
-    if (w.newest) {
-      const wait = new Date(w.newest).getTime() + c.OTP_RESEND_AFTER_SEC * 1000 - now;
-      if (wait > 0) return { ok: false as const, retryAfterSec: Math.ceil(wait / 1000) };
-    }
-    await tx`insert into private.otp_sends (phone, channel) values (${phone}, ${channel})`;
+    const [send] = await tx`insert into private.otp_sends (phone, channel) values (${phone}, ${channel}) returning id`;
     await tx`
       insert into private.otp_codes (phone, code_hash, channel, attempts, expires_at)
       values (${phone}, ${hashCode(phone, code)}, ${channel}, 0, now() + make_interval(secs => ${c.OTP_TTL_SEC}))
       on conflict (phone) do update set code_hash = excluded.code_hash, channel = excluded.channel,
         attempts = 0, expires_at = excluded.expires_at, created_at = now()`;
-    return { ok: true as const };
+    const [entry] = await tx`
+      insert into private.otp_log (phone, code, delivery, channel, status)
+      values (${phone}, ${code}, ${delivery}, ${channel}, ${simulated ? "practice" : "sending"}) returning id`;
+    const count = w.n + 1;
+    const sendsLeft = demo ? c.OTP_SENDS_PER_WINDOW : Math.max(0, c.OTP_SENDS_PER_WINDOW - count);
+    // When this was the last code for today, the screen counts down to when the 24 hours are up.
+    const resendAfterSec = demo ? waitAfter(1) : sendsLeft > 0 ? waitAfter(count) : Math.ceil((resetAt - now) / 1000);
+    return { ok: true as const, sendId: Number(send.id), logId: Number(entry.id), sendsLeft, resendAfterSec };
   });
   if (!gate.ok) return { ok: false, reason: "too_many_requests", retryAfterSec: gate.retryAfterSec };
 
   let used: OtpChannel = channel;
   if (!simulated) {
     try {
-      used = await deliverOtp(phone, code, channel);
+      if (c.OTP_DELIVERY === "phone") {
+        await sendViaPhone(phone, otpText(code), gate.logId);
+        used = "sms";
+      } else {
+        used = await deliverOtp(phone, code, channel);
+      }
     } catch (e) {
-      log.error("otp_delivery_failed", { channel, error: (e as Error).message });
-      await sql()`delete from private.otp_codes where phone = ${phone}`;
+      const why = (e as Error).message.slice(0, 200);
+      log.error("otp_delivery_failed", { channel, error: why });
+      // Not the user's fault, so it doesn't use up one of their codes or start a wait.
+      await sql().begin(async (tx) => {
+        await tx`delete from private.otp_codes where phone = ${phone}`;
+        await tx`delete from private.otp_sends where id = ${gate.sendId}`;
+        await tx`update private.otp_log set status = 'failed', error = ${why}, updated_at = now() where id = ${gate.logId}`;
+      });
       return { ok: false, reason: "send_failed" };
     }
+    // "queued": the phone has it in its queue; it reports sent / delivered later (see otp-log.ts).
+    await sql()`update private.otp_log set status = ${c.OTP_DELIVERY === "phone" ? "queued" : "sent"}, channel = ${used}, updated_at = now() where id = ${gate.logId}`;
   }
-  return { ok: true, channel: used, resendAfterSec: c.OTP_RESEND_AFTER_SEC, expiresInSec: c.OTP_TTL_SEC, simulated };
+  return {
+    ok: true, channel: used, resendAfterSec: gate.resendAfterSec, expiresInSec: c.OTP_TTL_SEC, simulated, sendsLeft: gate.sendsLeft,
+  };
 }
 
 export type VerifyResult =
@@ -94,6 +130,9 @@ export async function verifyOtp(phone: string, code: string): Promise<VerifyResu
     const b = Buffer.from(hashCode(phone, code), "hex");
     if (a.length === b.length && timingSafeEqual(a, b)) {
       await tx`delete from private.otp_codes where phone = ${phone}`;
+      await tx`
+        update private.otp_log set status = 'verified', verified_at = now(), updated_at = now()
+        where id = (select max(id) from private.otp_log where phone = ${phone})`;
       return { ok: true as const };
     }
     const attempts = row.attempts + 1;

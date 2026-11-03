@@ -242,3 +242,23 @@ Do these one at a time. Each step says how to check it worked.
 
 Admins: goals and challenges are under Home > Quick actions > "Goals and challenges". The weekly
 class board is off for every class; turn it on per class in Setup > Classes.
+
+## Part J: login codes from our own SMS phone (November 2026)
+
+Real, random 4-digit codes, sent as an SMS by a phone running the **MyNiyam SMS Gateway** app. No MSG91 needed.
+
+Rules: each number gets **3 codes per 24 hours**. After the 1st code it must wait **60 seconds** for the next, after the 2nd **120 seconds**. After the 3rd, the screen shows when the 24 hours are up. A code works for 5 minutes. If the code can't be handed to the phone, it doesn't count. The demo numbers (`DEMO_PHONES`) still use 1234 and have no daily limit.
+
+1. On the SMS phone: open the gateway app and tap **Turn ON**. Check that **Status: Connected** shows. In Settings, set "Seconds to wait between messages" to **1** so many people can get codes at once.
+2. In the app, tap **Copy topic**. Send it to your laptop (it's a secret, so don't post it anywhere public).
+3. Run the database update, first locally and then on Supabase: `npm run db:migrate`. This adds the login-codes log.
+4. In Vercel → Settings → Environment Variables:
+   - `OTP_DELIVERY` = `phone`
+   - `SMS_PHONE_TOPIC` = the topic you copied
+   - Delete `ALLOW_OTP_SIMULATION_IN_PRODUCTION`. Keep `DEMO_PHONES` if you still want the demo numbers.
+   - Make sure `SUPER_ADMIN_PHONE` is your number.
+5. Click **Redeploy**. Open `/healthz`: `otp` should say `our SMS phone`.
+6. Test: log in with your own number. You get an SMS from the gateway phone.
+7. To check a code with a member: Admin panel → **Super admin** → **Login codes**. Search their number to see the code, the time, and whether it was sent, delivered or used to log in.
+
+Good to know: codes pass through ntfy.sh (a free public relay), and ntfy.sh limits how much can be sent in a day. Many SIM plans allow only about 100 SMS a day. If codes stay at "With the phone", check that the phone is on, online, and the gateway is ON.

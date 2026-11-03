@@ -55,16 +55,48 @@ describe("OTP", () => {
     expect(await verifyOtp(p, TEST_CODE)).toEqual({ ok: false, reason: "code_expired" });
   });
 
-  it("allows 3 sends per number per 10 minutes, even when fired at once", async () => {
+  it("allows one send at a time, even when fired at once, then waits 60 s", async () => {
     const p = phone();
     const rs = await Promise.all(Array.from({ length: 10 }, () => sendOtp(p, "whatsapp")));
-    expect(rs.filter((r) => r.ok)).toHaveLength(3);
+    expect(rs.filter((r) => r.ok)).toHaveLength(1);
+    expect(rs.find((r) => r.ok)).toMatchObject({ resendAfterSec: 60, sendsLeft: 2 });
     const blocked = rs.find((r) => !r.ok)!;
     expect(blocked).toMatchObject({ ok: false, reason: "too_many_requests" });
-    if (!blocked.ok && blocked.reason === "too_many_requests") expect(blocked.retryAfterSec).toBeGreaterThan(590);
-    // Once the window has passed, sending works again.
-    await sql()`update private.otp_sends set sent_at = now() - interval '11 minutes' where phone = ${p}`;
-    expect((await sendOtp(p, "whatsapp")).ok).toBe(true);
+    if (!blocked.ok && blocked.reason === "too_many_requests") expect(blocked.retryAfterSec).toBeGreaterThan(55);
+  });
+
+  it("allows 3 codes per 24 hours, with waits of 60 s then 120 s", async () => {
+    const p = phone();
+    const back = (sec: number) => sql()`update private.otp_sends set sent_at = sent_at - make_interval(secs => ${sec}) where phone = ${p}`;
+    expect(await sendOtp(p, "sms")).toMatchObject({ ok: true, resendAfterSec: 60, sendsLeft: 2 });
+    await back(59);
+    expect(await sendOtp(p, "sms")).toMatchObject({ ok: false, reason: "too_many_requests" });
+    await back(2);
+    expect(await sendOtp(p, "sms")).toMatchObject({ ok: true, resendAfterSec: 120, sendsLeft: 1 });
+    await back(100);
+    expect(await sendOtp(p, "sms")).toMatchObject({ ok: false, reason: "too_many_requests" });
+    await back(21);
+    const last = await sendOtp(p, "sms");
+    expect(last).toMatchObject({ ok: true, sendsLeft: 0 });
+    if (last.ok) expect(last.resendAfterSec).toBeGreaterThan(86_000); // counts down to the end of the 24 hours
+    await back(3600);
+    const fourth = await sendOtp(p, "sms");
+    expect(fourth).toMatchObject({ ok: false, reason: "too_many_requests" });
+    if (!fourth.ok && fourth.reason === "too_many_requests") expect(fourth.retryAfterSec).toBeGreaterThan(80_000);
+    // Once the oldest code is a day old, sending works again.
+    await back(86_400);
+    expect((await sendOtp(p, "sms")).ok).toBe(true);
+  });
+
+  it("logs every code with its number and marks the one used to log in", async () => {
+    const p = phone();
+    await sendOtp(p, "sms");
+    const [row] = await sql()`select code, status, delivery from private.otp_log where phone = ${p} order by id desc limit 1`;
+    expect(row).toMatchObject({ code: TEST_CODE, status: "practice", delivery: "practice" });
+    expect(await verifyOtp(p, TEST_CODE)).toEqual({ ok: true });
+    const [after] = await sql()`select status, verified_at from private.otp_log where phone = ${p} order by id desc limit 1`;
+    expect(after.status).toBe("verified");
+    expect(after.verified_at).not.toBeNull();
   });
 });
 

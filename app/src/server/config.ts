@@ -3,7 +3,6 @@ import { z } from "zod";
 
 // Every tunable lives here, with a default and an env override. Secrets come only from env.
 const int = (d: number) => z.coerce.number().int().positive().default(d);
-const int0 = (d: number) => z.coerce.number().int().nonnegative().default(d);
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -14,17 +13,24 @@ const schema = z.object({
 
   // OTP
   // "simulate": nothing is sent and the code is always 1234. "msg91": a random code is sent by MSG91.
-  OTP_DELIVERY: z.enum(["simulate", "msg91"]).default("simulate"),
+  // "phone": a random code is sent as an SMS by our own phone running the MyNiyam SMS Gateway app
+  // (the server posts it to the app's ntfy topic, SMS_PHONE_TOPIC).
+  OTP_DELIVERY: z.enum(["simulate", "msg91", "phone"]).default("simulate"),
   OTP_TTL_SEC: int(300),             // a code lives 5 minutes
-  OTP_SENDS_PER_WINDOW: int(3),      // 3 sends per number...
-  OTP_WINDOW_SEC: int(600),          // ...per 10 minutes
-  OTP_RESEND_AFTER_SEC: int0(30),     // "Send by SMS instead" appears after 30 s
+  OTP_SENDS_PER_WINDOW: int(3),      // 3 codes per number...
+  OTP_WINDOW_SEC: int(86_400),       // ...per 24 hours
+  // Seconds to wait before the next code: 60 s after the 1st, 120 s after the 2nd (the last one repeats).
+  OTP_RESEND_WAITS: z.string().regex(/^\d+(,\d+)*$/).default("60,120"),
   OTP_MAX_ATTEMPTS: int(5),          // wrong guesses before the code is burned
+  // The phone gateway (OTP_DELIVERY=phone). The topic is a secret: anyone who knows it can send SMS
+  // from the phone. Copy it from the gateway app's "Cloud connection" box.
+  SMS_PHONE_RELAY: z.string().url().default("https://ntfy.sh"),
+  SMS_PHONE_TOPIC: z.string().regex(/^[A-Za-z0-9_-]{16,64}$/).optional(),
   // A private demo on a public URL with simulated codes: only these +91 numbers (comma-separated) can log in.
   DEMO_PHONES: z.string().default(""),
 
   // Per-IP limits (fixed windows)
-  RL_OTP_SEND_PER_IP_HOUR: int(20),
+  RL_OTP_SEND_PER_IP_HOUR: int(60),  // many families share one IP (pathshala Wi-Fi, mobile networks)
   RL_VERIFY_PER_IP_HOUR: int(60),
   RL_LOOKUP_PER_IP_MIN: int(30),
 
@@ -68,7 +74,7 @@ const schema = z.object({
 
 export type Config = z.infer<typeof schema> & {
   sessionSecret: string; whatsappEnabled: boolean; smsEnabled: boolean; superAdmins: string[]; supabaseStorage: boolean;
-  demoPhones: string[]; demoOnly: boolean; pushEnabled: boolean;
+  demoPhones: string[]; demoOnly: boolean; pushEnabled: boolean; resendWaits: number[];
 };
 
 let cached: Config | null = null;
@@ -83,6 +89,9 @@ export function config(): Config {
   const c = parsed.data;
   if (c.OTP_DELIVERY === "simulate" && c.NODE_ENV === "production" && process.env.ALLOW_OTP_SIMULATION_IN_PRODUCTION !== "true") {
     throw new Error("OTP_DELIVERY=simulate in production lets anyone log in with 1234. Set OTP_DELIVERY=msg91 (or ALLOW_OTP_SIMULATION_IN_PRODUCTION=true for a private demo).");
+  }
+  if (c.OTP_DELIVERY === "phone" && !c.SMS_PHONE_TOPIC) {
+    throw new Error("OTP_DELIVERY=phone needs SMS_PHONE_TOPIC: the topic shown in the MyNiyam SMS Gateway app.");
   }
   const demoPhones = c.DEMO_PHONES.split(",").map((p) => p.trim()).filter(Boolean);
   if (demoPhones.some((p) => !/^\+91[6-9]\d{9}$/.test(p))) throw new Error("DEMO_PHONES must be +91 numbers like +917000000001, separated by commas.");
@@ -99,6 +108,7 @@ export function config(): Config {
   cached = {
     ...c,
     superAdmins,
+    resendWaits: c.OTP_RESEND_WAITS.split(",").map(Number),
     demoPhones,
     demoOnly,
     supabaseStorage,

@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const [m] = await sql()`select max(name) as name from public.schema_migrations`.catch(() => [{ name: null }]);
     return NextResponse.json({
       ok: true, db: "up", dbMs: Math.round(performance.now() - started),
-      otp: c.OTP_DELIVERY === "simulate" ? "simulated (1234)" : c.smsEnabled ? "sms" : "MISSING MSG91 keys",
+      otp: c.OTP_DELIVERY === "simulate" ? "simulated (1234)" : c.OTP_DELIVERY === "phone" ? "our SMS phone" : c.smsEnabled ? "sms" : "MISSING MSG91 keys",
       storage: storageWords(bucket, c.STORAGE_BUCKET, c.NODE_ENV === "production"),
       reminders: c.pushEnabled ? (c.CRON_SECRET ? "on" : "MISSING CRON_SECRET") : "off",
       errorAlerts: c.SENTRY_DSN ? "on" : "off",

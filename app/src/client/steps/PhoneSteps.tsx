@@ -56,12 +56,21 @@ export function PhoneStep({ title, onSent, initialPhone, forAdmin }: {
         {!forAdmin && <p className="hint" id="phone-hint">Children can use a parent&apos;s number. <span lang="hi">बच्चे माता-पिता का नंबर इस्तेमाल करें।</span></p>}
         <Msg id="phone-msg" text={err} />
         <Button type="submit" busy={busy} disabled={digits.replace(/\D/g, "").length < 10}>
-          {busy ? "Sending code…" : "Send code on WhatsApp"}
+          {busy ? "Sending code…" : "Send code"}
         </Button>
       </form>
       {!forAdmin && <div className="mt-5"><PrivacyNotice /></div>}
     </div>
   );
+}
+
+/** 45 → "45 s", 150 → "2 min 30 s", 7300 → "2 h 2 min". */
+function waitWords(sec: number, hi = false): string {
+  const [h, m, s] = [Math.floor(sec / 3600), Math.floor((sec % 3600) / 60), sec % 60];
+  const [H, M, S] = hi ? ["घंटे", "मिनट", "सेकंड"] : ["h", "min", "s"];
+  if (h) return `${h} ${H}${m ? ` ${m} ${M}` : ""}`;
+  if (m) return `${m} ${M}${s ? ` ${s} ${S}` : ""}`;
+  return `${s} ${S}`;
 }
 
 /** The login code (4 digits). "Send by SMS instead" appears once the resend wait is over. */
@@ -126,7 +135,14 @@ export function OtpStep({ sent, onResent, onVerify, onChangeNumber }: {
 
       <div className="stack mt-5">
         {wait > 0 ? (
-          <p className="hint center" aria-live="off">Didn&apos;t get it? You can ask again in {wait} s. The code works for {Math.round(sent.expiresInSec / 60)} minutes.</p>
+          sent.sendsLeft === 0 ? (
+            <p className="hint center" aria-live="off">
+              That was your last code for today. You can ask for a new one in {waitWords(wait)}. The code works for {Math.round(sent.expiresInSec / 60)} minutes.
+              <br /><span lang="hi">आज के सारे कोड भेजे जा चुके। नया कोड {waitWords(wait, true)} बाद मँगा सकते हैं।</span>
+            </p>
+          ) : (
+            <p className="hint center" aria-live="off">Didn&apos;t get it? You can ask again in {waitWords(wait)}. The code works for {Math.round(sent.expiresInSec / 60)} minutes.</p>
+          )
         ) : (
           <>
             {sent.channel === "whatsapp" && <Button kind="secondary" busy={busy === "sms"} onClick={() => void resend("sms")}>Send by SMS instead</Button>}

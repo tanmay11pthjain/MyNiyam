@@ -66,7 +66,7 @@ See `.env.example`. Secrets are read only by server code; nothing is `NEXT_PUBLI
 | `SESSION_SECRET` | signing the session cookie and hashing OTPs (32+ random chars) |
 | `MSG91_AUTH_KEY`, `MSG91_SMS_TEMPLATE_ID` | SMS codes (DLT-approved OTP template) |
 | `MSG91_WHATSAPP_NUMBER`, `MSG91_WHATSAPP_TEMPLATE`, `MSG91_WHATSAPP_NAMESPACE` | WhatsApp codes (approved authentication template) |
-| `OTP_DELIVERY` | `simulate` (default, code is always 1234) or `msg91` |
+| `OTP_DELIVERY` | `simulate` (default, code is always 1234), `msg91`, or `phone` (our SMS Gateway phone; needs `SMS_PHONE_TOPIC`) |
 | `SUPER_ADMIN_PHONE` | the super admin's +91 number (comma-separated for several) |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | logo and photo uploads (private bucket `STORAGE_BUCKET`, default `myniyam`); without them, uploads go to `.data/storage` in dev and are refused in production |
 

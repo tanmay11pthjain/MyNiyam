@@ -24,7 +24,10 @@ type Words = { en: string; hi: string };
 
 function minutes(sec = 60) {
   const m = Math.ceil(sec / 60);
-  return sec < 60 ? { en: `${sec} seconds`, hi: `${sec} सेकंड` } : { en: m === 1 ? "1 minute" : `${m} minutes`, hi: `${m} मिनट` };
+  if (sec < 60) return { en: `${sec} seconds`, hi: `${sec} सेकंड` };
+  if (m < 90) return { en: m === 1 ? "1 minute" : `${m} minutes`, hi: `${m} मिनट` };
+  const h = Math.ceil(m / 60);
+  return { en: `${h} hours`, hi: `${h} घंटे` };
 }
 
 /** Human words (English and Hindi) for an error code. */

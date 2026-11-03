@@ -24,5 +24,5 @@ export const POST = route("otp.send", async (req, ctx) => {
     if (r.reason === "too_many_requests") return fail(ctx, { error: "too_many_requests", retryAfterSec: r.retryAfterSec });
     return fail(ctx, { error: "send_failed" });
   }
-  return ok<SendOtpResponse>(ctx, { channel: r.channel, resendAfterSec: r.resendAfterSec, expiresInSec: r.expiresInSec, simulated: r.simulated });
+  return ok<SendOtpResponse>(ctx, { channel: r.channel, resendAfterSec: r.resendAfterSec, expiresInSec: r.expiresInSec, simulated: r.simulated, sendsLeft: r.sendsLeft });
 });

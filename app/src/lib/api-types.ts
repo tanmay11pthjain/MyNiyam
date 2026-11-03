@@ -37,7 +37,11 @@ export type FamilyMember = {
 
 export type OtpChannel = "whatsapp" | "sms";
 
-export type SendOtpResponse = { channel: OtpChannel; resendAfterSec: number; expiresInSec: number; simulated: boolean };
+export type SendOtpResponse = {
+  channel: OtpChannel; resendAfterSec: number; expiresInSec: number; simulated: boolean;
+  /** Codes this number can still ask for in the 24-hour window. 0: resendAfterSec counts down to when the window ends. */
+  sendsLeft: number;
+};
 
 export type VerifyOtpResponse =
   | { status: "joined" }            // new account created in the chosen sangh
