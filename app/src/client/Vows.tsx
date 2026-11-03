@@ -11,7 +11,7 @@ const plusDays = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:0
 
 /**
  * My vows (pachchakkhan) on Today: private to this person, each with an end date. Tap to tick today.
- * They don't count toward the streak or Tej; they are between you and your atma.
+ * They don't count toward the streak or AP; they are between you and your atma.
  */
 export function Vows({ vows, today, onChanged }: { vows: Vow[]; today: string; onChanged: () => void }) {
   const [adding, setAdding] = useState(false);

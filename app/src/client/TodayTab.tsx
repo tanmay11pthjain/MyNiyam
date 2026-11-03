@@ -150,7 +150,7 @@ export function TodayTab({ profileId, sangh }: { profileId: string; sangh: { nam
         <div className="pbar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Today's progress"><i style={{ width: `${pct}%` }} /></div>
         <p className="hint pr-line" role="status">
           {allDone ? "All done. Anumodana!" : data.streak > 0 ? "Keep the lamp lit." : "Log one niyam to start your streak."}
-          {data.progress && data.progress.tejToday > 0 && <> · +{data.progress.tejToday} Tej today</>}
+          {data.progress && data.progress.tejToday > 0 && <> · +{data.progress.tejToday} AP today</>}
         </p>
         {data.progress?.kshamaUsedOn.includes(yesterdayOf(day.date)) && (
           <p className="kshama-note">A kshama day kept your streak safe yesterday.</p>

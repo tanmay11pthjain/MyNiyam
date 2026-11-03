@@ -14,7 +14,7 @@ const body = z.discriminatedUnion("intent", [
 ]);
 
 // POST /api/otp/verify
-//   join:  { intent: "join", phone, code, sanghId } → { status: "joined" | "logged_in" } | 409 other_sangh
+//   join:  { intent: "join", phone, code, sanghId } → { status: "joined" | "logged_in" } | 409 pathshala_limit
 //   login: { intent: "login", phone, code }          → { status: "logged_in" } | 404 not_member
 // Sets the session cookie whenever the number is proven and has an account.
 export const POST = route("otp.verify", async (req, ctx) => {
@@ -47,11 +47,11 @@ export const POST = route("otp.verify", async (req, ctx) => {
     outcome = await joinSangh(phone, input.sanghId); // the number was freed mid-join; one retry settles it
   }
   if (outcome.kind === "closed") return fail(ctx, { error: "joins_closed" });
-  // The number is proven, so the session is set even when it belongs to another sangh:
-  // the screen then offers "Log in there" (keep it) or "Use a different number" (log out).
-  if (outcome.kind === "other_sangh") {
-    const res = fail(ctx, { error: "other_sangh", sangh: outcome.sangh });
-    await setSession(res, { accountId: outcome.accountId, profileId: null });
+  if (outcome.kind === "limit") {
+    // The number is proven, so it is signed in to its first pathshala; the screen explains the limit.
+    const acc = await accountByPhone(phone);
+    const res = fail(ctx, { error: "pathshala_limit" });
+    if (acc) await setSession(res, { accountId: acc.id, profileId: null });
     return res;
   }
   const res = ok<VerifyOtpResponse>(ctx, { status: outcome.kind });

@@ -18,6 +18,7 @@ export function SetupHub() {
       { href: "/admin/classes", icon: Icon.layers, t: "Classes", s: "Add, order and hide classes" },
       { href: "/admin/form", icon: Icon.form, t: "Join form", s: "What new members are asked" },
     ] : []),
+    ...(can("admin") ? [{ href: "/admin/edit-window", icon: Icon.clock, t: "Edit windows", s: "How far back niyams and attendance can be changed" }] : []),
     ...(can("admin") ? [{ href: "/admin/volunteers", icon: Icon.people, t: "Volunteers and teachers", s: "Who helps, with which classes, and the activity log" }] : []),
     ...(me.isSuper ? [{ href: "/admin/super", icon: Icon.shield, t: "Super admin", s: "Approve pathshalas and their admins" }] : []),
   ];

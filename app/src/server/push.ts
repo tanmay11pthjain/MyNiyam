@@ -38,12 +38,15 @@ export async function saveSubscription(accountId: string, profileId: string, sub
 
 export async function getSubscription(accountId: string, endpoint: string): Promise<PushSettings | null> {
   const [r] = await sql()<{ remind_at: string; chauvihar: boolean }[]>`
-    select to_char(remind_at, 'HH24:MI') as remind_at, chauvihar from private.push_subs where account_id = ${accountId} and endpoint = ${endpoint}`;
+    select to_char(s.remind_at, 'HH24:MI') as remind_at, s.chauvihar from private.push_subs s
+    join public.accounts a on a.id = s.account_id
+    where s.endpoint = ${endpoint} and a.phone = (select phone from public.accounts where id = ${accountId})`; // any pathshala on this number
   return r ? { remindAt: r.remind_at, chauvihar: r.chauvihar } : null;
 }
 
 export async function removeSubscription(accountId: string, endpoint: string): Promise<void> {
-  await sql()`delete from private.push_subs where account_id = ${accountId} and endpoint = ${endpoint}`;
+  await sql()`delete from private.push_subs s using public.accounts a
+    where a.id = s.account_id and s.endpoint = ${endpoint} and a.phone = (select phone from public.accounts where id = ${accountId})`;
 }
 
 type Due = {

@@ -168,6 +168,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .choice[aria-checked="true"], .choice[aria-pressed="true"] { border-color: var(--accent); box-shadow: var(--glow); background: var(--accent-soft); }
 .choice .t { font: 700 var(--fs-18)/1.2 var(--font-display); display: block; }
 .choice .s { font-size: var(--fs-14); color: var(--ink-dim); display: block; }
+.choice .s.who-sangh { color: var(--accent-text); font-weight: 600; } /* the pathshala, under each name on the Who screen */
 .choice .grow { flex: 1; min-width: 0; }
 .choice .chev { width: 20px; height: 20px; color: var(--ink-dim); flex: none; }
 .avatar { width: 48px; height: 48px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 800 var(--fs-22) var(--font-display); background: var(--bg-3); color: var(--ink); }
@@ -353,7 +354,7 @@ button.nc-row:active { transform: scale(.99); }
 @keyframes flicker { 50% { opacity: .88; } }
 .kshama-note { margin: 0; font-weight: 600; color: var(--ok); }
 
-/* Tej on Profile */
+/* AP on Profile */
 .tej { display: grid; gap: var(--s-4); }
 .tej-top { display: flex; align-items: center; gap: var(--s-3); }
 .tej-top b { display: block; font: 800 var(--fs-28)/1.1 var(--font-display); }

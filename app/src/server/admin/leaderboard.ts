@@ -2,7 +2,7 @@ import "server-only";
 import { asAdmin } from "../db";
 import type { AdminBoard } from "@/lib/admin-types";
 
-// The class board for admins (and volunteers who may view members): Tej earned between two dates,
+// The class board for admins (and volunteers who may view members): AP earned between two dates,
 // days kept breaking a tie. Feeds the "Generate poster" picture of the top 3.
 
 export const MAX_RANGE_DAYS = 366;

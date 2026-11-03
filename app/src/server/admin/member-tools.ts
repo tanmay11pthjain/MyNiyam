@@ -1,5 +1,5 @@
 import "server-only";
-import { asAdmin, pgHint, sql } from "../db";
+import { asAdmin, pgHint } from "../db";
 import { createProfile, joinSangh } from "../onboarding";
 import { parseFormFields, validateAnswers, type AnswerErrors } from "@/lib/forms";
 
@@ -45,18 +45,17 @@ export async function editMember(phone: string, sanghId: string, profileId: stri
   });
 }
 
-export type AddResult = { ok: true; profileId: string } | { ok: false; reason: "already_member" | "other_sangh" | "joins_closed" };
+export type AddResult = { ok: true; profileId: string } | { ok: false; reason: "already_member" | "pathshala_limit" | "joins_closed" };
 
 /**
  * Adds a member on their behalf, after the admin typed the code sent to that member's number.
  * They finish the join form themselves the first time they open the app.
  */
 export async function addOnBehalf(adminPhone: string, sanghId: string, phone: string, name: string, classId: string | null): Promise<AddResult> {
-  const [existing] = await sql()`select sangh_id from public.accounts where phone = ${phone}`;
-  if (existing) return { ok: false, reason: existing.sangh_id === sanghId ? "already_member" : "other_sangh" };
   const j = await joinSangh(phone, sanghId);
   if (j.kind === "closed") return { ok: false, reason: "joins_closed" };
-  if (j.kind !== "joined") return { ok: false, reason: j.kind === "other_sangh" ? "other_sangh" : "already_member" };
+  if (j.kind === "limit") return { ok: false, reason: "pathshala_limit" };
+  if (j.kind !== "joined") return { ok: false, reason: "already_member" };
   const p = await createProfile(j.accountId, phone, { name, relation: "self", consent: false });
   if (!p.ok) throw new Error(`could not add profile: ${p.reason}`);
   if (classId) {

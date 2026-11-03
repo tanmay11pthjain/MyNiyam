@@ -44,7 +44,7 @@ afterAll(async () => { await sql().end(); });
 async function member(name = "Riya Shah", classId: string | null = null, sanghId = heer) {
   const p = phone();
   const r = await joinSangh(p, sanghId);
-  if (r.kind === "closed") throw new Error("closed");
+  if (r.kind === "closed" || r.kind === "limit") throw new Error(r.kind);
   const prof = await createProfile(r.accountId, p, { name, relation: "self", consent: false });
   if (!prof.ok) throw new Error("profile");
   const c = classId ?? (sanghId === heer ? cls[0] : null);
@@ -83,7 +83,7 @@ describe("streak repair (rules)", () => {
 });
 
 describe("badges (rules)", () => {
-  it("rewards streaks, days, Tej, tapasya firsts by name, attendance and challenges", () => {
+  it("rewards streaks, days, AP, tapasya firsts by name, attendance and challenges", () => {
     const got = earnedBadges({ best: 21, daysKept: 30, tej: 999, tapasyaNames: ["Ayambil आयंबिल", "Porsi"], fullAttendanceMonth: true, challengesDone: ["g1"] });
     expect(got).toEqual(["streak_7", "streak_21", "days_30", "first_ayambil", "attendance_month", "challenge:g1"]);
   });
@@ -197,7 +197,7 @@ describe("goals and challenges", () => {
 });
 
 describe("class leaderboard", () => {
-  it("is on by default and can be turned off; ranks Tej earned this week, with initials if chosen", async () => {
+  it("is on by default and can be turned off; ranks AP earned this week, with initials if chosen", async () => {
     const c = cls[1];
     const a = await member("Top Kid", c), b = await member("Second Kid", c);
     await logLocalWeek(a.profileId, 2);
@@ -209,13 +209,13 @@ describe("class leaderboard", () => {
     await setSharePrefs(b.accountId, b.profileId, { boardInitials: true });
     const board = (await getSanghTab(b.accountId, b.profileId))!.board!;
     for (let i = 1; i < board.rows.length; i++) expect(board.rows[i - 1].points).toBeGreaterThanOrEqual(board.rows[i].points);
-    // Same Tej rule as the member's own total (all of Top Kid's logs are this week).
+    // Same AP rule as the member's own total (all of Top Kid's logs are this week).
     const tejA = (await getProgress(a.accountId, a.profileId))!.tej;
     expect(tejA).toBeGreaterThan(0);
     expect(board.rows.find((r) => r.name === "Top K.")).toMatchObject({ points: tejA });
     expect(board.me).toMatchObject({ name: "S. K.", me: true });
 
-    // The admin's view (for the top-3 poster): same names and Tej, no photo for someone showing initials.
+    // The admin's view (for the top-3 poster): same names and AP, no photo for someone showing initials.
     const ab = (await getBoard(admin, heer, c, null, null))!;
     expect(ab.rows[0]).toMatchObject({ rank: 1 });
     expect(ab.rows.find((r) => r.name === "Top K.")).toMatchObject({ points: tejA });

@@ -3,7 +3,7 @@ import { readSession } from "@/server/session";
 import { getProgress } from "@/server/today";
 import type { Progress } from "@/lib/today-types";
 
-// GET /api/progress → Progress (Tej, streak, best streak, kshama days) for the person using the app.
+// GET /api/progress → Progress (AP, streak, best streak, kshama days) for the person using the app.
 export const GET = route("progress", async (req, ctx) => {
   const s = await readSession(req);
   if (!s) return fail(ctx, { error: "unauthorized" });

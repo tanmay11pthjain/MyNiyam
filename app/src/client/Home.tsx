@@ -114,7 +114,7 @@ function DisplaySettings() {
   );
 }
 
-/** Tej, best streak and kshama days. Loaded fresh each time the tab opens. */
+/** AP, best streak and kshama days. Loaded fresh each time the tab opens. */
 function ProgressCard() {
   const [p, setP] = useState<Progress | null>(null);
   useEffect(() => { void api<Progress>("/api/progress").then((r) => { if (r.ok) setP(r.data); }); }, []);
@@ -123,7 +123,7 @@ function ProgressCard() {
     <section className="card tej" aria-label="My progress">
       <div className="tej-top">
         <span className="tej-icon" aria-hidden="true">✦</span>
-        <div><b>{p.tej.toLocaleString("en-IN")}</b><span>Tej earned</span></div>
+        <div><b>{p.tej.toLocaleString("en-IN")}</b><span>Aradhana Points (AP)</span></div>
       </div>
       <div className="tej-grid">
         <div><b>{p.streak}</b><span>day streak</span></div>
@@ -167,7 +167,7 @@ function BadgesCard() {
       <div className="list">
         <Switch label="Show my milestones to my pathshala" sub="Others in your pathshala see “Riya S. reached a 21-day streak” and can send Anumodana."
           checked={d.prefs.shareMilestones} busy={busy} onChange={(v) => void set({ shareMilestones: v })} />
-        <Switch label="Only my initials on the class board" sub="Your class's weekly Tej board, and the top-3 poster, show “R. S.” instead of your name and photo."
+        <Switch label="Only my initials on the class board" sub="Your class's weekly AP board, and the top-3 poster, show “R. S.” instead of your name and photo."
           checked={d.prefs.boardInitials} busy={busy} onChange={(v) => void set({ boardInitials: v })} />
       </div>
     </section>
@@ -191,10 +191,11 @@ function ProfileTab({ p, me, cls }: { p: Profile; me: Me; cls?: string }) {
       <DisplaySettings />
       <div className="stack">
         <Link className="btn btn-secondary" href={`/who?edit=${p.id}`}>Edit my details</Link>
-        <Button kind="secondary" onClick={() => router.push("/who")}>Switch person</Button>
+        <Button kind="secondary" onClick={() => router.push("/who")}>Switch person or pathshala</Button>
+        <Link className="btn btn-secondary" href="/join">Join another pathshala</Link>
         <Button kind="quiet" busy={leaving} onClick={async () => { setLeaving(true); await api("/api/session/logout", { body: {} }); clearOfflineData(); goToLanding(); }}>Log out</Button>
       </div>
-      <MyData phone={me.phone} names={me.profiles.map((x) => x.name)} />
+      <MyData phone={me.phone} names={me.profiles.map((x) => x.name)} sanghName={me.sangh.name} otherPathshalas={me.family.some((x) => !x.here)} />
       <p className="hint center"><Link href="/privacy">Privacy</Link> · MyNiyam v{process.env.NEXT_PUBLIC_APP_VERSION} ({process.env.NEXT_PUBLIC_APP_COMMIT})</p>
     </div>
   );

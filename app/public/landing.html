@@ -133,6 +133,7 @@ p { margin: 0; }
 .hero .hi-line { margin-top: var(--s-3); font-size: var(--fs-22); color: var(--ink-dim); font-weight: 500; }
 .hero .lead { margin-top: var(--s-5); max-width: 34ch; font-size: var(--fs-22); line-height: 1.35; }
 .hero .cta { margin-top: var(--s-6); display: flex; flex-direction: column; gap: var(--s-3); align-items: flex-start; }
+.cta-btns { display: flex; flex-direction: column; gap: var(--s-3); }
 .cta-note { font-size: var(--fs-14); color: var(--ink-dim); }
 .sunset-note { margin-top: var(--s-6); display: inline-flex; gap: var(--s-2); align-items: center; font-size: var(--fs-14); color: var(--ink-dim); }
 .sunset-note svg { width: 18px; height: 18px; flex: none; }
@@ -229,8 +230,8 @@ p { margin: 0; }
 .band p { color: var(--ink-dim); font-size: var(--fs-16); }
 .sw.moti { background: #FFFDF9; box-shadow: inset 0 0 0 1.5px var(--line); }
 .sw.sindoor { background: #E1503F; } .sw.kesar { background: #F09D27; }
-.sw.panna { background: #1FA08B; } .sw.neel { background: #2A4D8C; }
-[data-theme="night"] .sw.neel { background: #5D7FC4; }
+.sw.panna { background: #1FA08B; } .sw.shyam { background: #111111; }
+[data-theme="night"] .sw.shyam { background: #000000; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.45); }
 
 /* ---------- Family ---------- */
 .family { padding: var(--s-8) 0; background: var(--bg-3); transition: background-color var(--t-slow); }
@@ -355,6 +356,7 @@ footer .ver { font-variant-numeric: tabular-nums; font-size: var(--fs-14); }
 @media (max-width: 719px) {
   .wide-only { display: none !important; }
   .hero { padding-top: var(--s-5); }
+  .hero .cta-btns { align-items: stretch; }
   .hero .cta .btn { width: 100%; min-height: 60px; font-size: var(--fs-22); }
   .hero .cta { align-items: stretch; text-align: center; margin-top: var(--s-5); }
   .hero .lead { font-size: var(--fs-22); line-height: 1.35; margin-top: var(--s-4); }
@@ -433,7 +435,10 @@ footer .ver { font-variant-numeric: tabular-nums; font-size: var(--fs-14); }
         <p class="hi-line hi" lang="hi">नियम निभाया, दीप जलाया</p>
         <p class="lead">One tap for each niyam you keep.</p>
         <div class="cta">
-          <a class="btn btn-primary" href="#join">Join your pathshala</a>
+          <div class="cta-btns">
+            <a class="btn btn-primary" href="#join">Join your pathshala</a>
+            <a class="btn btn-secondary" href="/login">Log in</a>
+          </div>
           <span class="cta-note">Free for every Jain family. No ads.</span>
         </div>
         <p class="sunset-note wide-only" id="sunsetNote">
@@ -564,7 +569,7 @@ footer .ver { font-variant-numeric: tabular-nums; font-size: var(--fs-14); }
         <div class="band rise"><span class="sw sindoor" aria-hidden="true"></span><div><b>Tap <small>Sindoor, for Siddha</small></b><p>Navkarsi, Ayambil, Upvas</p></div></div>
         <div class="band rise"><span class="sw kesar" aria-hidden="true"></span><div><b>Aachar <small>Kesar, for Acharya</small></b><p>Chauvihar, tithi tyag</p></div></div>
         <div class="band rise"><span class="sw panna" aria-hidden="true"></span><div><b>Gyan <small>Panna, for Upadhyay</small></b><p>Swadhyay, gathas</p></div></div>
-        <div class="band rise"><span class="sw neel" aria-hidden="true"></span><div><b>Sadhana <small>Neel, for Sadhu</small></b><p>Samayik, Pratikraman</p></div></div>
+        <div class="band rise"><span class="sw shyam" aria-hidden="true"></span><div><b>Sadhana <small>Shyam, for Sadhu</small></b><p>Samayik, Pratikraman</p></div></div>
       </div>
     </div>
   </section>
@@ -638,8 +643,9 @@ footer .ver { font-variant-numeric: tabular-nums; font-size: var(--fs-14); }
           <input class="code-input" id="code" name="code" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="6" placeholder="HEER01" aria-describedby="codeMsg">
           <p class="msg" id="codeMsg" role="status" aria-live="polite"></p>
           <button class="btn btn-primary" type="submit" id="joinBtn"><span class="spinner" aria-hidden="true"></span><span id="joinLabel">Join</span></button>
+          <a class="btn btn-secondary" href="/login">Already joined? Log in</a>
         </form>
-        <p class="or">Have a QR code? Point your phone camera at it.<br>No code? Ask your pathshala teacher.<br>Already joined? <a href="/login">Log in</a></p>
+        <p class="or">Have a QR code? Point your phone camera at it.<br>No code? Ask your pathshala teacher.</p>
       </div>
     </div>
   </section>

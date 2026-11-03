@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "../api";
 import { Button, Chevron } from "../ui";
@@ -7,6 +8,7 @@ import { useAdmin } from "./AdminApp";
 import { Icon, NIYAM_ICON_NAMES, NIYAM_ICONS, NiyamIcon } from "./icons";
 import { Confirm, LoadError, Loading, Sheet, Switch, UpDown, move, sayAdmin, useLoad, useToast } from "./kit";
 import type { Niyam, NiyamInput, NiyamsPage, NiyamType } from "@/lib/admin-types";
+import { logWindowWords } from "./EditWindowPage";
 import { NIYAM_LIBRARY, WEEKDAYS, niyamSummary } from "@/lib/niyam-library";
 
 const TYPES: { type: NiyamType; t: string; s: string }[] = [
@@ -24,7 +26,7 @@ const BLANK: NiyamInput = {
 type Editing = { niyam: Niyam | null; draft: NiyamInput };
 
 export function NiyamsPage() {
-  const { sangh } = useAdmin();
+  const { sangh, can } = useAdmin();
   const toast = useToast();
   const params = useSearchParams();
   const d = useLoad<NiyamsPage>(`/api/admin/niyams?s=${sangh.id}`);
@@ -87,7 +89,7 @@ export function NiyamsPage() {
       {copying && <CopySheet classes={page.classes} onClose={() => setCopying(false)}
         onDone={(n, words) => { setNiyams(n); setCopying(false); toast(words); }} />}
 
-      <LogWindow hours={page.logBackHours} onChange={(h) => d.set({ ...page, logBackHours: h })} />
+      <LogWindow hours={page.logBackHours} admin={can("admin")} />
 
       {adding && (
         <Sheet title="Add a niyam" onClose={() => setAdding(false)}>
@@ -120,23 +122,13 @@ export function NiyamsPage() {
   );
 }
 
-function LogWindow({ hours, onChange }: { hours: number; onChange: (h: number) => void }) {
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
+/** How far back members may log, with a link to change it (Setup → Edit windows). */
+function LogWindow({ hours, admin }: { hours: number; admin: boolean }) {
   return (
     <section className="section">
       <h2>Catching up</h2>
-      <div className="list">
-        <Switch label="Let members fill in yesterday" busy={busy}
-          sub={hours ? "A missed evening can be logged until the end of the next day." : "Off: members can only log today."}
-          checked={hours > 0}
-          onChange={async (v) => {
-            setBusy(true);
-            const r = await api<{ logBackHours: number }>("/api/admin/sangh", { method: "PATCH", body: { logBackHours: v ? 24 : 0 } });
-            setBusy(false);
-            if (r.ok) { onChange(r.data.logBackHours); toast(v ? "Members can fill in yesterday" : "Members can log today only"); } else toast(sayAdmin(r.err));
-          }} />
-      </div>
+      <p className="hint">{logWindowWords(hours)}</p>
+      {admin && <Link className="row" href="/admin/edit-window"><span className="grow"><span className="t">Change the edit window</span><span className="s">Setup → Edit windows</span></span><Chevron /></Link>}
     </section>
   );
 }
@@ -222,7 +214,7 @@ function NiyamEditor({ editing, classes, onClose, onSaved }: {
               <div key={o.value} style={{ display: "flex", gap: "var(--s-2)" }}>
                 <input aria-label={`Option ${i + 1}`} className="input input-sm" value={o.en} maxLength={40} placeholder={`Option ${i + 1}`}
                   onChange={(e) => set({ options: f.options.map((x, j) => (j === i ? { ...x, en: e.target.value } : x)) })} />
-                <input aria-label={`Tej for option ${i + 1}`} className="input input-sm opt-tej" inputMode="numeric" maxLength={3} placeholder={`${f.points} Tej`}
+                <input aria-label={`AP for option ${i + 1}`} className="input input-sm opt-tej" inputMode="numeric" maxLength={3} placeholder={`${f.points} AP`}
                   value={o.points ?? ""} onChange={(e) => {
                     const v = e.target.value.replace(/\D/g, "");
                     set({ options: f.options.map((x, j) => (j === i ? { ...x, points: v ? Math.min(500, Number(v)) : undefined } : x)) });
@@ -233,7 +225,7 @@ function NiyamEditor({ editing, classes, onClose, onSaved }: {
             ))}
             {f.options.length < 12 && <button type="button" className="chip" style={{ justifySelf: "start" }}
               onClick={() => set({ options: [...f.options, { value: `o${Date.now().toString(36)}`, en: "" }] })}>+ Add an option</button>}
-            <p className="hint">Tapasya levels: put them from small to big and give bigger ones more Tej (for example Navkarsi 10, Ekasan 30, Upvas 100). Empty uses {f.points} Tej.</p>
+            <p className="hint">Tapasya levels: put them from small to big and give bigger ones more AP (for example Navkarsi 10, Ekasan 30, Upvas 100). Empty uses {f.points} AP.</p>
           </fieldset>
         )}
 
@@ -293,9 +285,9 @@ function NiyamEditor({ editing, classes, onClose, onSaved }: {
             </div>
           )}
           <div className="field">
-            <label className="label" htmlFor="ntej">Tej points for keeping it</label>
+            <label className="label" htmlFor="ntej">Aradhana Points (AP) for keeping it</label>
             <PointsInput id="ntej" value={f.points} onChange={(points) => set({ points })} />
-            <p className="hint">{f.type === "count" || f.type === "duration" ? `${f.points} Tej for each ${f.type === "count" ? "count" : "minute"}, up to 10 a day.` : "Members earn these Tej points each time they keep it."} Any number from 0 (no Tej) to 100.</p>
+            <p className="hint">{f.type === "count" || f.type === "duration" ? `${f.points} AP for each ${f.type === "count" ? "count" : "minute"}, up to 10 a day.` : "Members earn these Aradhana Points (AP) each time they keep it."} Any number from 0 (no AP) to 100.</p>
           </div>
           <Switch label="Counts in daily progress" sub={f.isCore ? "A core niyam." : "Optional: members can log it, but it doesn't count."} checked={f.isCore} onChange={(v) => set({ isCore: v })} />
         </div>
@@ -394,7 +386,7 @@ function PointsInput({ id, value, onChange }: { id: string; value: number; onCha
           onChange(n);
         }}
         onBlur={() => setDraft(String(value))} />
-      <span>Tej</span>
+      <span>AP</span>
     </div>
   );
 }

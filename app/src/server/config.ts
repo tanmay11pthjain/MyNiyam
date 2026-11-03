@@ -29,6 +29,7 @@ const schema = z.object({
   RL_LOOKUP_PER_IP_MIN: int(30),
 
   MAX_PROFILES_PER_ACCOUNT: int(8),  // also enforced by a trigger in the database
+  MAX_PATHSHALAS_PER_PHONE: int(5),  // also enforced by a trigger in the database (accounts_limit)
   MAX_BODY_BYTES: int(16_384),
 
   // Admin panel

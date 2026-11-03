@@ -3,7 +3,8 @@ import { asAccount, pgCode, pgHint, sql } from "./db";
 import { config } from "./config";
 import { missingRequired, parseFormFields, validateAnswers, type AnswerErrors, type FormField } from "@/lib/forms";
 import { maskPhone } from "@/lib/phone";
-import type { ClassItem, Me, Profile, SanghCard } from "@/lib/api-types";
+import { fileUrl, getFile, keyFromUrl, newKey, putFile } from "./storage";
+import type { ClassItem, FamilyMember, Me, Profile, SanghCard } from "@/lib/api-types";
 
 // Data access for the join flow. Lookups before sign-in use the server's own connection and
 // return only public columns; everything after sign-in runs through asAccount (row-level security).
@@ -39,39 +40,63 @@ export async function searchSanghs(q: string, city: string | null): Promise<{ sa
 export type JoinOutcome =
   | { kind: "joined"; accountId: string }
   | { kind: "logged_in"; accountId: string }
-  | { kind: "other_sangh"; accountId: string; sangh: SanghCard }
-  | { kind: "closed" };
+  | { kind: "closed" }
+  | { kind: "limit" };
 
 /**
- * After the phone is verified: create the account in `sanghId`, or find the existing one.
- * The UNIQUE(phone) constraint makes this safe against double taps and two tabs: exactly one
- * insert wins and everyone else reads the winner's row. A sangh that is pending or has paused
- * joins refuses new accounts in the database (accounts_join_open); existing members still get in.
+ * After the phone is verified: the number's account in `sanghId`, made now if it is new there.
+ * A number can be in up to 5 pathshalas, each with its own account (and its own people and logs).
+ * UNIQUE(phone, sangh) makes this safe against double taps and two tabs: exactly one insert wins
+ * and everyone else reads the winner's row. A sangh that is pending or has paused joins refuses
+ * new accounts in the database (accounts_join_open); existing members still get in.
  */
 export async function joinSangh(phone: string, sanghId: string): Promise<JoinOutcome> {
-  const [existing] = await sql()`select id from public.accounts where phone = ${phone}`;
-  if (!existing) {
-    let inserted;
-    try {
-      inserted = await sql()`
-        insert into public.accounts (phone, sangh_id) values (${phone}, ${sanghId})
-        on conflict (phone) do nothing returning id`;
-    } catch (e) {
-      if (pgHint(e) === "joins_closed") return { kind: "closed" };
-      throw e;
-    }
-    if (inserted.length) return { kind: "joined", accountId: inserted[0].id };
+  const [existing] = await sql()`select id from public.accounts where phone = ${phone} and sangh_id = ${sanghId}`;
+  if (existing) return { kind: "logged_in", accountId: existing.id };
+  let inserted;
+  try {
+    inserted = await sql()`
+      insert into public.accounts (phone, sangh_id) values (${phone}, ${sanghId})
+      on conflict (phone, sangh_id) where phone is not null do nothing returning id`;
+  } catch (e) {
+    if (pgHint(e) === "joins_closed") return { kind: "closed" };
+    if (pgHint(e) === "pathshala_limit") return { kind: "limit" };
+    throw e;
   }
-  const [acc] = await sql()`select id, sangh_id from public.accounts where phone = ${phone}`;
+  if (inserted.length) return { kind: "joined", accountId: inserted[0].id };
+  const [acc] = await sql()`select id from public.accounts where phone = ${phone} and sangh_id = ${sanghId}`;
   if (!acc) throw new Error("account vanished during join"); // removed between the two statements; caller retries
-  if (acc.sangh_id === sanghId) return { kind: "logged_in", accountId: acc.id };
-  const sangh = await findSanghById(acc.sangh_id);
-  return { kind: "other_sangh", accountId: acc.id, sangh: sangh! };
+  return { kind: "logged_in", accountId: acc.id };
 }
 
+/** The number's first pathshala (plain login). The Who screen then shows everyone on the number, in every pathshala. */
 export async function accountByPhone(phone: string): Promise<{ id: string } | null> {
-  const [acc] = await sql()`select id from public.accounts where phone = ${phone}`;
+  const [acc] = await sql()`select id from public.accounts where phone = ${phone} order by created_at, id limit 1`;
   return acc ? { id: acc.id } : null;
+}
+
+/** The account (pathshala) a profile belongs to, if that profile is on this same number. */
+export async function familyAccountOf(phone: string, profileId: string): Promise<string | null> {
+  const [r] = await sql()`
+    select a.id from public.profiles p join public.accounts a on a.id = p.account_id
+    where p.id = ${profileId} and p.removed_at is null and a.phone = ${phone} and a.removed_at is null`;
+  return r ? (r.id as string) : null;
+}
+
+/** Everyone on this number, in every pathshala, for the Who screen. Read with the server's own connection, by the verified number. */
+async function familyOf(phone: string, accountId: string): Promise<FamilyMember[]> {
+  const rows = await sql()<{ id: string; name: string; relation: "self" | "child"; setup_done_at: Date | null; sangh_id: string; sangh_name: string; class_name: string | null; account_id: string }[]>`
+    select p.id, p.name, p.relation, p.setup_done_at, s.id as sangh_id, s.name as sangh_name, c.name as class_name, a.id as account_id
+    from public.accounts a
+    join public.sanghs s on s.id = a.sangh_id
+    join public.profiles p on p.account_id = a.id and p.removed_at is null
+    left join public.classes c on c.id = p.class_id
+    where a.phone = ${phone} and a.removed_at is null
+    order by (a.id = ${accountId}) desc, a.created_at, p.created_at`;
+  return rows.map((r) => ({
+    id: r.id, name: r.name, relation: r.relation, setupDone: r.setup_done_at !== null,
+    sangh: { id: r.sangh_id, name: r.sangh_name }, className: r.class_name, here: r.account_id === accountId,
+  }));
 }
 
 type ProfileRow = {
@@ -87,7 +112,7 @@ const toProfile = (p: ProfileRow, fields?: FormField[]): Profile => ({
 });
 
 export async function getMe(accountId: string, profileId: string | null): Promise<Me> {
-  return asAccount(accountId, async (tx) => {
+  const { rawPhone, ...me } = await asAccount(accountId, async (tx) => {
     const [acc] = await tx`select a.phone, s.id, s.name, s.city, s.logo_url, s.join_code, s.form_fields
       from public.accounts a join public.sanghs s on s.id = a.sangh_id`;
     const classes = await tx<{ id: string; name: string; name_hi: string | null; hidden: boolean; age_min: number | null; age_max: number | null }[]>`
@@ -98,6 +123,7 @@ export async function getMe(accountId: string, profileId: string | null): Promis
       where p.account_id = ${accountId} order by p.created_at`;
     const fields = parseFormFields(acc.form_fields);
     return {
+      rawPhone: acc.phone as string,
       phone: maskPhone(acc.phone),
       sangh: toCard(acc as SanghRow),
       classes: classes.map((c): ClassItem => ({ id: c.id, name: c.name, nameHi: c.name_hi, hidden: c.hidden, ageMin: c.age_min, ageMax: c.age_max })),
@@ -106,16 +132,29 @@ export async function getMe(accountId: string, profileId: string | null): Promis
       activeProfileId: profiles.some((p) => p.id === profileId) ? profileId : null,
     };
   });
+  // After the transaction, so a request never holds two pool connections at once.
+  return { ...me, family: await familyOf(rawPhone, accountId) };
 }
 
 export type CreateProfileResult =
   | { ok: true; profile: Profile }
-  | { ok: false; reason: "consent_required" | "self_exists" | "profile_limit" };
+  | { ok: false; reason: "consent_required" | "self_exists" | "profile_limit" | "not_found" };
 
 export async function createProfile(
-  accountId: string, phone: string, input: { name: string; relation: "self" | "child"; consent: boolean },
+  accountId: string, phone: string, input: { name: string; relation: "self" | "child"; consent: boolean; fromProfileId?: string | null },
 ): Promise<CreateProfileResult> {
   if (input.relation === "child" && !input.consent) return { ok: false, reason: "consent_required" };
+  // Joining a second pathshala as someone already on this number: their details are copied over.
+  const from = input.fromProfileId ? await familyAccountOf(phone, input.fromProfileId) : null;
+  if (input.fromProfileId && !from) return { ok: false, reason: "not_found" };
+  const made = await insertProfile(accountId, phone, input);
+  if (!made.ok || !input.fromProfileId) return made;
+  return { ok: true, profile: await copyDetails(accountId, input.fromProfileId, made.profile) };
+}
+
+async function insertProfile(
+  accountId: string, phone: string, input: { name: string; relation: "self" | "child"; consent: boolean },
+): Promise<CreateProfileResult> {
   try {
     return await asAccount(accountId, async (tx) => {
       const [{ n }] = await tx`select count(*)::int as n from public.profiles where account_id = ${accountId}`;
@@ -132,6 +171,53 @@ export async function createProfile(
     if (pgCode(e) === "P0001") return { ok: false, reason: "profile_limit" };
     throw e;
   }
+}
+
+// Details that mean the same in every pathshala. Roll number, class and the pathshala's own questions are not copied.
+const COPIED_KEYS = ["gender", "dob", "city", "area", "gps"];
+
+/**
+ * Copies a person's details from their profile in another pathshala into the new one: the answers this
+ * pathshala's form also asks (only those that pass its rules), and the photo if the form asks for one.
+ * Best effort: anything that can't be copied is simply asked again on the form.
+ */
+async function copyDetails(accountId: string, fromProfileId: string, profile: Profile): Promise<Profile> {
+  const [src] = await sql()<{ answers: Record<string, unknown> | null; photo_url: string | null }[]>`
+    select pa.answers, p.photo_url from public.profiles p left join public.profile_answers pa on pa.profile_id = p.id where p.id = ${fromProfileId}`;
+  const [dst] = await sql()<{ sangh_id: string; form_fields: unknown }[]>`
+    select s.id as sangh_id, s.form_fields from public.accounts a join public.sanghs s on s.id = a.sangh_id where a.id = ${accountId}`;
+  if (!src || !dst) return profile;
+  const fields = parseFormFields(dst.form_fields);
+  const answers: Record<string, string | number> = {};
+  for (const f of fields) {
+    const v = src.answers?.[f.key];
+    if (!COPIED_KEYS.includes(f.key) || v === undefined || v === null || v === "") continue;
+    const one = validateAnswers([{ ...f, required: false }], { [f.key]: v });
+    if (one.ok && one.answers[f.key] !== undefined) answers[f.key] = one.answers[f.key];
+  }
+  let photoUrl: string | null = null;
+  const srcKey = keyFromUrl(src.photo_url);
+  if (srcKey && fields.some((f) => f.type === "photo")) {
+    try {
+      const file = await getFile(srcKey);
+      if (file) {
+        const key = newKey("photos", dst.sangh_id, file.type);
+        await putFile(key, file.bytes, file.type);
+        photoUrl = fileUrl(key);
+      }
+    } catch {
+      photoUrl = null; // storage not reachable: they can add the photo on the form
+    }
+  }
+  if (!Object.keys(answers).length && !photoUrl) return profile;
+  await asAccount(accountId, async (tx) => {
+    if (Object.keys(answers).length) {
+      await tx`insert into public.profile_answers (profile_id, answers) values (${profile.id}, ${tx.json(answers)})
+        on conflict (profile_id) do update set answers = excluded.answers, updated_at = now()`;
+    }
+    if (photoUrl) await tx`update public.profiles set photo_url = ${photoUrl} where id = ${profile.id} and account_id = ${accountId}`;
+  });
+  return { ...profile, answers, photoUrl: photoUrl ?? profile.photoUrl ?? null };
 }
 
 export type SetupResult =

@@ -22,7 +22,7 @@ export const NIYAM_LIBRARY: LibraryItem[] = [
   {
     name: "Tapasya", nameHi: "तपस्या", type: "choice", target: null, icon: "star", note: "Which tapasya did you do today?",
     options: [
-      // Tapasya levels, small to big; a bigger one earns more Tej.
+      // Tapasya levels, small to big; a bigger one earns more AP.
       { value: "biyasna", en: "Biyasna", hi: "बियासना", points: 20 },
       { value: "ekasna", en: "Ekasna", hi: "एकासना", points: 30 },
       { value: "ayambil", en: "Ayambil", hi: "आयंबिल", points: 50 },

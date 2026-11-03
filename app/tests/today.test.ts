@@ -20,7 +20,7 @@ afterAll(async () => { await sql().end(); });
 async function member(sanghId = heer) {
   const p = phone();
   const r = await joinSangh(p, sanghId);
-  if (r.kind === "closed") throw new Error("closed");
+  if (r.kind === "closed" || r.kind === "limit") throw new Error(r.kind);
   const prof = await createProfile(r.accountId, p, { name: "Member", relation: "self", consent: false });
   if (!prof.ok) throw new Error("profile");
   return { accountId: r.accountId, profileId: prof.profile.id };
@@ -126,7 +126,7 @@ describe("streak", () => {
     expect((await getToday(m.accountId, m.profileId))!.streak).toBe(1);
   });
 
-  it("Tej: points per niyam, and each count up to 10 a day", async () => {
+  it("AP: points per niyam, and each count up to 10 a day", async () => {
     const m = await member();
     const yes = await niyamByType("yesno"), cnt = await niyamByType("count");
     const [{ py }] = await sql()`select points as py from public.niyams where id = ${yes}`;

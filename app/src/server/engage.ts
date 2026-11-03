@@ -94,7 +94,7 @@ export async function getSanghTab(accountId: string, profileId: string): Promise
       })),
       board: cls?.leaderboard ? {
         className: cls.name,
-        // The top 10 who earned Tej this week, and where this person stands.
+        // The top 10 who earned AP this week, and where this person stands.
         rows: rows.filter((r) => r.points > 0).slice(0, 10),
         me: rows.find((r) => r.me) ?? null,
       } : null,

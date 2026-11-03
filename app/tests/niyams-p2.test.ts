@@ -1,4 +1,4 @@
-// Tithi niyams, tapasya levels with their own Tej, and copying niyams to another class.
+// Tithi niyams, tapasya levels with their own AP, and copying niyams to another class.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sql } from "@/server/db";
 import { createProfile, findSanghByCode, joinSangh } from "@/server/onboarding";
@@ -21,7 +21,7 @@ afterAll(async () => { await sql().end(); });
 async function member(classId: string) {
   const p = phone();
   const r = await joinSangh(p, heer);
-  if (r.kind === "closed") throw new Error("closed");
+  if (r.kind === "closed" || r.kind === "limit") throw new Error(r.kind);
   const prof = await createProfile(r.accountId, p, { name: "Tithi Person", relation: "self", consent: false });
   if (!prof.ok) throw new Error("profile");
   await sql()`update public.profiles set class_id = ${classId} where id = ${prof.profile.id}`;
@@ -42,7 +42,7 @@ describe("tithi niyams and tapasya levels", () => {
     expect(names).not.toContain(later.id);
   });
 
-  it("a tapasya level earns its own Tej", async () => {
+  it("a tapasya level earns its own AP", async () => {
     const body = niyamInput.parse({ name: "Tap levels " + n, type: "choice", points: 10, allClasses: false, classIds: [classB],
       options: [{ value: "e", en: "Ekasna", points: 30 }, { value: "u", en: "Upvas", points: 100 }, { value: "x", en: "Other" }] });
     const id = (await createNiyam(admin, heer, body)).find((x) => x.name === body.name)!.id;

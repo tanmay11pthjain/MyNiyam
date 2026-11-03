@@ -229,25 +229,10 @@ textarea.input { min-height: 88px; padding: var(--s-3) var(--s-4); resize: verti
 .pct { flex: none; font-weight: 700; }
 .rank { list-style: none; padding: 0; margin: 0; }
 
-/* Report cards: print two to a page */
-.cards { display: grid; gap: var(--s-4); }
-.rcard { background: var(--bg-2); border-radius: var(--r-l); padding: var(--s-5); display: grid; gap: var(--s-2); break-inside: avoid; }
-.rcard header { display: flex; justify-content: space-between; color: var(--ink-dim); font-size: var(--fs-12); }
-.rcard .brand { font-weight: 800; color: var(--accent-text); }
-.rcard h3 { margin: 0; font: 800 1.5rem var(--font-display); }
-.rcard .sub { margin: 0; color: var(--ink-dim); }
-.rcard dl { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); margin: var(--s-2) 0; }
-.rcard dt { font-size: var(--fs-12); color: var(--ink-dim); }
-.rcard dd { margin: 0; font: 800 1.6rem var(--font-display); }
-.rcard dd small { font: 600 var(--fs-12) var(--font-body); color: var(--ink-dim); }
-.rcard footer { font-weight: 600; color: var(--ok); }
 @media print {
   .no-print, .tabbar, .admin-bar, .toast { display: none !important; }
   .admin { padding: 0; max-width: none; }
   body { background: #fff; color: #000; }
-  .rcard { background: #fff; color: #000; border: 1.5px solid #999; page-break-inside: avoid; }
-  .rcard dt, .rcard .sub, .rcard header, .rcard dd small { color: #444; }
-  .cards { grid-template-columns: 1fr; }
 }
 .alert-link { text-decoration: none; color: inherit; display: grid; }
 .alert-link + .alert-link { margin-top: var(--s-3); }

@@ -65,8 +65,8 @@ async function dayView(tx: Tx, profileId: string, prof: Prof, date: string): Pro
 }
 
 /**
- * Streak (with kshama days), best streak and Tej, worked out from the logs every time, so every phone
- * shows the same numbers. Tej: a niyam's points each time it is kept; for count and minutes niyams,
+ * Streak (with kshama days), best streak and AP, worked out from the logs every time, so every phone
+ * shows the same numbers. AP: a niyam's points each time it is kept; for count and minutes niyams,
  * points for each count, up to 10 counts a day.
  */
 export async function progress(tx: Tx, profileId: string): Promise<Progress & { daysKept: number }> {
@@ -322,7 +322,7 @@ export async function getHistoryDay(accountId: string, profileId: string, date: 
     const prof = await loadProfile(tx, profileId);
     if (!prof) return null;
     const day = await dayView(tx, profileId, prof, date);
-    const [{ y }] = await tx<{ y: boolean }[]>`select ${date}::date = private.local_today() - 1 as y`;
-    return { day, isYesterday: y };
+    const [{ t }] = await tx<{ t: boolean }[]>`select ${date}::date >= private.local_today() as t`;
+    return { day, isToday: t };
   });
 }

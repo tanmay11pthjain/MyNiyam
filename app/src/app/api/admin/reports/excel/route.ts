@@ -6,7 +6,7 @@ import { reportWorkbook } from "@/server/admin/reports";
 import { logActivity } from "@/server/admin/volunteers";
 import { toXlsx } from "@/server/xlsx";
 
-// GET /api/admin/reports/excel?from=YYYY-MM-DD&to=YYYY-MM-DD → myniyam-report.xlsx: members (Tej,
+// GET /api/admin/reports/excel?from=YYYY-MM-DD&to=YYYY-MM-DD → myniyam-report.xlsx: members (AP,
 // days, attendance, gathas), attendance day by day, and niyams, for those dates (both counted; at most
 // a year). No dates: the last 30 days. Admins only: it has phone numbers.
 export const GET = sanghRoute("admin.reports.excel", async (req, ctx) => {

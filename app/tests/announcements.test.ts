@@ -27,7 +27,7 @@ afterAll(async () => { await sql().end(); });
 async function member(classId: string) {
   const p = phone();
   const r = await joinSangh(p, heer);
-  if (r.kind === "closed") throw new Error("closed");
+  if (r.kind === "closed" || r.kind === "limit") throw new Error(r.kind);
   const prof = await createProfile(r.accountId, p, { name: "M", relation: "self", consent: false });
   if (!prof.ok) throw new Error("profile");
   const s = await setupProfile(r.accountId, prof.profile.id, classId, {});
@@ -40,7 +40,8 @@ describe("announcements", () => {
     expect(announcementInput.safeParse({ title: "x", buttonLabel: "Go" }).success).toBe(false);
     expect(announcementInput.safeParse({ title: "x", buttonLabel: "Go", buttonUrl: "http://a.in" }).success).toBe(false);
     expect(announcementInput.safeParse({ title: "x", startDate: "2026-10-10", endDate: "2026-10-01" }).success).toBe(false);
-    expect(announcementInput.safeParse({ title: "x" }).success).toBe(true); // a picture is optional
+    expect(announcementInput.safeParse({ title: "x" }).success).toBe(false); // every slide needs its picture
+    expect(announcementInput.safeParse({ title: "x", imageUrl: "/api/files/photos/a.png" }).success).toBe(true);
   });
 
   it("shows members their class's live slides on the Sangh tab, pinned first; counts views", async () => {

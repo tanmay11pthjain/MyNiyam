@@ -24,7 +24,9 @@ const patch = z.object({
   about: opt(200),
   joinOpen: z.boolean().optional(),
   searchable: z.boolean().optional(),
-  logBackHours: z.union([z.literal(0), z.literal(24)]).optional(),
+  // Edit windows (Setup → Edit windows). The database holds the same limits.
+  logBackHours: z.union([z.literal(0), z.literal(24), z.literal(48), z.literal(72), z.literal(168)]).optional(),
+  attendanceBackDays: z.union([z.literal(0), z.literal(1), z.literal(3), z.literal(7), z.literal(15), z.literal(30)]).optional(),
   // Where sunrise and sunset are worked out for (India only); null clears it.
   location: z.object({ lat: z.number().min(6).max(38), lon: z.number().min(68).max(98) }).nullable().optional(),
 });

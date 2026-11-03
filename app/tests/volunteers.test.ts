@@ -24,7 +24,7 @@ afterAll(async () => { await sql().end(); });
 async function member(classId: string, name: string) {
   const p = phone();
   const r = await joinSangh(p, heer);
-  if (r.kind === "closed") throw new Error("closed");
+  if (r.kind === "closed" || r.kind === "limit") throw new Error(r.kind);
   const prof = await createProfile(r.accountId, p, { name, relation: "self", consent: false });
   if (!prof.ok) throw new Error("profile");
   await sql()`update public.profiles set class_id = ${classId} where id = ${prof.profile.id}`;

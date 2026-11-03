@@ -21,7 +21,7 @@ const STATUS: Record<ApiError["error"], number> = {
   unauthorized: 401, forbidden: 403, too_large: 413, too_many_requests: 429, send_failed: 502, server_error: 500,
   joins_closed: 403, class_has_members: 409, invalid_field: 400, duplicate_key: 400, no_sangh: 404, unsupported_type: 415,
   log_window_closed: 400, demo_only: 403, already_admin: 409, already_member: 409, same_number: 400,
-  vow_limit: 409, push_off: 503,
+  vow_limit: 409, push_off: 503, pathshala_limit: 409,
 };
 
 export function fail(ctx: Ctx, body: ApiError): NextResponse {

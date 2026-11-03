@@ -2,7 +2,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { asAdmin, sql } from "@/server/db";
 import { createProfile, findSanghByCode, joinSangh } from "@/server/onboarding";
-import { bestRun, getAlerts, getReport, getReportCards, reportWorkbook } from "@/server/admin/reports";
+import { bestRun, getAlerts, getReport, reportWorkbook } from "@/server/admin/reports";
 import { saveVolunteer } from "@/server/admin/volunteers";
 
 let n = 0;
@@ -22,7 +22,7 @@ afterAll(async () => { await sql().end(); });
 async function member(classId: string, name: string, joinedDaysAgo = 0) {
   const p = phone();
   const r = await joinSangh(p, heer);
-  if (r.kind === "closed") throw new Error("closed");
+  if (r.kind === "closed" || r.kind === "limit") throw new Error(r.kind);
   const prof = await createProfile(r.accountId, p, { name, relation: "self", consent: false });
   if (!prof.ok) throw new Error("profile");
   await sql()`update public.profiles set class_id = ${classId}, created_at = now() - make_interval(days => ${joinedDaysAgo}) where id = ${prof.profile.id}`;
@@ -57,7 +57,6 @@ describe("reports", () => {
     const r = await getReport(t, heer, { days: 7, classId: null });
     expect(r.top.some((p) => p.id === b)).toBe(false);
     expect(r.classes.map((c) => c.id)).toEqual([classA]);
-    expect(await getReportCards(t, heer, classB, today.slice(0, 7))).toBeNull();
   });
 
   it("alerts list people quiet for 3 days, not people who just joined", async () => {
@@ -72,23 +71,20 @@ describe("reports", () => {
     expect(after.quiet).toBe(al.quiet - 1);
   });
 
-  it("report cards and the Excel report", async () => {
+  it("the Excel report", async () => {
     const a = await member(classA, "Card Person");
     await logToday(a);
-    const cards = (await getReportCards(admin, heer, classA, today.slice(0, 7)))!;
-    const c = cards.cards.find((x) => x.name === "Card Person")!;
-    expect(c).toMatchObject({ daysLogged: 1, kept: 1, bestStreak: 1, attendance: null });
     const book = await reportWorkbook(admin, heer, today, today);
     expect(book.map((s) => s.name)).toEqual(["Members", "Attendance", "Niyams"]);
     const head = book[0].rows[0];
     expect(head.slice(0, 3)).toEqual(["Name", "Class", "Mobile"]);
     const row = book[0].rows.find((r) => r[0] === "Card Person")!;
-    expect(row[head.indexOf("Tej points")]).toBeGreaterThan(0);
+    expect(row[head.indexOf("Aradhana Points (AP)")]).toBeGreaterThan(0);
     expect(row[head.indexOf("Days logged")]).toBe(1);
-    // Dates before the log: no Tej, no days.
+    // Dates before the log: no AP, no days.
     const old = await reportWorkbook(admin, heer, "2026-01-01", "2026-01-31");
     const before = old[0].rows.find((r) => r[0] === "Card Person")!;
-    expect([before[head.indexOf("Tej points")], before[head.indexOf("Days logged")]]).toEqual([0, 0]);
+    expect([before[head.indexOf("Aradhana Points (AP)")], before[head.indexOf("Days logged")]]).toEqual([0, 0]);
   });
 
   it("the Excel file is a real workbook, and text never runs as a formula", async () => {

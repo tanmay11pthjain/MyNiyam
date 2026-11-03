@@ -26,7 +26,7 @@ export function Welcome() {
         <p className="lead">Keep your daily niyams with your pathshala.</p>
         <div className="stack mt-6">
           <Link className="btn btn-primary" href="/join">Join your pathshala</Link>
-          <Link className="btn btn-quiet" href="/login">Already joined? Log in</Link>
+          <Link className="btn btn-secondary" href="/login">Already joined? Log in</Link>
         </div>
       </main>
     </div>

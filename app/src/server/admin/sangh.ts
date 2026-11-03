@@ -48,29 +48,29 @@ export async function isAdminOf(phone: string, sanghId: string): Promise<boolean
 type ProfileRow = {
   id: string; name: string; name_hi: string | null; city: string; area: string | null; sampraday: string | null;
   contact_phone: string | null; about: string | null; logo_url: string | null; join_code: string; status: SanghProfile["status"];
-  join_open: boolean; searchable: boolean; log_back_hours: number; lat: number | null; lon: number | null;
+  join_open: boolean; searchable: boolean; log_back_hours: number; attendance_back_days: number; lat: number | null; lon: number | null;
 };
 const toProfile = (r: ProfileRow): SanghProfile => ({
   id: r.id, name: r.name, nameHi: r.name_hi, city: r.city, area: r.area, sampraday: r.sampraday, contactPhone: r.contact_phone,
   about: r.about, logoUrl: r.logo_url, joinCode: r.join_code, status: r.status, joinOpen: r.join_open, searchable: r.searchable,
-  logBackHours: r.log_back_hours, location: r.lat !== null && r.lon !== null ? { lat: r.lat, lon: r.lon } : null,
+  logBackHours: r.log_back_hours, attendanceBackDays: r.attendance_back_days, location: r.lat !== null && r.lon !== null ? { lat: r.lat, lon: r.lon } : null,
 });
 
 export async function getSanghProfile(phone: string, sanghId: string): Promise<SanghProfile | null> {
   const [r] = await asAdmin(phone, (tx) => tx<ProfileRow[]>`
-    select id, name, name_hi, city, area, sampraday, contact_phone, about, logo_url, join_code, status, join_open, searchable, log_back_hours, lat, lon
+    select id, name, name_hi, city, area, sampraday, contact_phone, about, logo_url, join_code, status, join_open, searchable, log_back_hours, attendance_back_days, lat, lon
     from public.sanghs where id = ${sanghId} and private.is_sangh_admin(id)`);
   return r ? toProfile(r) : null;
 }
 
 export type SanghPatch = Partial<{
   name: string; nameHi: string | null; city: string; area: string | null; sampraday: string | null; contactPhone: string | null;
-  about: string | null; joinOpen: boolean; searchable: boolean; logBackHours: number; lat: number | null; lon: number | null;
+  about: string | null; joinOpen: boolean; searchable: boolean; logBackHours: number; attendanceBackDays: number; lat: number | null; lon: number | null;
 }>;
 
 const COLUMNS: Record<keyof SanghPatch, string> = {
   name: "name", nameHi: "name_hi", city: "city", area: "area", sampraday: "sampraday", contactPhone: "contact_phone",
-  about: "about", joinOpen: "join_open", searchable: "searchable", logBackHours: "log_back_hours", lat: "lat", lon: "lon",
+  about: "about", joinOpen: "join_open", searchable: "searchable", logBackHours: "log_back_hours", attendanceBackDays: "attendance_back_days", lat: "lat", lon: "lon",
 };
 
 export async function updateSanghProfile(phone: string, sanghId: string, patch: SanghPatch): Promise<SanghProfile | null> {
@@ -79,7 +79,7 @@ export async function updateSanghProfile(phone: string, sanghId: string, patch: 
   return asAdmin(phone, async (tx) => {
     if (Object.keys(row).length) await tx`update public.sanghs set ${tx(row)} where id = ${sanghId}`;
     const [r] = await tx<ProfileRow[]>`
-      select id, name, name_hi, city, area, sampraday, contact_phone, about, logo_url, join_code, status, join_open, searchable, log_back_hours, lat, lon
+      select id, name, name_hi, city, area, sampraday, contact_phone, about, logo_url, join_code, status, join_open, searchable, log_back_hours, attendance_back_days, lat, lon
       from public.sanghs where id = ${sanghId} and private.is_sangh_admin(id)`;
     return r ? toProfile(r) : null;
   });

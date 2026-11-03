@@ -5,12 +5,16 @@ import { api, say } from "./api";
 import { shrinkImage, upload } from "./images";
 import { JoinForm, type JoinValues } from "./JoinFields";
 import { Button, Chevron, Frame, Msg, Title } from "./ui";
-import type { ApiError, Me, Profile } from "@/lib/api-types";
+import type { ApiError, FamilyMember, Me, Profile } from "@/lib/api-types";
 
 type Words = { en: string; hi: string };
 type View = { name: "pick" } | { name: "add" } | { name: "setup"; profile: Profile };
 
-/** "Who is using MyNiyam?" → pick or add a person → class and the pathshala's questions → Home. */
+/**
+ * "Who is using MyNiyam?" → pick a person (anyone on this number, in any of its pathshalas; the
+ * pathshala shows under each name) or add one → class and the pathshala's questions → Home.
+ * Picking someone in another pathshala opens that pathshala.
+ */
 export function WhoScreen() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
@@ -44,13 +48,12 @@ export function WhoScreen() {
     );
   }
 
-  const className = (id: string | null) => me.classes.find((c) => c.id === id)?.name;
   const hasSelf = me.profiles.some((p) => p.relation === "self");
 
   if (view.name === "add") {
     return (
-      <Frame lamps={{ total: 3, lit: 2 }} onBack={me.profiles.length ? () => setView({ name: "pick" }) : undefined}>
-        <AddPerson hasSelf={hasSelf} sanghName={me.sangh.name}
+      <Frame lamps={{ total: 3, lit: 2 }} onBack={me.family.length ? () => setView({ name: "pick" }) : undefined}>
+        <AddPerson hasSelf={hasSelf} sanghName={me.sangh.name} others={othersToBring(me)}
           onAdded={(p) => { setMe({ ...me, profiles: [...me.profiles, p] }); setView({ name: "setup", profile: p }); }} />
       </Frame>
     );
@@ -64,36 +67,65 @@ export function WhoScreen() {
     );
   }
 
+  // After picking: open Home, or first finish that person's form (in their pathshala, which is now open).
+  async function picked(m: FamilyMember) {
+    const r = await api<Me>("/api/me");
+    if (!r.ok) return say(r.err);
+    setMe(r.data);
+    const p = r.data.profiles.find((x) => x.id === m.id);
+    if (p && p.setupDone && !p.missing?.length) router.push("/home");
+    else if (p) setView({ name: "setup", profile: p });
+    return null;
+  }
+
   return (
     <Frame>
       <div className="screen">
-        <Title en="Who is using MyNiyam?" hi="MyNiyam कौन इस्तेमाल कर रहा है?" lead={<>{me.sangh.name} · {me.phone}</>} />
-        <PickList profiles={me.profiles} className={className} onPicked={(p) => (p.setupDone && !p.missing?.length ? router.push("/home") : setView({ name: "setup", profile: p }))} />
+        <Title en="Who is using MyNiyam?" hi="MyNiyam कौन इस्तेमाल कर रहा है?" lead={me.phone} />
+        <PickList family={me.family} onPicked={picked} />
         <div className="stack push">
-          <Button kind="secondary" onClick={() => setView({ name: "add" })}>Add someone on this number</Button>
+          <Button kind="secondary" onClick={() => setView({ name: "add" })}>Add someone to {me.sangh.name}</Button>
+          <Button kind="quiet" onClick={() => router.push("/join")}>Join another pathshala</Button>
         </div>
       </div>
     </Frame>
   );
 }
 
-function PickList({ profiles, className, onPicked }: { profiles: Profile[]; className: (id: string | null) => string | undefined; onPicked: (p: Profile) => void }) {
+/** People on this number who are in other pathshalas but not in this one yet: one row per person (same name and relation). */
+function othersToBring(me: Me): (FamilyMember & { sanghs: string[] })[] {
+  const key = (m: { name: string; relation: string }) => `${m.relation}:${m.name.trim().toLowerCase()}`;
+  const here = new Set(me.profiles.map(key));
+  const hasSelf = me.profiles.some((p) => p.relation === "self");
+  const out = new Map<string, FamilyMember & { sanghs: string[] }>();
+  for (const m of me.family) {
+    if (m.here || here.has(key(m)) || (m.relation === "self" && hasSelf)) continue;
+    const seen = out.get(key(m));
+    if (seen) { if (!seen.sanghs.includes(m.sangh.name)) seen.sanghs.push(m.sangh.name); }
+    else out.set(key(m), { ...m, sanghs: [m.sangh.name] });
+  }
+  return [...out.values()];
+}
+
+function PickList({ family, onPicked }: { family: FamilyMember[]; onPicked: (m: FamilyMember) => Promise<Words | null> }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<Words | null>(null);
   return (
     <div className="stack mt-5">
-      {profiles.map((p) => (
+      {family.map((p) => (
         <button key={p.id} type="button" className="choice" disabled={busy !== null} aria-busy={busy === p.id || undefined}
           onClick={async () => {
             setBusy(p.id); setErr(null);
             const r = await api("/api/session/profile", { body: { profileId: p.id } });
+            const e = r.ok ? await onPicked(p) : say(r.err);
             setBusy(null);
-            if (r.ok) onPicked(p); else setErr(say(r.err));
+            if (e) setErr(e);
           }}>
           <span className={`avatar${p.relation === "self" ? " kesar" : ""}`} aria-hidden="true">{p.name.charAt(0).toUpperCase()}</span>
           <span className="grow">
             <span className="t">{p.name}</span>
-            <span className="s">{p.relation === "self" ? "Myself" : "My child"}{className(p.classId) ? ` · ${className(p.classId)}` : " · class not chosen yet"}</span>
+            <span className="s who-sangh">{p.sangh.name}</span>
+            <span className="s">{p.relation === "self" ? "Myself" : "My child"}{p.className ? ` · ${p.className}` : " · class not chosen yet"}</span>
           </span>
           {busy === p.id ? <span className="spinner" aria-hidden="true" /> : <Chevron />}
         </button>
@@ -103,7 +135,12 @@ function PickList({ profiles, className, onPicked }: { profiles: Profile[]; clas
   );
 }
 
-function AddPerson({ hasSelf, sanghName, onAdded }: { hasSelf: boolean; sanghName: string; onAdded: (p: Profile) => void }) {
+function AddPerson({ hasSelf, sanghName, others, onAdded }: {
+  hasSelf: boolean; sanghName: string; others: (FamilyMember & { sanghs: string[] })[]; onAdded: (p: Profile) => void;
+}) {
+  // Someone already on this number in another pathshala, whose details are copied over; null = someone new.
+  const [from, setFrom] = useState<FamilyMember | null>(null);
+  const [chosen, setChosen] = useState(others.length === 0);
   const [relation, setRelation] = useState<"self" | "child" | null>(hasSelf ? "child" : null);
   const [name, setName] = useState("");
   const [consent, setConsent] = useState(false);
@@ -116,16 +153,46 @@ function AddPerson({ hasSelf, sanghName, onAdded }: { hasSelf: boolean; sanghNam
     if (!name.trim()) { setErr({ en: "Please write a name.", hi: "नाम लिखें।" }); return; }
     if (relation === "child" && !consent) { setConsentErr(true); setErr(say({ error: "consent_required" })); return; }
     setBusy(true); setErr(null);
-    const r = await api<{ profile: Profile }>("/api/profiles", { body: { name: name.trim(), relation, consent } });
+    const r = await api<{ profile: Profile }>("/api/profiles", { body: { name: name.trim(), relation, consent, fromProfileId: from?.id ?? null } });
     setBusy(false);
     if (r.ok) onAdded(r.data.profile);
     else setErr(say(r.err as ApiError));
   }
 
+  // First: who is joining? Everyone on this number from the other pathshalas, or someone new.
+  if (!chosen) {
+    return (
+      <div className="screen">
+        <Title en={`Who is joining ${sanghName}?`} hi="कौन जुड़ रहा है?" lead="Pick someone already on this number, or add someone new." />
+        <div className="stack mt-5">
+          {others.map((m) => (
+            <button key={m.id} type="button" className="choice"
+              onClick={() => { setFrom(m); setRelation(m.relation); setName(m.name); setConsent(false); setChosen(true); }}>
+              <span className={`avatar${m.relation === "self" ? " kesar" : ""}`} aria-hidden="true">{m.name.charAt(0).toUpperCase()}</span>
+              <span className="grow">
+                <span className="t">{m.name}</span>
+                <span className="s who-sangh">{m.sanghs.join(", ")}</span>
+                <span className="s">{m.relation === "self" ? "Myself" : "My child"}</span>
+              </span>
+              <Chevron />
+            </button>
+          ))}
+          <button type="button" className="choice" onClick={() => { setFrom(null); setRelation(hasSelf ? "child" : null); setName(""); setChosen(true); }}>
+            <span className="avatar" aria-hidden="true">+</span>
+            <span className="grow"><span className="t">Someone new</span><span className="s" lang="hi">कोई नया</span></span>
+            <Chevron />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="screen">
-      <Title en="Who is using MyNiyam?" hi="MyNiyam कौन इस्तेमाल कर रहा है?" lead="You can add your children on this same number." />
-      <div className="stack mt-5" role="radiogroup" aria-label="Who is this for">
+      <Title en={from ? `${from.name} joins ${sanghName}` : "Who is using MyNiyam?"} hi={from ? "पाठशाला से जुड़ें" : "MyNiyam कौन इस्तेमाल कर रहा है?"}
+        lead={from ? "Answers this pathshala also asks (like date of birth and city) are copied from their other pathshala. You can change them next." : "You can add your children on this same number."} />
+      {others.length > 0 && <button type="button" className="link-btn mt-2" onClick={() => { setChosen(false); setErr(null); }}>Choose someone else</button>}
+      {!from && <div className="stack mt-5" role="radiogroup" aria-label="Who is this for">
         {!hasSelf && (
           <button type="button" role="radio" className="choice" aria-checked={relation === "self"} onClick={() => setRelation("self")}>
             <span className="radio-dot" aria-hidden="true" />
@@ -136,7 +203,7 @@ function AddPerson({ hasSelf, sanghName, onAdded }: { hasSelf: boolean; sanghNam
           <span className="radio-dot" aria-hidden="true" />
           <span className="grow"><span className="t">My child</span><span className="s" lang="hi">मेरा बच्चा</span></span>
         </button>
-      </div>
+      </div>}
 
       {relation && (
         <form className="stack mt-5" noValidate onSubmit={(e) => { e.preventDefault(); void save(); }}>

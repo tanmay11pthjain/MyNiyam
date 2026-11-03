@@ -10,7 +10,7 @@ import { formatPhone, normalizeIndianPhone } from "@/lib/phone";
 
 // Admins only. Adds a member for someone who can't do it on their phone: a code goes to their number,
 // they read it out, the admin types it. They answer the join form the first time they open the app.
-// POST { step: "send", phone } → { resendAfterSec, simulated } | 409 already_member | other_sangh
+// POST { step: "send", phone } → { resendAfterSec, simulated } | 409 already_member | pathshala_limit
 // POST { step: "confirm", phone, code, name, classId } → { profileId }
 const body = z.discriminatedUnion("step", [
   z.object({ step: z.literal("send"), phone: z.string().max(20) }),
@@ -23,8 +23,11 @@ export const POST = sanghRoute("admin.members.add", async (req, ctx) => {
   if (!input) return fail(ctx, { error: "bad_request" });
   const phone = normalizeIndianPhone(input.phone);
   if (!phone) return fail(ctx, { error: "invalid_phone" });
-  const [existing] = await sql()`select sangh_id from public.accounts where phone = ${phone}`;
-  if (existing) return fail(ctx, { error: existing.sangh_id === ctx.sanghId ? "already_member" : "other_sangh" });
+  // A number may be in other pathshalas too (up to 5); only this pathshala matters here.
+  const [existing] = await sql()`select count(*) filter (where sangh_id = ${ctx.sanghId})::int as here, count(*)::int as all
+    from public.accounts where phone = ${phone}`;
+  if (existing.here) return fail(ctx, { error: "already_member" });
+  if (existing.all >= config().MAX_PATHSHALAS_PER_PHONE) return fail(ctx, { error: "pathshala_limit" });
 
   if (input.step === "send") {
     const limited = await limitIp(ctx, "otp_send", config().RL_OTP_SEND_PER_IP_HOUR, 3600);

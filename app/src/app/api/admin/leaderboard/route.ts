@@ -6,7 +6,7 @@ import { getBoard } from "@/server/admin/leaderboard";
 import type { AdminBoard } from "@/lib/admin-types";
 
 // GET /api/admin/leaderboard?class=&from=YYYY-MM-DD&to=YYYY-MM-DD → AdminBoard
-// (first class, and this week, by default). Ranked by Tej earned in those dates.
+// (first class, and this week, by default). Ranked by AP earned in those dates.
 export const GET = sanghRouteFor("view_members")("admin.leaderboard", async (req, ctx) => {
   const q = req.nextUrl.searchParams;
   const cls = q.get("class"), from = q.get("from"), to = q.get("to");

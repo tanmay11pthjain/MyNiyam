@@ -7,9 +7,11 @@ const body = z.object({
   name: z.string().trim().min(1).max(60),
   relation: z.enum(["self", "child"]),
   consent: z.boolean().default(false), // required true for "child": the number's owner is the parent or guardian
+  // The same person's profile in another pathshala on this number: their details are copied over.
+  fromProfileId: z.uuid().nullable().optional(),
 });
 
-// POST /api/profiles { name, relation, consent } → { profile }  (also makes it the active profile)
+// POST /api/profiles { name, relation, consent, fromProfileId? } → { profile }  (also makes it the active profile)
 export const POST = route("profiles.create", async (req, ctx) => {
   const s = await readSession(req);
   if (!s) return fail(ctx, { error: "unauthorized" });

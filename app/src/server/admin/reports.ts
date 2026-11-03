@@ -1,7 +1,7 @@
 import "server-only";
 import { asAdmin, type Tx } from "../db";
 import { formatPhone } from "@/lib/phone";
-import type { DashboardAlerts, Report, ReportCards } from "@/lib/admin-types";
+import type { DashboardAlerts, Report } from "@/lib/admin-types";
 import type { SheetData } from "../xlsx";
 
 // Reports for admins and volunteers with "view_members". Row-level security limits a volunteer
@@ -84,7 +84,7 @@ export async function getReport(phone: string, sanghId: string, r: Range): Promi
 const short = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 
 /** Admins only (the route checks): the Excel workbook for `from` to `to` (both days counted).
- *  Members (with numbers, Tej and attendance), attendance day by day, and niyams kept. */
+ *  Members (with numbers, AP and attendance), attendance day by day, and niyams kept. */
 export async function reportWorkbook(phone: string, sanghId: string, from: string, to: string): Promise<SheetData[]> {
   return asAdmin(phone, async (tx) => {
     const rows = await tx`
@@ -127,7 +127,7 @@ export async function reportWorkbook(phone: string, sanghId: string, from: strin
       {
         name: "Members", widths: [24, 16, 16, 8, 12, 12, 10, 12, 12, 12, 10],
         rows: [
-          ["Name", "Class", "Mobile", "Who", "Joined", "Last logged", "Tej points", "Days logged", "Niyams kept", "Attendance %", "Gathas"],
+          ["Name", "Class", "Mobile", "Who", "Joined", "Last logged", "Aradhana Points (AP)", "Days logged", "Niyams kept", "Attendance %", "Gathas"],
           ...rows.map((r) => { const t = totals(r.id); return [r.name, r.class ?? "", formatPhone(r.phone), r.relation === "self" ? "Self" : "Child", r.joined, r.last_logged ?? "", r.tej, r.days, r.kept, t.pct, t.gathas]; }),
           [],
           [`Dates: ${short(from)} to ${short(to)} (both days counted). Last logged is the latest day ever logged.`],
@@ -145,39 +145,6 @@ export async function reportWorkbook(phone: string, sanghId: string, from: strin
       },
       { name: "Niyams", widths: [30, 14, 10], rows: [["Niyam", "Times kept", "People"], ...niyams.map((n) => [n.name, n.done, n.people])] },
     ];
-  });
-}
-
-/** One report card per person in a class for a month: days logged, niyams kept, best streak, attendance. */
-export async function getReportCards(phone: string, sanghId: string, classId: string, month: string): Promise<ReportCards | null> {
-  return asAdmin(phone, async (tx) => {
-    const [s] = await tx`select name from public.sanghs where id = ${sanghId}`;
-    const [c] = await tx`select name from public.classes where id = ${classId} and sangh_id = ${sanghId} and private.class_in_scope(sangh_id, id)`;
-    if (!s || !c) return null;
-    const start = `${month}-01`;
-    const rows = await tx<{ id: string; name: string; days: number[]; kept: number; present: number; total: number }[]>`
-      select p.id, p.name,
-        coalesce((select array_agg(distinct extract(day from l.log_date)::int order by extract(day from l.log_date)::int) from public.niyam_logs l
-          where l.profile_id = p.id and l.done and l.log_date >= ${start}::date and l.log_date < (${start}::date + interval '1 month')), '{}') as days,
-        (select count(*)::int from public.niyam_logs l where l.profile_id = p.id and l.done
-          and l.log_date >= ${start}::date and l.log_date < (${start}::date + interval '1 month')) as kept,
-        (select count(*) filter (where at.status <> 'absent')::int from public.attendance at where at.profile_id = p.id
-          and at.day >= ${start}::date and at.day < (${start}::date + interval '1 month')
-          and not exists (select 1 from public.sangh_holidays h where h.sangh_id = at.sangh_id and h.day = at.day)) as present,
-        (select count(*)::int from public.attendance at where at.profile_id = p.id
-          and at.day >= ${start}::date and at.day < (${start}::date + interval '1 month')
-          and not exists (select 1 from public.sangh_holidays h where h.sangh_id = at.sangh_id and h.day = at.day)) as total
-      from public.profiles p join public.accounts a on a.id = p.account_id
-      where p.class_id = ${classId} and a.removed_at is null and p.removed_at is null order by lower(p.name)`;
-    const [{ dim }] = await tx<{ dim: number }[]>`
-      select extract(day from least((${start}::date + interval '1 month - 1 day')::date, private.local_today()))::int as dim`;
-    return {
-      sangh: s.name, className: c.name, month, daysInMonth: Math.max(dim, 0),
-      cards: rows.map((r) => ({
-        name: r.name, daysLogged: r.days.length, kept: r.kept, bestStreak: bestRun(r.days),
-        attendance: r.total ? { came: r.present, total: r.total } : null,
-      })),
-    };
   });
 }
 

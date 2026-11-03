@@ -7,7 +7,7 @@ import type { Niyam, NiyamsPage } from "@/lib/admin-types";
 // from members. Which classes a niyam is for lives in niyam_classes (empty when allClasses).
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-// points: a tapasya level's own Tej (Upvas earns more than Navkarsi). Missing = the niyam's points.
+// points: a tapasya level's own AP (Upvas earns more than Navkarsi). Missing = the niyam's points.
 const option = z.object({ value: z.string().min(1).max(40), en: z.string().trim().min(1).max(40), hi: z.string().trim().max(40).optional(),
   points: z.number().int().min(0).max(500).optional() });
 
@@ -29,7 +29,7 @@ export const niyamInput = z.object({
   endDate: date.nullable().default(null),
   isCore: z.boolean().default(true),
   timeHint: z.enum(["navkarsi", "chauvihar"]).nullable().default(null),
-  /** Tej each time it is kept (for count and minutes: each count, up to 10 a day). */
+  /** AP each time it is kept (for count and minutes: each count, up to 10 a day). */
   points: z.number().int().min(0).max(100).default(10),
 }).superRefine((n, ctx) => {
   const bad = (path: string) => ctx.addIssue({ code: "custom", path: [path], message: path });

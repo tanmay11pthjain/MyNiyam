@@ -21,7 +21,7 @@ afterAll(async () => { await sql().end(); });
 async function joined(sanghId = heer) {
   const p = phone();
   const r = await joinSangh(p, sanghId);
-  if (r.kind === "closed") throw new Error("sangh is not taking members");
+  if (r.kind === "closed" || r.kind === "limit") throw new Error("sangh is not taking members");
   return { phone: p, accountId: r.accountId };
 }
 
@@ -76,7 +76,7 @@ describe("rate limit counter", () => {
   });
 });
 
-describe("one number, one sangh", () => {
+describe("one number, one account per sangh", () => {
   it("parallel joins of one number create one account", async () => {
     const p = phone();
     const rs = await Promise.all(Array.from({ length: 10 }, () => joinSangh(p, heer)));
@@ -87,15 +87,17 @@ describe("one number, one sangh", () => {
     expect(c).toBe(1);
   });
 
-  it("a number already in another sangh is told where it is", async () => {
+  it("a number can join another sangh too, with its own account there", async () => {
     const a = await joined(heer);
     const r = await joinSangh(a.phone, shan);
-    expect(r).toMatchObject({ kind: "other_sangh", accountId: a.accountId, sangh: { joinCode: "HEER01" } });
+    expect(r.kind).toBe("joined");
+    expect("accountId" in r && r.accountId).not.toBe(a.accountId);
+    expect(await joinSangh(a.phone, heer)).toEqual({ kind: "logged_in", accountId: a.accountId });
   });
 
-  it("the database itself refuses a second account for a number", async () => {
+  it("the database itself refuses a second account for a number in the same sangh", async () => {
     const a = await joined(heer);
-    await expect(sql()`insert into public.accounts (phone, sangh_id) values (${a.phone}, ${shan})`).rejects.toMatchObject({ code: "23505" });
+    await expect(sql()`insert into public.accounts (phone, sangh_id) values (${a.phone}, ${heer})`).rejects.toMatchObject({ code: "23505" });
   });
 });
 

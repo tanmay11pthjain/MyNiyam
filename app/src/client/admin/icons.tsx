@@ -14,6 +14,7 @@ export const Icon = {
   plus: () => <S><path d="M12 5v14M5 12h14" /></S>,
   check: () => <S><path d="M5 12.5l4.5 4.5L19 7.5" /></S>,
   roll: () => <S><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V3h6v1" /><path d="M8.5 13l2.5 2.5 4.5-5" /></S>,
+  clock: () => <S><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></S>,
   copy: () => <S><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h8" /></S>,
   share: () => <S><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" /><path d="M12 3v12M7 8l5-5 5 5" /></S>,
   download: () => <S><path d="M12 3v12M7 10l5 5 5-5" /><path d="M4 19h16" /></S>,

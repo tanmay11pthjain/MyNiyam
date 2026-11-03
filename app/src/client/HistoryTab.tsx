@@ -14,7 +14,7 @@ const shift = (m: string, by: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
 
-/** The current month day by day, newest first. Tap a day to see what was kept; yesterday can still be changed. */
+/** The current month day by day, newest first. Tap a day to see what was kept; days inside the edit window can still be changed. */
 export function HistoryTab() {
   const [month, setMonth] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).slice(0, 7));
   // The answer is kept with its month, so changing month shows the loading state without setting state in an effect.
@@ -127,7 +127,7 @@ function NiyamStats() {
   );
 }
 
-/** One day in a pop-up. Only yesterday can be changed here; today is logged on the Today tab. */
+/** One day in a pop-up. Days inside the pathshala's edit window can be changed here; today is logged on the Today tab. */
 function DayDialog({ date, onClose, onChanged }: { date: string; onClose: () => void; onChanged: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); }, []);
@@ -139,7 +139,7 @@ function DayDialog({ date, onClose, onChanged }: { date: string; onClose: () => 
     void api<HistoryDayResponse>(`/api/history?date=${date}`).then((r) => { if (r.ok) setRes(r.data); else setErr(say(r.err).en); });
   }, [date]);
 
-  const canEdit = !!res && res.isYesterday && res.day.editable;
+  const canEdit = !!res && !res.isToday && res.day.editable;
 
   function log(n: DayNiyam, patch: LogPatch) {
     setRes((r) => r && { ...r, day: { ...r.day, niyams: r.day.niyams.map((x) => (x.id === n.id ? applyPatch(x, patch) : x)) } });
@@ -157,7 +157,7 @@ function DayDialog({ date, onClose, onChanged }: { date: string; onClose: () => 
       <div className="sheet-head">
         <div>
           <h2 id="day-title">{dayLabel(date)}</h2>
-          {res && <p className="hint">{canEdit ? "You can still change yesterday." : res.isYesterday ? "This day has closed." : "Only yesterday can be changed. Log today on the Today tab."}</p>}
+          {res && <p className="hint">{res.isToday ? "Log today on the Today tab." : canEdit ? "You can still change this day." : "This day has closed."}</p>}
         </div>
         <button type="button" className="sheet-x" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
       </div>

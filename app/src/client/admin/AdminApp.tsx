@@ -28,7 +28,7 @@ const TABS: { href: string; label: string; hi?: string; icon: () => ReactNode; m
   { href: "/admin/members", label: "Members", hi: "सदस्य", icon: Icon.people, match: (p: string) => p.startsWith("/admin/members"), show: (can) => can("view_members") },
   { href: "/admin/attendance", label: "Attendance", hi: "हाज़िरी", icon: Icon.roll, match: (p: string) => p.startsWith("/admin/attendance"), show: (can) => can("attendance") },
   { href: "/admin/niyams", label: "Niyams", hi: "नियम", icon: Icon.niyam, match: (p: string) => p.startsWith("/admin/niyams"), show: (can) => can("niyams") },
-  { href: "/admin/setup", label: "Setup", hi: "सेटअप", icon: Icon.setup, match: (p: string) => ["/admin/setup", "/admin/sangh", "/admin/classes", "/admin/form", "/admin/super", "/admin/volunteers"].some((x) => p.startsWith(x)), show: () => true },
+  { href: "/admin/setup", label: "Setup", hi: "सेटअप", icon: Icon.setup, match: (p: string) => ["/admin/setup", "/admin/sangh", "/admin/classes", "/admin/form", "/admin/super", "/admin/volunteers", "/admin/edit-window"].some((x) => p.startsWith(x)), show: () => true },
 ];
 
 /** Wraps every /admin page: checks the session, opens a sangh, and draws the header and tabs. */
@@ -157,6 +157,7 @@ function MenuSheet({ me, can, path, onClose }: { me: AdminMe; can: Can; path: st
       { href: "/admin/classes", icon: Icon.layers, t: "Classes", show: can("setup") },
       { href: "/admin/form", icon: Icon.form, t: "Join form", show: can("setup") },
       { href: "/admin/volunteers", icon: Icon.people, t: "Volunteers and teachers", show: can("admin") },
+      { href: "/admin/edit-window", icon: Icon.clock, t: "Edit windows", show: can("admin") },
       { href: "/admin/setup", icon: Icon.setup, t: "All settings", show: true },
       { href: "/admin/super", icon: Icon.shield, t: "Super admin", show: me.isSuper },
     ] },

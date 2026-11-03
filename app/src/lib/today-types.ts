@@ -57,7 +57,8 @@ export type HistoryDay = { date: string; coreDone: number; coreTotal: number; an
 export type HistoryResponse = { month: string; today: string; days: HistoryDay[]; firstMonth: string; attendance: { present: number; late: number; absent: number } | null };
 
 /** GET /api/history/day?date=YYYY-MM-DD */
-export type HistoryDayResponse = { day: DayView; isYesterday: boolean };
+/** isToday: today is logged on the Today tab. A past day can be changed while day.editable (the pathshala's edit window). */
+export type HistoryDayResponse = { day: DayView; isToday: boolean };
 
 /** GET /api/history/niyams: per niyam, days in a row now (ending today or yesterday), best ever and the lifetime total. */
 export type NiyamStat = { id: string; name: string; streak: number; best: number; total: number; unit: string };
@@ -81,7 +82,7 @@ export type GoalCard = {
 /** A milestone post in the feed. myMsg: the Anumodana this person sent (index into the presets), if any. */
 export type FeedPost = { id: number; badge: string; en: string; hi: string; mark: string; name: string; mine: boolean; at: string; count: number; myMsg: number | null };
 
-/** Tej earned this week (Monday onwards); days kept break a tie. */
+/** AP earned this week (Monday onwards); days kept break a tie. */
 export type BoardRow = { rank: number; name: string; points: number; days: number; me: boolean };
 
 /** GET /api/sangh: the Sangh tab. board: null when the class has no leaderboard. */

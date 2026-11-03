@@ -25,6 +25,14 @@ export type Me = {
   formFields: FormField[];
   profiles: Profile[];
   activeProfileId: string | null;
+  /** Everyone on this number in every pathshala (this one first). `here`: in the pathshala open now. */
+  family: FamilyMember[];
+};
+
+/** One person in one pathshala. The same child in two pathshalas is two of these, with the same name. */
+export type FamilyMember = {
+  id: string; name: string; relation: "self" | "child"; setupDone: boolean;
+  sangh: { id: string; name: string }; className: string | null; here: boolean;
 };
 
 export type OtpChannel = "whatsapp" | "sms";
@@ -46,7 +54,9 @@ export type ApiError = {
     | "joins_closed" | "class_has_members" | "invalid_field" | "duplicate_key" | "no_sangh" | "unsupported_type"
     | "log_window_closed" | "demo_only" | "already_admin" | "already_member" | "same_number"
     // P3
-    | "vow_limit" | "push_off";
+    | "vow_limit" | "push_off"
+    // many pathshalas
+    | "pathshala_limit";
   retryAfterSec?: number;
   attemptsLeft?: number;
   sangh?: SanghCard;

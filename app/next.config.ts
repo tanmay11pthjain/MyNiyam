@@ -54,6 +54,8 @@ const nextConfig: NextConfig = {
     // The QR code on the pathshala poster holds https://<app>/j/HEER01.
     return [
       { source: "/j/:code", destination: "/join?code=:code", permanent: false },
+      // Report cards were removed; old bookmarks land on Reports.
+      { source: "/admin/reports/cards", destination: "/admin/reports", permanent: false },
       // Signed-in members go straight to their Today screen; everyone else sees the landing page.
       { source: "/", has: [{ type: "cookie", key: "mn_session" }], destination: "/home", permanent: false },
     ];

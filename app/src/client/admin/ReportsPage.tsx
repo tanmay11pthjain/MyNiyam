@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import Link from "next/link";
 import { useAdmin } from "./AdminApp";
 import { Icon } from "./icons";
 import { LoadError, Loading, Sheet, useLoad } from "./kit";
@@ -18,7 +17,6 @@ export function ReportsPage() {
   const d = useLoad<Report>(can("view_members") ? `/api/admin/reports?s=${sangh.id}&days=${days}${cls ? `&class=${cls}` : ""}` : null);
 
   if (!can("view_members")) return <main className="page"><div className="banner err">You can&apos;t see reports in this pathshala.</div></main>;
-  const month = new Date().toISOString().slice(0, 7);
 
   return (
     <main className="page">
@@ -35,16 +33,15 @@ export function ReportsPage() {
       )}
       {d.state === "loading" && <Loading rows={4} />}
       {d.state === "error" && <LoadError message={d.message} retry={d.retry} />}
-      {d.state === "ready" && <Body r={d.data} month={month} admin={can("admin")} sanghId={sangh.id} />}
+      {d.state === "ready" && <Body r={d.data} admin={can("admin")} sanghId={sangh.id} />}
     </main>
   );
 }
 
-function Body({ r, month, admin, sanghId }: { r: Report; month: string; admin: boolean; sanghId: string }) {
+function Body({ r, admin, sanghId }: { r: Report; admin: boolean; sanghId: string }) {
   const [excel, setExcel] = useState(false);
   const avg = r.trend.length ? Math.round(r.trend.reduce((a, t) => a + t.pct, 0) / r.trend.length) : 0;
   const today = r.trend[r.trend.length - 1];
-  const cardClass = r.classId ?? r.classes[0]?.id;
   return (
     <>
       <section className="section" aria-labelledby="trend-h">
@@ -109,15 +106,14 @@ function Body({ r, month, admin, sanghId }: { r: Report; month: string; admin: b
         )}
       </section>
 
-      <section className="section" aria-labelledby="dl-h">
-        <h2 id="dl-h">Print and download</h2>
+      {admin && <section className="section" aria-labelledby="dl-h">
+        <h2 id="dl-h">Download</h2>
         <div className="quick stacked">
-          {cardClass && <Link href={`/admin/reports/cards?class=${cardClass}&month=${month}`}><Icon.print />Report cards for {r.classes.find((c) => c.id === cardClass)?.name}</Link>}
-          {admin && <button type="button" onClick={() => setExcel(true)}><Icon.download />Download Excel report</button>}
+          <button type="button" onClick={() => setExcel(true)}><Icon.download />Download Excel report</button>
         </div>
-        {admin && <p className="hint">You choose the dates first. It has members with their phone numbers, Tej points, attendance with gathas, and niyams. Keep the file safe and delete it when you&apos;re done.</p>}
+        <p className="hint">You choose the dates first. It has members with their phone numbers, Aradhana Points (AP), attendance with gathas, and niyams. Keep the file safe and delete it when you&apos;re done.</p>
         {excel && <ExcelSheet sanghId={sanghId} today={r.to} onClose={() => setExcel(false)} />}
-      </section>
+      </section>}
     </>
   );
 }

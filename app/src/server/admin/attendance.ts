@@ -33,7 +33,8 @@ export async function getSheet(phone: string, sanghId: string, classId: string |
   return asAdmin(phone, async (tx) => {
     const classes = await myClasses(tx, sanghId);
     const [{ today, min }] = await tx<{ today: string; min: string }[]>`
-      select private.local_today()::text as today, (private.local_today() - 30)::text as min`;
+      select private.local_today()::text as today,
+        (private.local_today() - (select attendance_back_days from public.sanghs where id = ${sanghId}))::text as min`;
     const d = day ?? today;
     if (d > today || d < min) return null;
     const cls = classId ? classes.find((c) => c.id === classId) : classes[0];
@@ -81,9 +82,15 @@ export async function saveMarks(phone: string, sanghId: string, input: z.input<t
 }
 
 /** Removes the class's marks for that day (taken by mistake). */
-export async function clearMarks(phone: string, sanghId: string, classId: string, day: string): Promise<void> {
-  await asAdmin(phone, (tx) => tx`
-    delete from public.attendance where day = ${day} and sangh_id = ${sanghId} and class_id = ${classId}`);
+export async function clearMarks(phone: string, sanghId: string, classId: string, day: string): Promise<"ok" | "day_out_of_range"> {
+  try {
+    await asAdmin(phone, (tx) => tx`
+      delete from public.attendance where day = ${day} and sangh_id = ${sanghId} and class_id = ${classId}`);
+    return "ok";
+  } catch (e) {
+    if (pgHint(e) === "day_out_of_range") return "day_out_of_range";
+    throw e;
+  }
 }
 
 /** A holiday is for the whole pathshala: no class that day, and it never counts against anyone. */

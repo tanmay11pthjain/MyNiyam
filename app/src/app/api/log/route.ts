@@ -2,6 +2,7 @@ import { z } from "zod";
 import { fail, limitIp, ok, readJson, route } from "@/server/http";
 import { readSession } from "@/server/session";
 import { setLog } from "@/server/today";
+import { familyAccountOf } from "@/server/onboarding";
 
 const body = z.object({
   niyamId: z.uuid(),
@@ -24,7 +25,9 @@ export const POST = route("log", async (req, ctx) => {
   if (!input || Number.isNaN(Date.parse(input.date))) return fail(ctx, { error: "bad_request" });
   const profileId = input.profileId ?? s.profileId;
   if (!profileId) return fail(ctx, { error: "not_found" });
-  const r = await setLog(s.accountId, profileId, input);
+  // A tap saved offline may be for someone in another pathshala on this number (the app switched since).
+  const accountId = profileId === s.profileId ? s.accountId : (await familyAccountOf(s.phone, profileId)) ?? s.accountId;
+  const r = await setLog(accountId, profileId, input);
   if (r.ok) return ok(ctx, { niyam: r.niyam });
   return fail(ctx, { error: r.reason === "invalid_choice" ? "bad_request" : r.reason });
 });

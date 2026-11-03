@@ -9,7 +9,7 @@ import { OTP_LENGTH } from "@/lib/otp-code";
 type Words = { en: string; hi: string };
 
 /** Profile's "Your data": download a copy, or delete everything on this number after a fresh code. */
-export function MyData({ phone, names }: { phone: string; names: string[] }) {
+export function MyData({ phone, names, sanghName, otherPathshalas }: { phone: string; names: string[]; sanghName: string; otherPathshalas: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <section className="stack" aria-labelledby="mydata-h">
@@ -17,12 +17,14 @@ export function MyData({ phone, names }: { phone: string; names: string[] }) {
       {/* A plain link: the browser saves the file the server sends. */}
       <a className="btn btn-secondary" href="/api/me/data" download>Download my data</a>
       <Button kind="quiet" onClick={() => setOpen(true)}><span style={{ color: "var(--danger)" }}>Delete my data</span></Button>
-      {open && <DeleteDialog phone={phone} names={names} onClose={() => setOpen(false)} />}
+      {open && <DeleteDialog phone={phone} names={names} sanghName={sanghName} otherPathshalas={otherPathshalas} onClose={() => setOpen(false)} />}
     </section>
   );
 }
 
-function DeleteDialog({ phone, names, onClose }: { phone: string; names: string[]; onClose: () => void }) {
+function DeleteDialog({ phone, names, sanghName, otherPathshalas, onClose }: {
+  phone: string; names: string[]; sanghName: string; otherPathshalas: boolean; onClose: () => void;
+}) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); }, []);
   const [step, setStep] = useState<"ask" | "code">("ask");
@@ -40,7 +42,8 @@ function DeleteDialog({ phone, names, onClose }: { phone: string; names: string[
   async function confirm(c: string) {
     setBusy(true); setErr(null);
     const r = await api("/api/me/delete", { body: { step: "confirm", code: c } });
-    if (r.ok) { clearOfflineData(); window.location.replace("/"); return; }
+    // Deleting one pathshala leaves the others: log in again to open them.
+    if (r.ok) { clearOfflineData(); window.location.replace(otherPathshalas ? "/login" : "/"); return; }
     setBusy(false); setCode(""); setErr(say(r.err));
   }
 
@@ -55,7 +58,11 @@ function DeleteDialog({ phone, names, onClose }: { phone: string; names: string[
       <div className="stack">
         {step === "ask" ? (
           <>
-            <p>This deletes <b>{phone}</b> and everyone on it{names.length > 1 ? `: ${names.join(", ")}` : ""}, with all their niyam logs.</p>
+            {otherPathshalas ? (
+              <p>This deletes <b>{phone}</b> from <b>{sanghName}</b>, with everyone on it there{names.length > 1 ? `: ${names.join(", ")}` : ""} and all their niyam logs. Your other pathshalas are not touched.</p>
+            ) : (
+              <p>This deletes <b>{phone}</b> and everyone on it{names.length > 1 ? `: ${names.join(", ")}` : ""}, with all their niyam logs.</p>
+            )}
             <p><b>It happens at once and cannot be undone.</b> Streaks and history are lost. You can join again later as new.</p>
             <p className="hint" lang="hi">यह नंबर, इस पर जुड़े सभी लोग और उनके सारे नियम तुरंत मिट जाएँगे। वापस नहीं आएँगे।</p>
             {err && <p className="msg err" role="alert">{err.en}</p>}

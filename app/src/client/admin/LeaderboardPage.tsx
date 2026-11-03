@@ -9,7 +9,7 @@ import { DateRangePicker, shortDay, type Range } from "./DateRange";
 import type { AdminBoard } from "@/lib/admin-types";
 
 
-/** The class board by Tej over any dates, and a poster of the top 3 to share on WhatsApp. */
+/** The class board by AP over any dates, and a poster of the top 3 to share on WhatsApp. */
 export function LeaderboardPage() {
   const { sangh, can } = useAdmin();
   const toast = useToast();
@@ -29,7 +29,7 @@ export function LeaderboardPage() {
 
   return (
     <main className="page">
-      <div className="page-title"><h1 data-hi="लीडरबोर्ड">Leaderboard</h1><p>Who earned the most Tej points. Days kept break a tie.</p></div>
+      <div className="page-title"><h1 data-hi="लीडरबोर्ड">Leaderboard</h1><p>Who earned the most Aradhana Points (AP). Days kept break a tie.</p></div>
       {today && <DateRangePicker today={today} initial="week" onChange={(r) => { if (r) setRange(r); }} />}
       {d.state === "loading" && <Loading rows={5} />}
       {d.state === "error" && <LoadError message={d.message} retry={d.retry} />}
@@ -51,7 +51,7 @@ export function LeaderboardPage() {
             if (r === "downloaded") toast("Poster saved to your downloads");
             if (r === "failed") toast("The poster couldn't be made. Try again.");
           }}><Icon.share />{busy ? "Making poster…" : "Generate poster"}</Button>
-          {top.length === 0 && <p className="hint">The poster is ready once someone in {c?.name} earns Tej in these dates.</p>}
+          {top.length === 0 && <p className="hint">The poster is ready once someone in {c?.name} earns AP in these dates.</p>}
 
           {b.rows.length === 0 ? (
             <div className="notice"><b>No one in {c?.name} yet</b><span>Members appear here once they join this class.</span></div>
@@ -62,7 +62,7 @@ export function LeaderboardPage() {
                   <b className="pct" style={{ minWidth: 28 }}>{r.rank}</b>
                   <span className="avatar" aria-hidden="true">{r.photoUrl ? <img src={r.photoUrl} alt="" /> : r.name.charAt(0)}</span>
                   <span className="grow"><span className="t">{r.name}</span><span className="s">{r.days} {r.days === 1 ? "day" : "days"} kept</span></span>
-                  <b className="pct">{r.points.toLocaleString("en-IN")} Tej</b>
+                  <b className="pct">{r.points.toLocaleString("en-IN")} AP</b>
                 </li>
               ))}
             </ol>
@@ -137,7 +137,7 @@ async function sharePoster(b: AdminBoard, className: string, label: string, top:
     g.fillStyle = "#1C2F5E"; g.font = `800 ${i ? 46 : 58}px ${display}`;
     g.fillText(p.name, s.x, s.y + s.r + (i ? 100 : 112), i ? 380 : 600);
     g.fillStyle = "#56607F"; g.font = `500 ${i ? 34 : 40}px ${body}`;
-    g.fillText(`${p.points.toLocaleString("en-IN")} Tej`, s.x, s.y + s.r + (i ? 148 : 166));
+    g.fillText(`${p.points.toLocaleString("en-IN")} AP`, s.x, s.y + s.r + (i ? 148 : 166));
   });
 
   g.fillStyle = "#1C2F5E"; g.font = `600 40px ${body}`;

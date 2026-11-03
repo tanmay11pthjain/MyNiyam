@@ -24,7 +24,7 @@ export const PUT = att("admin.attendance.save", async (req, ctx) => {
   const input = await readJson(req, marksInput);
   if (!input) return fail(ctx, { error: "bad_request" });
   const r = await saveMarks(ctx.admin.phone, ctx.sanghId, input);
-  if (r === "day_out_of_range") return fail(ctx, { error: "bad_request" });
+  if (r === "day_out_of_range") return fail(ctx, { error: "log_window_closed" });
   if (r === "not_found") return fail(ctx, { error: "not_found" });
   const sheet = await getSheet(ctx.admin.phone, ctx.sanghId, input.classId, input.day);
   const cls = sheet?.classes.find((c) => c.id === input.classId)?.name ?? "";
@@ -36,7 +36,7 @@ export const PUT = att("admin.attendance.save", async (req, ctx) => {
 export const DELETE = att("admin.attendance.clear", async (req, ctx) => {
   const input = await readJson(req, z.object({ classId: z.uuid(), day: z.string().regex(DAY) }));
   if (!input) return fail(ctx, { error: "bad_request" });
-  await clearMarks(ctx.admin.phone, ctx.sanghId, input.classId, input.day);
+  if ((await clearMarks(ctx.admin.phone, ctx.sanghId, input.classId, input.day)) === "day_out_of_range") return fail(ctx, { error: "log_window_closed" });
   const sheet = await getSheet(ctx.admin.phone, ctx.sanghId, input.classId, input.day);
   return sheet ? ok<AttendanceSheet>(ctx, sheet) : fail(ctx, { error: "not_found" });
 });

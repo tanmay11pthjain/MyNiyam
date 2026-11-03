@@ -29,6 +29,8 @@ export function sayAdmin(err: ApiError | { error: "offline" }): string {
     case "already_admin": return "This number is already an admin of this pathshala.";
     case "already_member": return "This number has already joined. Find them in Members.";
     case "same_number": return "That is your own number. Enter the new admin's number.";
+    case "log_window_closed": return "That day is outside the edit window. Change it in Setup → Edit windows.";
+    case "pathshala_limit": return "This number is already in 5 pathshalas, the most it can join.";
     case "invalid_class": return "One of the chosen classes isn't here any more. Pick again.";
     default: return "Something went wrong on our side. Please try again.";
   }

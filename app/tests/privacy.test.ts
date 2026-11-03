@@ -20,7 +20,7 @@ afterAll(async () => { await sql().end(); });
 async function family(sanghId = heer) {
   const p = phone();
   const r = await joinSangh(p, sanghId);
-  if (r.kind === "closed") throw new Error("closed");
+  if (r.kind === "closed" || r.kind === "limit") throw new Error(r.kind);
   const prof = await createProfile(r.accountId, p, { name: "Asha", relation: "self", consent: false });
   if (!prof.ok) throw new Error("profile");
   return { phone: p, accountId: r.accountId, profileId: prof.profile.id };

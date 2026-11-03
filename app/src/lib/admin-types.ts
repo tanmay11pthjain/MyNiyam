@@ -16,7 +16,9 @@ export type AdminMe = { phone: string; isSuper: boolean; sanghs: AdminSangh[]; a
 export type SanghProfile = {
   id: string; name: string; nameHi: string | null; city: string; area: string | null; sampraday: string | null;
   contactPhone: string | null; about: string | null; logoUrl: string | null; joinCode: string; status: SanghStatus;
-  joinOpen: boolean; searchable: boolean; logBackHours: number;
+  joinOpen: boolean; searchable: boolean;
+  /** Edit windows: niyam logs (hours after the day ends: 0, 24, 48, 72 or 168) and attendance (days back, 0 to 30). */
+  logBackHours: number; attendanceBackDays: number;
   /** Where sunrise and sunset (Navkarsi, Chauvihar times) are worked out for. */
   location: { lat: number; lon: number } | null;
 };
@@ -44,7 +46,7 @@ export type AdminClass = {
 
 export type NiyamType = "yesno" | "count" | "duration" | "choice";
 export type NiyamStatus = "active" | "paused" | "archived";
-/** points: this level's own Tej (tapasya levels); missing = the niyam's points. */
+/** points: this level's own AP (tapasya levels); missing = the niyam's points. */
 export type NiyamOption = { value: string; en: string; hi?: string; points?: number };
 export type Niyam = {
   id: string; name: string; nameHi: string | null; type: NiyamType; target: number | null; options: NiyamOption[];
@@ -55,7 +57,7 @@ export type Niyam = {
   isCore: boolean; status: NiyamStatus;
   /** Show a time on the member's card: Navkarsi (sunrise + 48 min) or Chauvihar (sunset). */
   timeHint: "navkarsi" | "chauvihar" | null;
-  /** Tej each time it is kept; for count and minutes niyams, each count (up to 10 a day). */
+  /** AP each time it is kept; for count and minutes niyams, each count (up to 10 a day). */
   points: number;
 };
 export type NiyamInput = Omit<Niyam, "id" | "status">;
@@ -141,12 +143,6 @@ export type Report = {
   newJoins: number;
 };
 
-/** GET /api/admin/reports/cards?class=&month=: one printable card per person. */
-export type ReportCards = {
-  sangh: string; className: string; month: string; daysInMonth: number;
-  cards: { name: string; daysLogged: number; kept: number; bestStreak: number; attendance: { came: number; total: number } | null }[];
-};
-
 /** A pathshala goal: a total for everyone ("10 lakh Navkar") or a challenge each person finishes ("21 days of Navkarsi"). */
 export type Goal = {
   id: string; kind: "total" | "challenge"; title: string; titleHi: string | null; niyamId: string; niyamName: string;
@@ -157,7 +153,7 @@ export type GoalInput = Pick<Goal, "kind" | "title" | "titleHi" | "niyamId" | "t
 /** GET /api/admin/goals */
 export type GoalsPage = { goals: Goal[]; niyams: { id: string; name: string; type: NiyamType }[]; classes: { id: string; name: string }[]; today: string };
 
-/** GET /api/admin/leaderboard: one class between two dates, most Tej first (days kept break a tie). */
+/** GET /api/admin/leaderboard: one class between two dates, most AP first (days kept break a tie). */
 export type AdminBoard = {
   sangh: string;
   classes: { id: string; name: string; on: boolean }[];
